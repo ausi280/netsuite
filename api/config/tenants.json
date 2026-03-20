@@ -1,0 +1,52 @@
+{
+  "cc": {
+    "name": "CryoCell de México",
+    "url": "https://cryo-cell.com.mx",
+    "public_key": "",
+    "secret_key": "",
+    "styles": {
+      "base" : "#FFF",
+      "background" : "#EAEAEA"
+    }
+  },
+  "bc": {
+    "name": "Banco de Cordón Umbilical",
+    "url": "",
+    "public_key": "",
+    "secret_key": "",
+    "styles": {
+      "base" : "#FFF",
+      "background" : "#EAEAEA"
+    }
+  },
+  "bs": {
+    "name": "Operadora BSCU",
+    "url": "",
+    "public_key": "",
+    "secret_key": "",
+    "styles": {
+      "base" : "#FFF",
+      "background" : "#EAEAEA"
+    }
+  },
+  "fc": {
+    "name": "FCells",
+    "url": "",
+    "public_key": "",
+    "secret_key": "",
+    "styles": {
+      "base" : "#FFF",
+      "background" : "#EAEAEA"
+    }
+  },
+  "rt": {
+    "name": "Renew Therapies",
+    "url": "",
+    "public_key": "",
+    "secret_key": "",
+    "styles": {
+      "base" : "#FFF",
+      "background" : "#EAEAEA"
+    }
+  }
+}
