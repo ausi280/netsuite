@@ -1,0 +1,57 @@
+exports.up = function(knex) {
+  return knex.schema.createTable('netsuite_records', function(table) {
+    table.increments('id').primary();
+    table.string('netsuite_id').unique();
+    table.string('name');
+    table.string('created');
+    table.string('lastmodified');
+    table.string('custrecord_cryo_contratosistemaanterior');
+    table.string('custrecord_cryo_numerocontrato');
+    table.string('custrecord_nso_token');
+    table.json('links');
+    table.string('custrecord_cryo_actualizar_fecha');
+    table.string('custrecord_cryo_aniosanticipados');
+    table.string('custrecord_cryo_articulobonif');
+    table.string('custrecord_cryo_cesarea');
+    table.string('custrecord_cryo_duenio');
+    table.string('custrecord_cryo_envio_exitoso');
+    table.string('custrecord_cryo_especimen');
+    table.string('custrecord_cryo_estatus');
+    table.string('custrecord_cryo_fecha_ini_ultima_a');
+    table.string('custrecord_cryo_fechanacimiento');
+    table.string('custrecord_cryo_fechaprocesamientoi');
+    table.string('custrecord_cryo_finicio');
+    table.string('custrecord_cryo_fnacimientoconf');
+    table.string('custrecord_cryo_garantia_completa');
+    table.string('custrecord_cryo_garantiafallecimiento');
+    table.string('custrecord_cryo_mensaje_email_mostrado');
+    table.string('custrecord_cryo_mesnac_letra');
+    table.string('custrecord_cryo_mesnacimiento');
+    table.string('custrecord_cryo_moneda');
+    table.string('custrecord_cryo_numerofamilia');
+    table.string('custrecord_cryo_padres');
+    table.string('custrecord_cryo_primera_vez_part');
+    table.string('custrecord_cryo_procesadosi');
+    table.string('custrecord_cryo_saldo_inicial');
+    table.string('custrecord_cryo_servicio');
+    table.string('custrecord_cryo_solicitaaprobacion');
+    table.string('custrecord_cryo_subsidiariacontrato');
+    table.string('custrecord_cryo_titular_deudor');
+    table.string('custrecord_cryo_titularcontrato');
+    table.string('custrecord_cryo_ubicacion');
+    table.string('custrecord_cryo_vendedor');
+    table.string('custrecord_nso_cc_marca_contrato_mx');
+    table.string('custrecordcryo_tipocambiocontrato');
+    table.string('isinactive');
+    table.string('lastmodifiedby');
+    table.string('owner');
+    table.string('recordid');
+    table.string('scriptid');
+    table.json('raw_data');
+    table.timestamps(true, true);
+  });
+};
+
+exports.down = function(knex) {
+  return knex.schema.dropTable('netsuite_records');
+};
