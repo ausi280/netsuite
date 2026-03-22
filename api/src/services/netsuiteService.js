@@ -1,17 +1,40 @@
 const axios = require('axios');
 const env = require('../../config').env;
 const db = require('../../database');
+const OAuth = require('oauth-1.0a'); 
+const crypto = require('crypto');
 
 class NetsuiteService {
 
   constructor() {
-    this.service = env.SERVICES.NETSUITE; // Assuming you will add NETSUITE to your config
+    this.service = env.SERVICES.ERP;
+    this.token = {
+      key: this.service.ACCESS_TOKEN,
+      secret: this.service.TOKEN_SECRET,
+    };
+
+    this.oauth = OAuth({
+      consumer: {
+        key: this.service.CONSUMER_KEY,
+        secret: this.service.CONSUMER_SECRET,
+      },
+      signature_method: 'HMAC-SHA256',
+      hash_function(base, key) {
+        return crypto.createHmac('sha256', key).update(base).digest('base64');
+      },
+    });
   }
 
   async #fetchAllRecords() {
     let allItems = [];
     let hasMore = true;
-    let url = 'https://9358923.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql'; // URL from the prompt
+    let url = `https://${this.service.REALM}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql`; // URL from the prompt
+
+    request.headers = this.oauth.toHeader(
+        this.oauth.authorize(request, this.token)
+    );
+
+    request.headers.Authorization = `OAuth realm="${this.service.REALM}", ${request.headers.Authorization.replace('OAuth ', '')}`;
 
     const body = {
       "q": "SELECT * FROM customrecord1184"
@@ -19,11 +42,8 @@ class NetsuiteService {
 
     while (hasMore) {
       try {
-        // TODO: Add authentication if required.
-        // const headers = { 'Authorization': 'Bearer YOUR_TOKEN' };
-        // const response = await axios.post(url, body, { headers });
 
-        const response = await axios.post(url, body);
+        const response = await axios.post(url, body, { headers: request.headers });
 
         if (response.data && response.data.items) {
           allItems = allItems.concat(response.data.items);
