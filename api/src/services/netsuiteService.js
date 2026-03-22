@@ -28,13 +28,8 @@ class NetsuiteService {
   async #fetchAllRecords() {
     let allItems = [];
     let hasMore = true;
-    let url = `https://${this.service.REALM}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql`; // URL from the prompt
-
-    request.headers = this.oauth.toHeader(
-        this.oauth.authorize(request, this.token)
-    );
-
-    request.headers.Authorization = `OAuth realm="${this.service.REALM}", ${request.headers.Authorization.replace('OAuth ', '')}`;
+    const realm = this.service.REALM.replace('_', '-');
+    let url = `https://${realm}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql`; // URL from the prompt
 
     const body = {
       "q": "SELECT * FROM customrecord1184"
@@ -43,7 +38,16 @@ class NetsuiteService {
     while (hasMore) {
       try {
 
-        const response = await axios.post(url, body, { headers: request.headers });
+        const requestData = {
+            url,
+            method: 'POST',
+            data: body,
+        };
+        
+        const authHeaders = this.oauth.toHeader(this.oauth.authorize(requestData, this.token));
+        authHeaders.Authorization = `OAuth realm="${this.service.REALM}", ${authHeaders.Authorization.replace('OAuth ', '')}`;
+
+        const response = await axios.post(url, body, { headers: authHeaders });
 
         if (response.data && response.data.items) {
           allItems = allItems.concat(response.data.items);
