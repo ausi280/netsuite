@@ -25,10 +25,34 @@ class NetsuiteService {
     });
   }
 
+  async #validateCredentials() {
+    try {
+      const realm = this.service.REALM.replace('_', '-').toLowerCase();
+      const url = `https://${realm}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql`;
+      const body = { "q": "SELECT 1 FROM dual" };
+      const requestData = { url, method: 'POST' };
+      const authHeaders = this.oauth.toHeader(this.oauth.authorize(requestData, this.token));
+      authHeaders.Authorization = `OAuth realm="${this.service.REALM}", ${authHeaders.Authorization.replace('OAuth ', '')}`;
+
+      await axios.post(url, body, { headers: { 
+            'Content-Type': 'application/json',
+            'Prefer': 'transient',
+            'Accept': 'application/json' , 
+            ...authHeaders 
+          }  });
+    } catch (error) {
+      if (error.response && error.response.data && error.response.data['o:errorCode'] === 'INVALID_LOGIN') {
+        throw new Error('Invalid NetSuite credentials. Please check your configuration.');
+      }
+      console.error('Failed to connect to NetSuite:', error.response ? error.response.data : error.message);
+      throw new Error(`Failed to connect to NetSuite. Reason: ${error.response ? JSON.stringify(error.response.data) : error.message}`);
+    }
+  }
+
   async #fetchAllRecords() {
     let allItems = [];
     let hasMore = true;
-    const realm = this.service.REALM.replace('_', '-');
+    const realm = this.service.REALM.replace('_', '-').toLowerCase();
     let url = `https://${realm}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql`; // URL from the prompt
 
     const body = {
@@ -41,13 +65,18 @@ class NetsuiteService {
         const requestData = {
             url,
             method: 'POST',
-            data: body,
         };
         
         const authHeaders = this.oauth.toHeader(this.oauth.authorize(requestData, this.token));
         authHeaders.Authorization = `OAuth realm="${this.service.REALM}", ${authHeaders.Authorization.replace('OAuth ', '')}`;
 
-        const response = await axios.post(url, body, { headers: authHeaders });
+        const response = await axios.post(url, body, { 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Prefer': 'transient',
+            'Accept': 'application/json' , 
+            ...authHeaders 
+          } });
 
         if (response.data && response.data.items) {
           allItems = allItems.concat(response.data.items);
@@ -79,6 +108,7 @@ class NetsuiteService {
   }
 
   async syncAndSaveData() {
+    await this.#validateCredentials();
     const records = await this.#fetchAllRecords();
     const formattedRecords = records.map(record => ({
       netsuite_id: record.id,
@@ -130,12 +160,27 @@ class NetsuiteService {
       raw_data: JSON.stringify(record)
     }));
 
-    await db.transaction(async trx => {
-      await trx('netsuite_records')
-        .insert(formattedRecords)
-        .onConflict('netsuite_id')
-        .merge();
-    });
+    const dialect = db.client.config.client;
+
+    if (dialect === 'mssql') {
+      await db.transaction(async trx => {
+        for (const record of formattedRecords) {
+          const existing = await trx('netsuite_records').where('netsuite_id', record.netsuite_id).first();
+          if (existing) {
+            await trx('netsuite_records').where('netsuite_id', record.netsuite_id).update(record);
+          } else {
+            await trx('netsuite_records').insert(record);
+          }
+        }
+      });
+    } else {
+      await db.transaction(async trx => {
+        await trx('netsuite_records')
+          .insert(formattedRecords)
+          .onConflict('netsuite_id')
+          .merge();
+      });
+    }
 
     return formattedRecords.length;
   }

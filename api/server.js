@@ -50,8 +50,9 @@ if (env.SERVICES) {
         let route = require(routesPath);
         if (route && route.default) route = route.default;
         if (env.SERVICES[name]) app.use(env.SERVICES[name].SLUG || '/', route);
-        loadedRoutes.push(`${name} -> ${env.SERVICES[name].SLUG || '/'} (${routesPath})`);
-        console.log(`Loaded routes for ${name} at ${env.SERVICES[name].SLUG || '/'}`);
+        const fullUrl = `${env.API.URL}${env.API.PORT ? `:${env.API.PORT}` : ""}${env.SERVICES[name].SLUG || '/'}`;
+        loadedRoutes.push(`${name} -> ${fullUrl} (${routesPath})`);
+        console.log(`Loaded routes for ${name} at ${fullUrl}`);
       } else {
         loadedRoutes.push(`${name} -> FAILED (File not found: ${routesPath})`);
         console.log(`Expected route file not found at: ${routesPath}`);
