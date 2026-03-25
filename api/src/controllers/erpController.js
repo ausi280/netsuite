@@ -38,7 +38,7 @@ class ErpController {
       const message = 'An internal error occurred while syncing data from NetSuite.';
       
       if (res) {
-        res.status(500).json({ success: false, message });
+        res.status(500).json({ success: false, message: error.message });
       }
       
       throw new Error(message);

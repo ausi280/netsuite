@@ -38,6 +38,7 @@ const driver = drivers[driverKey];
 
 if (!driver) throw new Error(`Database driver not found. Key: ${driverKey}, Env: ${nodeEnv}, Available: ${Object.keys(drivers).join(', ')}`);
 
-const db = require(driver);
+const driverModule = require(driver);
+const db = driverModule.getKnex();
 
 module.exports = db;
