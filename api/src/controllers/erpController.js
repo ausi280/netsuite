@@ -45,6 +45,31 @@ class ErpController {
     }
   }
 
+  getEmployees = async (req, res) => {
+    try {
+      const employees = await netsuiteService.syncEmployees();
+      return res.status(200).json({ success: true, count: employees.length, data: employees });
+    } catch (error) {
+      console.error('Error fetching employees from NetSuite:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Failed to fetch employees.' });
+    }
+  }
+
+  runSuiteQL = async (req, res) => {
+    try {
+      const { q, queryKey, idField } = req.body;
+      if (!q || typeof q !== 'string') {
+        return res.status(400).json({ success: false, message: 'Missing or invalid "q" SuiteQL query in request body.' });
+      }
+
+      const rows = await netsuiteService.queryAndSaveSuiteQL(q, queryKey || 'suiteql', idField || 'id');
+      return res.status(200).json({ success: true, count: rows.length, data: rows });
+    } catch (error) {
+      console.error('Error running SuiteQL query:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Failed to run SuiteQL query.' });
+    }
+  }
+
 
 }
 
