@@ -49,43 +49,41 @@ class NetsuiteService {
     }
   }
 
-  async #fetchAllRecords() {
+  async #executeSuiteQL(query) {
     let allItems = [];
     let hasMore = true;
     const realm = this.service.REALM.replace('_', '-').toLowerCase();
-    let url = `https://${realm}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql`; // URL from the prompt
+    let url = `https://${realm}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql`;
 
-    const body = {
-      "q": "SELECT * FROM customrecord1184"
-    };
+    const body = { q: query };
 
     while (hasMore) {
       try {
-
         const requestData = {
-            url,
-            method: 'POST',
+          url,
+          method: 'POST',
         };
-        
+
         const authHeaders = this.oauth.toHeader(this.oauth.authorize(requestData, this.token));
         authHeaders.Authorization = `OAuth realm="${this.service.REALM}", ${authHeaders.Authorization.replace('OAuth ', '')}`;
 
-        const response = await axios.post(url, body, { 
-          headers: { 
+        const response = await axios.post(url, body, {
+          headers: {
             'Content-Type': 'application/json',
             'Prefer': 'transient',
-            'Accept': 'application/json' , 
-            ...authHeaders 
-          } });
+            'Accept': 'application/json',
+            ...authHeaders,
+          },
+        });
 
         if (response.data && response.data.items) {
           allItems = allItems.concat(response.data.items);
         }
 
-        hasMore = response.data.hasMore;
+        hasMore = Boolean(response.data && response.data.hasMore);
 
         if (hasMore) {
-          const nextLink = response.data.links.find(link => link.rel === 'next');
+          const nextLink = response.data.links.find((link) => link.rel === 'next');
           if (nextLink) {
             url = nextLink.href;
           } else {
@@ -98,13 +96,82 @@ class NetsuiteService {
           console.error('Response data:', error.response.data);
           console.error('Response status:', error.response.status);
         }
-        // Stop fetching if there's an error
         hasMore = false;
         throw new Error('Failed to fetch data from NetSuite.');
       }
     }
 
     return allItems;
+  }
+
+  async #fetchAllRecords() {
+    return this.#executeSuiteQL('SELECT * FROM customrecord1184');
+  }
+
+  async fetchAllEmployees() {
+    return this.#executeSuiteQL('SELECT * FROM employee');
+  }
+
+  async saveSuiteQLResults(queryKey, records, idField = 'id') {
+    if (!queryKey || !Array.isArray(records)) {
+      throw new Error('queryKey and records (array) are required to save SuiteQL results.');
+    }
+
+    const results = records.map(record => ({
+      query_key: queryKey,
+      suite_id: record[idField] !== undefined && record[idField] !== null ? String(record[idField]) : null,
+      raw_data: JSON.stringify(record),
+      created_at: new Date(),
+      updated_at: new Date(),
+    }));
+
+    const dialect = db.client.config.client;
+
+    if (results.length === 0) {
+      return 0;
+    }
+
+    if (dialect === 'mssql') {
+      await db.transaction(async trx => {
+        for (const row of results) {
+          const existing = await trx('netsuite_query_results')
+            .where('query_key', row.query_key)
+            .andWhere('suite_id', row.suite_id)
+            .first();
+
+          if (existing) {
+            await trx('netsuite_query_results').where('id', existing.id).update({ raw_data: row.raw_data, updated_at: row.updated_at });
+          } else {
+            await trx('netsuite_query_results').insert(row);
+          }
+        }
+      });
+    } else {
+      await db.transaction(async trx => {
+        await trx('netsuite_query_results')
+          .insert(results)
+          .onConflict(['query_key', 'suite_id'])
+          .merge(['raw_data', 'updated_at']);
+      });
+    }
+
+    return results.length;
+  }
+
+  async syncEmployees() {
+    const employees = await this.fetchAllEmployees();
+    await this.saveSuiteQLResults('employee', employees, 'id');
+    return employees;
+  }
+
+  async queryAndSaveSuiteQL(query, queryKey = 'suiteql', idField = 'id') {
+    if (!query || typeof query !== 'string') {
+      throw new Error('Valid SuiteQL query string is required.');
+    }
+
+    const records = await this.#executeSuiteQL(query);
+    await this.saveSuiteQLResults(queryKey, records, idField);
+    return records;
   }
 
   async syncAndSaveData() {
