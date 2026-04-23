@@ -4,4 +4,4 @@
  */
 const metaWebhookRouter = require('../controllers/metaWebhooks');
 
-module.exports = metaWebhookRouter;module.exports = metaWebhookRouter;
+module.exports = metaWebhookRouter;
