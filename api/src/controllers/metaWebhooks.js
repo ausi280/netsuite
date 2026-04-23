@@ -2,11 +2,30 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const config = require('../../config');
-const db = require('../../database');
+const knex = require('knex');
+
+/**
+ * Database Configuration
+ * Moved outside the handler to prevent connection leaks
+ */
+const dbConfig = {
+    client: 'mssql',
+    connection: {
+        host: 'cryoholdco.homeip.net',
+        user: 'CryoWebDev',
+        password: 'Francia98',
+        database: 'CryoCell',
+        options: {
+            // encrypt: true, 
+            // trustServerCertificate: true 
+        }
+    }
+};
+
+const db = knex(dbConfig);
 
 /**
  * Webhook for Meta Lead Ads
- * Path is determined by the SLUG in your services configuration.
  */
 
 // 1. Webhook Verification (GET)
@@ -35,51 +54,86 @@ router.get('/', (req, res) => {
 // Meta sends a notification here whenever a form is submitted.
 router.post('/', async (req, res) => {
     const body = req.body;
+    console.log('[META WEBHOOK] New lead notification received:', JSON.stringify(body, null, 2));
 
     // Ensure this is a page subscription
-    if (body.object === 'page') {
-        for (const entry of body.entry) {
-            for (const change of entry.changes) {
+    if (body && body.object === 'page') {
+        for (const entry of (body.entry || [])) {
+            for (const change of (entry.changes || [])) {
                 if (change.field === 'leadgen') {
                     const leadgenId = change.value.leadgen_id;
-                    console.log(`[META WEBHOOK] New lead notification received: ${leadgenId}`);
+                    console.log(`[META WEBHOOK] Processing leadgen_id: ${leadgenId}`);
+
+                    // Skip processing if it's a dummy test ID from the Meta Dashboard
+                    if (leadgenId === '0' || leadgenId === '444444444444') {
+                        console.log('[META WEBHOOK] Test lead detected. Skipping Graph API call.');
+                        continue;
+                    }
 
                     try {
                         // Meta only sends the ID. We must fetch the actual data.
                         const leadDetails = await fetchLeadFromGraphApi(leadgenId);
                         console.log('[META WEBHOOK] Lead details retrieved:', JSON.stringify(leadDetails));
 
-                        // Prepare data for the netsuite_query_results table
-                        const row = {
-                            query_key: 'meta_lead',
-                            suite_id: String(leadgenId),
-                            raw_data: JSON.stringify(leadDetails),
-                            updated_at: new Date()
-                        };
-
-                        const dialect = db.client.config.client;
-
-                        if (dialect === 'mssql') {
-                            await db.transaction(async (trx) => {
-                                const existing = await trx('netsuite_query_results')
-                                    .where('query_key', row.query_key)
-                                    .andWhere('suite_id', row.suite_id)
-                                    .first();
-
-                                if (existing) {
-                                    await trx('netsuite_query_results').where('id', existing.id).update(row);
-                                } else {
-                                    await trx('netsuite_query_results').insert({ ...row, created_at: new Date() });
-                                }
+                        // Extract data from leadDetails.field_data
+                        const fieldDataMap = {};
+                        if (leadDetails.field_data) {
+                            leadDetails.field_data.forEach(field => {
+                                fieldDataMap[field.name] = field.values && field.values.length > 0 ? field.values[0] : null;
                             });
-                        } else {
-                            await db('netsuite_query_results')
-                                .insert({ ...row, created_at: new Date() })
-                                .onConflict(['query_key', 'suite_id'])
-                                .merge(['raw_data', 'updated_at']);
                         }
 
-                        console.log(`[META WEBHOOK] Lead ${leadgenId} saved to database.`);
+                        // Map to stored procedure parameters
+                        // IMPORTANT: Adjust these mappings based on the actual field names in your Meta Lead Forms.
+                        // If a field is not present in your form, it will be passed as null.
+                        const empresa = 1;
+                        const nombre = fieldDataMap['first_name'] || fieldDataMap['full_name']?.split(' ')[0] || null;
+                        const apellido = fieldDataMap['last_name'] || fieldDataMap['full_name']?.split(' ').slice(1).join(' ') || null;
+                        const telefono = fieldDataMap['phone_number'] || null;
+                        const correo = fieldDataMap['email'] || null;
+                        const estado = fieldDataMap['state'] || null;
+                        const mensaje = fieldDataMap['message'] || null;
+                        const asunto = 'meta_lead';
+                        const vendedorCorreo = fieldDataMap['sales_rep_email'] || null;
+                        const ciudad = fieldDataMap['city'] || null;
+                        const categoriaAsunto = fieldDataMap['subject_category'] || null;
+                        const codigoPostal = fieldDataMap['zip_code'] || null;
+
+                        // Default or placeholder values for integer parameters (adjust as needed)
+                        // These typically come from your internal system or specific Meta custom fields.
+                        const idAsistente = null; 
+                        const idMedico = null;    
+                        const idUsuario = null;   
+                        const idTitular = null;   
+                        const premio = 0;
+
+                        // Execute the stored procedure
+                        await db.raw(`
+                            EXEC [dbo].[SW_InsertarProspecto]
+                                @Empresa = ?,
+                                @Nombre = ?,
+                                @Apellido = ?,
+                                @Telefono = ?,
+                                @Correo = ?,
+                                @Estado = ?,
+                                @Mensaje = ?,
+                                @Asunto = ?,
+                                @VendedorCorreo = ?,
+                                @Ciudad = ?,
+                                @CategoriaAsunto = ?,
+                                @CodigoPostal = ?,
+                                @ID_Asistente = ?,
+                                @ID_Medico = ?,
+                                @ID_Usuario = ?,
+                                @ID_Titular = ?,
+                                @Premio = ?;
+                        `, [
+                            empresa, nombre, apellido, telefono, correo, estado, mensaje,
+                            asunto, vendedorCorreo, ciudad, categoriaAsunto, codigoPostal,
+                            idAsistente, idMedico, idUsuario, idTitular, premio
+                        ]);
+
+                        console.log(`[META WEBHOOK] Stored procedure SW_InsertarProspecto executed for lead ${leadgenId}.`);
                         
                     } catch (error) {
                         console.error('[META WEBHOOK] Error processing lead:', error.response?.data || error.message);
@@ -90,7 +144,8 @@ router.post('/', async (req, res) => {
         return res.status(200).send('EVENT_RECEIVED');
     }
 
-    res.sendStatus(404);
+    // Always return 200 to Meta to prevent retries/disabling the webhook
+    res.status(200).send('NOT_PAGE_OBJECT');
 });
 
 /**
