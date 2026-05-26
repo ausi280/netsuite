@@ -77,7 +77,7 @@ const syncGoogleLeads = async () => {
             if (!rows || rows.length <= 1) continue;
 
             const headers = rows[0];
-            const emailIdx = headers.indexOf('correo_electrónico');
+            const emailIdx = headers.indexOf('email');
             let statusIdx = headers.indexOf('Sync Status');
 
             if (emailIdx === -1) {
@@ -107,12 +107,13 @@ const syncGoogleLeads = async () => {
 
                 if (status === 'PROCESSED' || !email) continue;
            
-                const nombre = row[headers.indexOf('nombre_completo')] || null;
+                const nombre = row[headers.indexOf('full_name')] || null;
                 const apellido = row[headers.indexOf('Last Name')] || null;
-                const telefonoRaw = row[headers.indexOf('número_de_teléfono')] || null;
+                const telefonoRaw = row[headers.indexOf('phone_number')] || null;
                 const telefono = telefonoRaw ? telefonoRaw.replace(/^p:\s*/i, '') : null;
                 const platform = row[headers.indexOf('platform')] || 'Google Sheets';
                 const mensaje = row[headers.indexOf('fecha_probable_del_parto')] || ' ' + row[headers.indexOf('semanas_de_embarazo')] || ' ';
+                const ciudad = row[headers.indexOf('ciudad')] || null;
 
                 await db.raw(`
                     EXEC [dbo].[SW_InsertarProspecto]
@@ -124,8 +125,9 @@ const syncGoogleLeads = async () => {
                         @Asunto = ?,
                         @Mensaje = ?,
                         @Premio = 0,
+                        @Ciudad = ?,
                         @Estado = 'NA';
-                `, [nombre, apellido, telefono, email, platform, mensaje]);
+                `, [nombre, apellido, telefono, email, platform, mensaje, ciudad]);
 
                 console.log(`[SHEET SYNC] Inserted lead: ${email} from ${sheetName}`);
 
