@@ -44,6 +44,103 @@ const getColumnLetter = (index) => {
     return letter;
 };
 
+// New helper function to fetch "Motivo No Venta" from the database
+const getMotivoNoVenta = async (phoneNumber) => {
+    if (!phoneNumber) {
+        return null;
+    }
+    console.log(`[DB Lookup] Searching for "Motivo No Venta" for phone: ${phoneNumber}`);
+    try {
+        // 1. Find Id_Prospecto from ProspectoTelefono
+        const prospectoTelefonoResult = await db.raw(
+            `SELECT Id_Prospecto FROM ProspectoTelefono WHERE Telefono = ?`,
+            [phoneNumber]
+        );
+        if (!prospectoTelefonoResult || prospectoTelefonoResult.length === 0) {
+            console.log(`[DB Lookup] No Id_Prospecto found for phone: ${phoneNumber}`);
+            return null;
+        }
+        const idProspecto = prospectoTelefonoResult[0].Id_Prospecto;
+        console.log(`[DB Lookup] Found Id_Prospecto: ${idProspecto} for phone: ${phoneNumber}`);
+
+        // 2. Find ID_NoVenta from Prospecto
+        const prospectoResult = await db.raw(
+            `SELECT ID_NoVenta FROM Prospecto WHERE Id_Prospecto = ?`,
+            [idProspecto]
+        );
+        if (!prospectoResult || prospectoResult.length === 0 || prospectoResult[0].ID_NoVenta === null) {
+            console.log(`[DB Lookup] No valid ID_NoVenta associated with Id_Prospecto: ${idProspecto}`);
+            return null;
+        }
+        const idNoVenta = prospectoResult[0].ID_NoVenta;
+        console.log(`[DB Lookup] Found ID_NoVenta: ${idNoVenta} for Id_Prospecto: ${idProspecto}`);
+
+        // 3. Find Nombre from NoVenta
+        const noVentaResult = await db.raw(
+            `SELECT Nombre FROM NoVenta WHERE ID_NoVenta = ?`,
+            [idNoVenta]
+        );
+        if (!noVentaResult || noVentaResult.length === 0) {
+            console.log(`[DB Lookup] No record found in NoVenta table for ID: ${idNoVenta}`);
+            return null;
+        }
+        console.log(`[DB Lookup] Successfully retrieved Motivo No Venta: ${noVentaResult[0].Nombre}`);
+        return noVentaResult[0].Nombre;
+
+    } catch (error) {
+        console.error(`[DB Lookup] Error fetching Motivo No Venta for phone ${phoneNumber}:`, error);
+        return null;
+    }
+};
+
+// Helper function to fetch "Contrato" status (Si/No) from the database
+const getContratoStatus = async (phoneNumber) => {
+    if (!phoneNumber) {
+        return null;
+    }
+    console.log(`[DB Lookup] Checking "Contrato" status for phone: ${phoneNumber}`);
+    try {
+        // 1. Find Id_Prospecto from ProspectoTelefono
+        const ptRes = await db.raw(
+            `SELECT Id_Prospecto FROM ProspectoTelefono WHERE Telefono = ?`,
+            [phoneNumber]
+        );
+        if (!ptRes || ptRes.length === 0) {
+            console.log(`[DB Lookup] No Id_Prospecto found for phone: ${phoneNumber}`);
+            return null;
+        }
+        const idProspecto = ptRes[0].Id_Prospecto;
+
+        // 2. Find Activo and id_contrato from Prospecto
+        const pRes = await db.raw(
+            `SELECT Activo, id_contrato FROM Prospecto WHERE Id_Prospecto = ?`,
+            [idProspecto]
+        );
+        
+        if (!pRes || pRes.length === 0) {
+            console.log(`[DB Lookup] No record found in Prospecto for ID: ${idProspecto}`);
+            return "No";
+        }
+
+        const { Activo, id_contrato } = pRes[0];
+        console.log(`[DB Lookup] Retrieved Activo: ${Activo}, id_contrato: ${id_contrato} for Id_Prospecto: ${idProspecto}`);
+
+        // Validation: If Active, skip update
+        if (Activo) {
+            console.log(`[DB Lookup] Prospecto ${idProspecto} is Active (Activo=1). Skipping "Contrato" status update.`);
+            return null;
+        }
+
+        const hasContrato = id_contrato != null ? "Si" : "No";
+        console.log(`[DB Lookup] Successfully retrieved Contrato status: ${hasContrato}`);
+        return hasContrato;
+
+    } catch (error) {
+        console.error(`[DB Lookup] Error fetching Contrato status for phone ${phoneNumber}:`, error);
+        return null;
+    }
+};
+
 /**
  * Core logic to synchronize leads from Google Sheets to the Database
  */
@@ -79,11 +176,13 @@ const syncGoogleLeads = async () => {
             const headers = rows[0];
             const emailIdx = headers.indexOf('email');
             let statusIdx = headers.indexOf('Sync Status');
+            let motivoNoVentaIdx = headers.indexOf('Motivo No Venta'); // New column index
+            let contratoIdx = headers.indexOf('Contrato'); // New column index
 
-            if (emailIdx === -1) {
+            /*if (emailIdx === -1) {
                 console.warn(`[SHEET SYNC] Skipping sheet "${sheetName}": Missing "Email" column.`);
                 continue;
-            }
+            }*/
 
             // If status column doesn't exist, create it at the end
             if (statusIdx === -1) {
@@ -98,51 +197,116 @@ const syncGoogleLeads = async () => {
                 console.log(`[SHEET SYNC] Created "Sync Status" column in sheet: ${sheetName}`);
             }
 
+            // If "Motivo No Venta" column doesn't exist, create it
+            if (motivoNoVentaIdx === -1) {
+                motivoNoVentaIdx = headers.length; // Place it after existing headers
+                const colLetter = getColumnLetter(motivoNoVentaIdx);
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `${sheetName}!${colLetter}1`,
+                    valueInputOption: 'USER_ENTERED',
+                    resource: { values: [['Motivo No Venta']] },
+                });
+                console.log(`[SHEET SYNC] Created "Motivo No Venta" column in sheet: ${sheetName}`);
+                // Update headers array to reflect new column
+                headers.push('Motivo No Venta');
+            }
+
+            // If "Contrato" column doesn't exist, create it
+            if (contratoIdx === -1) {
+                contratoIdx = headers.length; // Place it after existing headers
+                const colLetter = getColumnLetter(contratoIdx);
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `${sheetName}!${colLetter}1`,
+                    valueInputOption: 'USER_ENTERED',
+                    resource: { values: [['Contrato']] },
+                });
+                console.log(`[SHEET SYNC] Created "Contrato" column in sheet: ${sheetName}`);
+                // Update headers array to reflect new column
+                headers.push('Contrato');
+            }
+
             let sheetProcessedCount = 0;
 
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
-                const email = row[emailIdx];
+                const email = row[emailIdx] || null;
                 const status = row[statusIdx];
-
-                if (status === 'PROCESSED' || !email) continue;
-           
-                const nombre = row[headers.indexOf('full_name')] || null;
-                const apellido = row[headers.indexOf('Last Name')] || null;
+                const currentMotivoNoVenta = row[motivoNoVentaIdx]; // Get current value
+                const currentContrato = row[contratoIdx]; // Get current value
                 const telefonoRaw = row[headers.indexOf('phone_number')] || null;
-                const telefono = telefonoRaw ? telefonoRaw.replace(/^p:\s*/i, '') : null;
-                const platform = row[headers.indexOf('platform')] || 'Google Sheets';
-                const mensaje = row[headers.indexOf('fecha_probable_del_parto')] || ' ' + row[headers.indexOf('semanas_de_embarazo')] || ' ';
-                const ciudad = row[headers.indexOf('ciudad')] || null;
+                const telefono = telefonoRaw ? telefonoRaw.replace(/^p:\s*/i, '').replace(/^\+52/, '') : null;
 
-                await db.raw(`
-                    EXEC [dbo].[SW_InsertarProspecto]
-                        @Empresa = 1,
-                        @Nombre = ?,
-                        @Apellido = ?,
-                        @Telefono = ?,
-                        @Correo = ?,
-                        @Asunto = ?,
-                        @Mensaje = ?,
-                        @Premio = 0,
-                        @Ciudad = ?,
-                        @Estado = 'NA';
-                `, [nombre, apellido, telefono, email, platform, mensaje, ciudad]);
+                // 1. Process Lead Insertion if not already processed and has an email
+                if (status !== 'PROCESSED') {
+                    const nombre = row[headers.indexOf('full_name')] || null;
+                    const apellido = row[headers.indexOf('Last Name')] || null;
+                    const platform = row[headers.indexOf('platform')] || 'Google Sheets';
+                    const mensaje = row[headers.indexOf('fecha_probable_del_parto')] || ' ' + row[headers.indexOf('semanas_de_embarazo')] || ' ';
+                    const ciudad = row[headers.indexOf('ciudad')] || null;
 
-                console.log(`[SHEET SYNC] Inserted lead: ${email} from ${sheetName}`);
+                    await db.raw(`
+                        EXEC [dbo].[SW_InsertarProspecto]
+                            @Empresa = 1,
+                            @Nombre = ?,
+                            @Apellido = ?,
+                            @Telefono = ?,
+                            @Correo = ?,
+                            @Asunto = ?,
+                            @Mensaje = ?,
+                            @Premio = 0,
+                            @Ciudad = ?,
+                            @Estado = 'NA';
+                    `, [nombre, apellido, telefono, email, platform, mensaje, ciudad]);
 
-                const columnLetter = getColumnLetter(statusIdx);
-                const rangeToUpdate = `${sheetName}!${columnLetter}${i + 1}`;
+                    console.log(`[SHEET SYNC] Inserted lead: ${email} from ${sheetName}`);
 
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_ID,
-                    range: rangeToUpdate,
-                    valueInputOption: 'USER_ENTERED',
-                    resource: { values: [['PROCESSED']] },
-                });
+                    const columnLetter = getColumnLetter(statusIdx);
+                    const rangeToUpdate = `${sheetName}!${columnLetter}${i + 1}`;
 
-                sheetProcessedCount++;
-                totalProcessedCount++;
+                    await sheets.spreadsheets.values.update({
+                        spreadsheetId: SPREADSHEET_ID,
+                        range: rangeToUpdate,
+                        valueInputOption: 'USER_ENTERED',
+                        resource: { values: [['PROCESSED']] },
+                    });
+
+                    sheetProcessedCount++;
+                    totalProcessedCount++;
+                }
+
+                // Populate "Motivo No Venta" if empty
+                if (!currentMotivoNoVenta) {
+                    const motivoNoVenta = await getMotivoNoVenta(telefono);
+                    if (motivoNoVenta) {
+                        const motivoNoVentaColumnLetter = getColumnLetter(motivoNoVentaIdx);
+                        const motivoNoVentaRangeToUpdate = `${sheetName}!${motivoNoVentaColumnLetter}${i + 1}`;
+                        await sheets.spreadsheets.values.update({
+                            spreadsheetId: SPREADSHEET_ID,
+                            range: motivoNoVentaRangeToUpdate,
+                            valueInputOption: 'USER_ENTERED',
+                            resource: { values: [[motivoNoVenta]] },
+                        });
+                        console.log(`[SHEET SYNC] Updated "Motivo No Venta" for row ${i + 1} in ${sheetName}: ${motivoNoVenta}`);
+                    }
+                }
+
+                // Populate "Contrato" if empty
+                if (!currentContrato) {
+                    const contratoStatus = await getContratoStatus(telefono);
+                    if (contratoStatus) {
+                        const contratoColumnLetter = getColumnLetter(contratoIdx);
+                        const contratoRangeToUpdate = `${sheetName}!${contratoColumnLetter}${i + 1}`;
+                        await sheets.spreadsheets.values.update({
+                            spreadsheetId: SPREADSHEET_ID,
+                            range: contratoRangeToUpdate,
+                            valueInputOption: 'USER_ENTERED',
+                            resource: { values: [[contratoStatus]] },
+                        });
+                        console.log(`[SHEET SYNC] Updated "Contrato" for row ${i + 1} in ${sheetName}: ${contratoStatus}`);
+                    }
+                }
             }
             results.push({ sheet: sheetName, processed: sheetProcessedCount });
         }
