@@ -7,7 +7,11 @@
     "setup": "cross-env NODE_ENV=development node scripts/setup.js",
     "setup:prod": "cross-env NODE_ENV=production node scripts/setup.js",
     "start": "cross-env NODE_ENV=production node server.js",
-    "dev": "cross-env NODE_ENV=development nodemon server.js"
+    "dev": "cross-env NODE_ENV=development nodemon server.js",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "npm run build:ts",
+    "dev:ts": "tsc -p tsconfig.json --watch",
+    "sync:ts": "node dist-ts/cli/runSync.js"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +19,7 @@
   "type": "commonjs",
   "dependencies": {
     "axios": "^1.13.2",
+    "bottleneck": "^2.19.5",
     "chalk": "^4.1.2",
     "cors": "^2.8.5",
     "cross-env": "^10.1.0",
@@ -27,9 +32,14 @@
     "mysql2": "^3.16.0",
     "node-cron": "^3.0.0",
     "oauth-1.0a": "^2.2.6",
-    "pg": "^8.16.3"
+    "p-retry": "^4.6.2",
+    "pg": "^8.16.3",
+    "pino": "^9.5.0"
   },
   "devDependencies": {
-    "nodemon": "^1.0.2"
+    "@types/node": "^22.10.2",
+    "@types/node-cron": "^3.0.11",
+    "nodemon": "^1.0.2",
+    "typescript": "^5.7.2"
   }
 }
