@@ -1,6 +1,7 @@
 import { BaseSyncService, RawNetSuiteRecord } from './baseSyncService';
 import { SuiteQlQueryBuilder } from '../suiteql/queryBuilder';
 import { mapContract } from '../mappers/contractMapper';
+import { parseNetSuiteDate } from '../mappers/utils';
 import type { ContractRow } from '../repositories/contractRepository';
 import type { SyncEntityName } from '../config/types';
 
@@ -24,9 +25,6 @@ export class ContractSyncService extends BaseSyncService<RawNetSuiteRecord, Cont
   }
 
   protected extractTimestamp(raw: RawNetSuiteRecord): Date | null {
-    const value = raw.lastmodified;
-    if (!value) return null;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
+    return parseNetSuiteDate(raw.lastmodified);
   }
 }

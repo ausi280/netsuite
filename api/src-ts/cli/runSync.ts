@@ -3,7 +3,7 @@ import { createLogger } from '../logger';
 import db from '../db/connection';
 import type { SyncEntityName } from '../config/types';
 
-const VALID_ENTITIES: SyncEntityName[] = ['customer', 'contract', 'invoice', 'payment', 'employee', 'receivable'];
+const VALID_ENTITIES: SyncEntityName[] = ['customer', 'contract', 'familyMember', 'service', 'invoice', 'payment', 'employee', 'receivable'];
 
 /**
  * `node dist-ts/cli/runSync.js <entity|all> [--dry-run]`

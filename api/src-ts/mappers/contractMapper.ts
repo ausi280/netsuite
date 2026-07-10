@@ -1,11 +1,11 @@
 import type { ContractRow } from '../repositories/contractRepository';
-import { toDate, toStringOrNull } from './utils';
+import { parseNetSuiteDate, toStringOrNull } from './utils';
 
 /**
  * Mirrors the legacy field-by-field mapping in
- * netsuiteService.js:180-228 exactly, so the shared `netsuite_records`
- * table keeps a consistent column set whether written by the legacy JS
- * full sync or this incremental TS sync.
+ * netsuiteService.js:180-228 exactly, so the shared `netsuite_contracts`
+ * table (renamed from `netsuite_records`) keeps a consistent column set
+ * whether written by the legacy JS full sync or this incremental TS sync.
  */
 export function mapContract(raw: Record<string, any>): ContractRow {
   return {
@@ -13,7 +13,7 @@ export function mapContract(raw: Record<string, any>): ContractRow {
     name: toStringOrNull(raw.name),
     created: toStringOrNull(raw.created),
     lastmodified: toStringOrNull(raw.lastmodified),
-    lastmodifieddate_dt: toDate(raw.lastmodified),
+    lastmodifieddate_dt: parseNetSuiteDate(raw.lastmodified),
     custrecord_cryo_contratosistemaanterior: toStringOrNull(raw.custrecord_cryo_contratosistemaanterior),
     custrecord_cryo_numerocontrato: toStringOrNull(raw.custrecord_cryo_numerocontrato),
     custrecord_nso_token: toStringOrNull(raw.custrecord_nso_token),

@@ -6,6 +6,8 @@ import type { SyncEntityName, ErpSyncConfig, EntitySyncConfig } from '../config/
 const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   customer: 'CUSTOMER',
   contract: 'CONTRACT',
+  familyMember: 'FAMILY_MEMBER',
+  service: 'SERVICE',
   invoice: 'INVOICE',
   payment: 'PAYMENT',
   employee: 'EMPLOYEE',

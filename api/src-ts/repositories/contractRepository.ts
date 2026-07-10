@@ -2,12 +2,13 @@ import type { Knex } from 'knex';
 import { upsertRows } from './upsertHelper';
 
 /**
- * Mirrors the legacy `netsuite_records` table (customrecord1184), including
- * every custom field the legacy syncAndSaveData() maps
- * (netsuiteService.js:180-228), plus the new `lastmodifieddate_dt` column
- * used for incremental-sync watermark comparisons. This table is
- * intentionally shared with the legacy JS writer — both use `netsuite_id`
- * as the upsert key and write a compatible column set.
+ * Mirrors the `netsuite_contracts` table (customrecord1184, renamed from
+ * `netsuite_records`), including every custom field the legacy
+ * syncAndSaveData() maps (netsuiteService.js:180-228), plus the
+ * `lastmodifieddate_dt` column used for incremental-sync watermark
+ * comparisons. This table is intentionally shared with the legacy JS
+ * writer — both use `netsuite_id` as the upsert key and write a
+ * compatible column set.
  */
 export interface ContractRow {
   netsuite_id: string;
@@ -61,7 +62,7 @@ export interface ContractRow {
 }
 
 export class ContractRepository {
-  private readonly table = 'netsuite_records';
+  private readonly table = 'netsuite_contracts';
 
   constructor(private readonly db: Knex) {}
 

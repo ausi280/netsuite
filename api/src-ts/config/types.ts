@@ -6,6 +6,8 @@ export interface EntitySyncConfig {
 export type SyncEntityName =
   | 'customer'
   | 'contract'
+  | 'familyMember'
+  | 'service'
   | 'invoice'
   | 'payment'
   | 'employee'
@@ -32,6 +34,8 @@ export interface ErpSyncConfig {
   LOG_LEVEL: string;
   CUSTOMER: EntitySyncConfig;
   CONTRACT: EntitySyncConfig;
+  FAMILY_MEMBER: EntitySyncConfig;
+  SERVICE: EntitySyncConfig;
   INVOICE: EntitySyncConfig;
   PAYMENT: EntitySyncConfig;
   EMPLOYEE: EntitySyncConfig;
