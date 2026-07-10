@@ -8,6 +8,8 @@ const legacyConfig = require('../../config') as { env: Record<string, any> };
 const DEFAULT_CRON: Record<SyncEntityName, string> = {
   customer: '10 1 * * *',
   contract: '20 1 * * *',
+  familyMember: '25 1 * * *',
+  service: '27 1 * * *',
   invoice: '30 1 * * *',
   payment: '40 1 * * *',
   employee: '50 1 * * *',
@@ -44,6 +46,8 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     LOG_LEVEL: raw?.LOG_LEVEL ?? 'info',
     CUSTOMER: mergeEntityConfig('customer', raw?.CUSTOMER),
     CONTRACT: mergeEntityConfig('contract', raw?.CONTRACT),
+    FAMILY_MEMBER: mergeEntityConfig('familyMember', raw?.FAMILY_MEMBER),
+    SERVICE: mergeEntityConfig('service', raw?.SERVICE),
     INVOICE: mergeEntityConfig('invoice', raw?.INVOICE),
     PAYMENT: mergeEntityConfig('payment', raw?.PAYMENT),
     EMPLOYEE: mergeEntityConfig('employee', raw?.EMPLOYEE),

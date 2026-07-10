@@ -106,7 +106,7 @@ npx knex migrate:latest --knexfile ./knexfile.js
 **Known gotcha on the shared dev SQL Server**: the `knex_migrations` table on this database also has rows from a *different* application (payment-gateway tables: `core_countries`, `core_companies`, `app_pricing`, `app_payments`, …) whose migration files don't exist in this repo. `knex migrate:latest`/`migrate:list` refuse to run at all when this happens (`"The migration directory is corrupt, the following files are missing: ..."`), because knex validates the *entire* history before doing anything.
 
 If you hit this:
-1. It's not caused by anything in this repo's migrations — don't delete/recreate `netsuite_records` or the NetSuite tables to "fix" it.
+1. It's not caused by anything in this repo's migrations — don't delete/recreate `netsuite_contracts` or the other NetSuite tables to "fix" it.
 2. Either reconcile `knex_migrations` (find the other repo's migration files and drop them alongside these, or manually clean up the stale rows if you're sure they're safe to remove), **or**
 3. As a one-off unblock, apply the specific new migration(s) directly via the knex schema builder instead of the CLI — `require('./database')` to get the real Knex singleton, `require('./database/migrations/<file>').up(db)`, then manually insert a matching row into `knex_migrations` (`name`, `batch = current max + 1`, `migration_time`) so future CLI runs (once reconciled) don't try to redo it. This is what was done to get the tables in §6 onto the dev DB the first time.
 
@@ -117,13 +117,17 @@ If you hit this:
 | Entity | NetSuite source | Table | Incremental? |
 |---|---|---|---|
 | `customer` | `customer` (SuiteQL) | `netsuite_customers` | yes, on `lastmodifieddate` |
-| `contract` | `customrecord1184` | `netsuite_records` (**shared** with legacy `syncAndSaveData()`) | yes, on `lastmodified` |
+| `contract` | `customrecord1184` | `netsuite_contracts` (renamed from `netsuite_records`; **shared** with legacy `syncAndSaveData()`) | yes, on `lastmodified` |
+| `familyMember` | `customrecord_cryo_familia` | `netsuite_family_members` | yes, on `lastmodified` |
+| `service` | `customrecord_cryo_servicios` | `netsuite_services` | yes, on `lastmodified` |
 | `invoice` | `transaction` where `type='CustInvc'` | `netsuite_invoices` | yes, on `lastmodifieddate` |
 | `payment` | `transaction` where `type='CustPymt'` | `netsuite_payments` | yes, on `lastmodifieddate` |
 | `employee` | `employee` (SuiteQL) | `netsuite_employees` | yes, on `lastmodifieddate` |
 | `receivable` | open-balance `CustInvc` | `netsuite_receivables` | **no** — full refresh + stale-row pruning every run (see below) |
 
 Every entity also writes its raw NetSuite JSON to `netsuite_raw_records` (keyed by `entity` + `netsuite_id`) **before** the typed upsert, so a mapper bug never loses data — you can always re-derive the typed row from the raw JSON.
+
+**Custom-record date fields aren't ISO.** `customrecord1184`/`customrecord_cryo_familia`/`customrecord_cryo_servicios`'s `lastmodified`/`created` (and, for services, `custrecord_cryo_fecha_procesoserv`) fields come back from SuiteQL as account-locale text (e.g. `20/08/2025`, confirmed day-first since `20` can't be a month), not ISO timestamps — `new Date(...)` silently mis-parses or nulls them. Use `parseNetSuiteDate()` from `mappers/utils.ts` (not the generic `toDate()`) for any custom-record date/text field you map or use for watermark comparisons — see `contractMapper.ts`/`familyMemberMapper.ts` and their services' `extractTimestamp` overrides for the pattern. Standard-entity fields (`customer.lastmodifieddate`, `transaction.lastmodifieddate`, `employee.lastmodifieddate`) haven't shown this issue so far, but haven't been exhaustively checked either — worth confirming if you see a `customer`/`invoice`/`payment`/`employee` sync that never advances its watermark.
 
 ### How a normal (incremental) sync run works
 
@@ -154,7 +158,9 @@ Every entity also writes its raw NetSuite JSON to `netsuite_raw_records` (keyed 
 ```bash
 npm run sync:ts -- employee
 npm run sync:ts -- customer
-npm run sync:ts -- contract --dry-run   # fetches + maps, does NOT write — use before trusting the shared netsuite_records table
+npm run sync:ts -- contract --dry-run   # fetches + maps, does NOT write — use before trusting the shared netsuite_contracts table
+npm run sync:ts -- familyMember
+npm run sync:ts -- service
 npm run sync:ts -- invoice
 npm run sync:ts -- payment
 npm run sync:ts -- receivable
@@ -165,12 +171,14 @@ npm run sync:ts -- all                  # runs every entity once
 
 ```json
 "SYNC": {
-  "CUSTOMER":   { "ENABLED": false, "CRON": "10 1 * * *" },
-  "CONTRACT":   { "ENABLED": false, "CRON": "20 1 * * *" },
-  "INVOICE":    { "ENABLED": false, "CRON": "30 1 * * *" },
-  "PAYMENT":    { "ENABLED": false, "CRON": "40 1 * * *" },
-  "EMPLOYEE":   { "ENABLED": false, "CRON": "50 1 * * *" },
-  "RECEIVABLE": { "ENABLED": false, "CRON": "0 2 * * *" }
+  "CUSTOMER":      { "ENABLED": false, "CRON": "10 1 * * *" },
+  "CONTRACT":      { "ENABLED": false, "CRON": "20 1 * * *" },
+  "FAMILY_MEMBER": { "ENABLED": false, "CRON": "25 1 * * *" },
+  "SERVICE":       { "ENABLED": false, "CRON": "27 1 * * *" },
+  "INVOICE":       { "ENABLED": false, "CRON": "30 1 * * *" },
+  "PAYMENT":       { "ENABLED": false, "CRON": "40 1 * * *" },
+  "EMPLOYEE":      { "ENABLED": false, "CRON": "50 1 * * *" },
+  "RECEIVABLE":    { "ENABLED": false, "CRON": "0 2 * * *" }
 }
 ```
 

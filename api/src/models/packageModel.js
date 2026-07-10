@@ -6,7 +6,7 @@ class PackageModel {
   }
 
   get tableName() {
-    return 'netsuite_records';
+    return 'netsuite_contracts';
   }
 
   getAll() {

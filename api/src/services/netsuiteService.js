@@ -232,17 +232,17 @@ class NetsuiteService {
     if (dialect === 'mssql') {
       await db.transaction(async trx => {
         for (const record of formattedRecords) {
-          const existing = await trx('netsuite_records').where('netsuite_id', record.netsuite_id).first();
+          const existing = await trx('netsuite_contracts').where('netsuite_id', record.netsuite_id).first();
           if (existing) {
-            await trx('netsuite_records').where('netsuite_id', record.netsuite_id).update(record);
+            await trx('netsuite_contracts').where('netsuite_id', record.netsuite_id).update(record);
           } else {
-            await trx('netsuite_records').insert(record);
+            await trx('netsuite_contracts').insert(record);
           }
         }
       });
     } else {
       await db.transaction(async trx => {
-        await trx('netsuite_records')
+        await trx('netsuite_contracts')
           .insert(formattedRecords)
           .onConflict('netsuite_id')
           .merge();

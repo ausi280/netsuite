@@ -8,12 +8,16 @@ import { SyncStateRepository } from './repositories/syncStateRepository';
 import { RawStoreRepository } from './repositories/rawStoreRepository';
 import { CustomerRepository } from './repositories/customerRepository';
 import { ContractRepository } from './repositories/contractRepository';
+import { FamilyMemberRepository } from './repositories/familyMemberRepository';
+import { ServiceRepository } from './repositories/serviceRepository';
 import { InvoiceRepository } from './repositories/invoiceRepository';
 import { PaymentRepository } from './repositories/paymentRepository';
 import { EmployeeRepository } from './repositories/employeeRepository';
 import { ReceivableRepository } from './repositories/receivableRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
+import { FamilyMemberSyncService } from './services/familyMemberSyncService';
+import { ServiceSyncService } from './services/serviceSyncService';
 import { InvoiceSyncService } from './services/invoiceSyncService';
 import { PaymentSyncService } from './services/paymentSyncService';
 import { EmployeeSyncService } from './services/employeeSyncService';
@@ -43,6 +47,8 @@ export function bootstrap(): Bootstrapped {
   const services: EntitySyncService[] = [
     new CustomerSyncService(db, http, syncState, rawStore, new CustomerRepository(db), overlapMinutes),
     new ContractSyncService(db, http, syncState, rawStore, new ContractRepository(db), overlapMinutes),
+    new FamilyMemberSyncService(db, http, syncState, rawStore, new FamilyMemberRepository(db), overlapMinutes),
+    new ServiceSyncService(db, http, syncState, rawStore, new ServiceRepository(db), overlapMinutes),
     new InvoiceSyncService(db, http, syncState, rawStore, new InvoiceRepository(db), overlapMinutes),
     new PaymentSyncService(db, http, syncState, rawStore, new PaymentRepository(db), overlapMinutes),
     new EmployeeSyncService(db, http, syncState, rawStore, new EmployeeRepository(db), overlapMinutes),
