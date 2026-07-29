@@ -112,6 +112,72 @@ class NetsuiteService {
     return this.#executeSuiteQL('SELECT * FROM employee');
   }
 
+  /**
+   * Ad-hoc SuiteQL, returned directly (no persistence). Used by other
+   * services (e.g. lead-to-NetSuite sync) that just need a lookup.
+   */
+  async runSuiteQL(query) {
+    return this.#executeSuiteQL(query);
+  }
+
+  #recordUrl(recordType, id) {
+    const realm = this.service.REALM.replace('_', '-').toLowerCase();
+    const base = `https://${realm}.suitetalk.api.netsuite.com/services/rest/record/v1/${recordType}`;
+    return id ? `${base}/${id}` : base;
+  }
+
+  #authHeaders(url, method) {
+    const requestData = { url, method };
+    const authHeaders = this.oauth.toHeader(this.oauth.authorize(requestData, this.token));
+    authHeaders.Authorization = `OAuth realm="${this.service.REALM}", ${authHeaders.Authorization.replace('OAuth ', '')}`;
+    return authHeaders;
+  }
+
+  /**
+   * Creates a record via the REST Record API. Returns the new record's
+   * internal ID (parsed from the Location response header).
+   */
+  async createRecord(recordType, body) {
+    const url = this.#recordUrl(recordType);
+    try {
+      const response = await axios.post(url, body, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...this.#authHeaders(url, 'POST'),
+        },
+      });
+      const location = response.headers.location || '';
+      const match = location.match(/\/(\d+)\s*$/);
+      return match ? match[1] : null;
+    } catch (error) {
+      const detail = error.response ? JSON.stringify(error.response.data) : error.message;
+      console.error(`Error creating ${recordType} in NetSuite:`, detail);
+      throw new Error(`Failed to create ${recordType} in NetSuite: ${detail}`);
+    }
+  }
+
+  /**
+   * Partially updates a record via the REST Record API.
+   */
+  async updateRecord(recordType, id, body) {
+    const url = this.#recordUrl(recordType, id);
+    try {
+      await axios.patch(url, body, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          ...this.#authHeaders(url, 'PATCH'),
+        },
+      });
+      return id;
+    } catch (error) {
+      const detail = error.response ? JSON.stringify(error.response.data) : error.message;
+      console.error(`Error updating ${recordType} ${id} in NetSuite:`, detail);
+      throw new Error(`Failed to update ${recordType} ${id} in NetSuite: ${detail}`);
+    }
+  }
+
   async saveSuiteQLResults(queryKey, records, idField = 'id') {
     if (!queryKey || !Array.isArray(records)) {
       throw new Error('queryKey and records (array) are required to save SuiteQL results.');

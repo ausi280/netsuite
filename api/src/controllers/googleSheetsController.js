@@ -4,6 +4,7 @@ const knex = require('knex');
 const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
+const leadNetsuiteService = require('../services/leadNetsuiteService');
 
 /**
  * Database Configuration
@@ -261,6 +262,25 @@ const syncGoogleLeads = async () => {
                     `, [nombre, apellido, telefono, email, platform, mensaje, ciudad]);
 
                     console.log(`[SHEET SYNC] Inserted lead: ${email} from ${sheetName}`);
+
+                    if(false){
+                        // Dual-write into NetSuite (Customer/Lead record, subsidiary 5,
+                        // form 874). Best-effort: a NetSuite failure must not stop the
+                        // existing SQL Server insert / sheet status update below.
+                        try {
+                            const nsResult = await leadNetsuiteService.upsertLeadInNetsuite({
+                                firstName: nombre,
+                                lastName: apellido,
+                                email,
+                                phone: telefono,
+                                weeksPregnant: row[headers.indexOf('semanas_de_embarazo')],
+                                dueDate: row[headers.indexOf('fecha_probable_del_parto')],
+                            });
+                            console.log(`[SHEET SYNC] NetSuite lead ${nsResult.created ? 'created' : 'updated'} (id ${nsResult.id}) for ${email}`);
+                        } catch (nsError) {
+                            console.error(`[SHEET SYNC] NetSuite sync failed for ${email}:`, nsError.message);
+                        }
+                    }
 
                     const columnLetter = getColumnLetter(statusIdx);
                     const rangeToUpdate = `${sheetName}!${columnLetter}${i + 1}`;

@@ -30,16 +30,16 @@ const scheduleNetsuiteSync = () => {
     timezone: "America/Mexico_City" // Example timezone, you might want to configure this
   });*/
 
-  // Schedule Google Sheets Lead Sync every 20 minutes
-  //cron.schedule('*/20 * * * *', async () => {
-  //  console.log(`[${new Date().toISOString()}] Starting scheduled Google Sheets sync...`);
-  //  try {
-  //    const report = await syncGoogleLeads();
-  //    console.log(`[${new Date().toISOString()}] Scheduled sync finished. Total leads: ${report.totalProcessedCount}`);
-  //  } catch (error) {
-  //    console.error('[SCHEDULER ERROR] Google Sheets sync failed:', error.message);
-  //  }
- // });
+  //Schedule Google Sheets Lead Sync every 20 minutes
+  cron.schedule('*/20 * * * *', async () => {
+    console.log(`[${new Date().toISOString()}] Starting scheduled Google Sheets sync...`);
+    try {
+      const report = await syncGoogleLeads();
+      console.log(`[${new Date().toISOString()}] Scheduled sync finished. Total leads: ${report.totalProcessedCount}`);
+    } catch (error) {
+      console.error('[SCHEDULER ERROR] Google Sheets sync failed:', error.message);
+    }
+  });
 };
 
 module.exports = { scheduleNetsuiteSync };
