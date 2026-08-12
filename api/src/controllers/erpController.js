@@ -7,42 +7,7 @@ const knex = require('knex');
 
 const netsuiteService = require('../services/netsuiteService');
 const db = require('../../database');
-
-// NetSuite returns dates for this account as DD/MM/YYYY.
-function parseNsDate(dateStr) {
-  if (!dateStr) return null;
-  const [day, month, year] = dateStr.split('/').map(Number);
-  return new Date(Date.UTC(year, month - 1, day));
-}
-
-function formatIsoDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-/**
- * custrecord_cryo_fecha_ini_ultima_a tracks custrecord_cryo_fnacimientoconf's
- * day/month, offset by however many annuity years have already elapsed
- * (anchorYear - oldConfYear). Preserving that offset onto the new conf date
- * keeps it in sync, including when the conf date crosses a year boundary.
- */
-function computeNewAnchor(oldConfStr, oldAnchorStr, newConfIso) {
-  const newConf = new Date(`${newConfIso}T00:00:00Z`);
-
-  if (!oldAnchorStr) {
-    return formatIsoDate(newConf);
-  }
-
-  const oldAnchor = parseNsDate(oldAnchorStr);
-  const oldConf = parseNsDate(oldConfStr);
-  const yearOffset = oldConf ? oldAnchor.getUTCFullYear() - oldConf.getUTCFullYear() : 0;
-
-  const newAnchor = new Date(Date.UTC(
-    newConf.getUTCFullYear() + yearOffset,
-    newConf.getUTCMonth(),
-    newConf.getUTCDate(),
-  ));
-  return formatIsoDate(newAnchor);
-}
+const { shiftAnnuityDates, parseNsDate } = require('../services/contractAnnuityShift');
 
 class ErpController {
 
@@ -182,13 +147,18 @@ class ErpController {
         updateBody.custrecord_cryo_fnacimientoconf = fechaNacimiento;
 
         const [current] = await netsuiteService.runSuiteQL(
-          `SELECT custrecord_cryo_fnacimientoconf, custrecord_cryo_fecha_ini_ultima_a FROM customrecord1184 WHERE id = ${resolved.id}`,
+          `SELECT custrecord_cryo_fnacimientoconf FROM customrecord1184 WHERE id = ${resolved.id}`,
         );
-        updateBody.custrecord_cryo_fecha_ini_ultima_a = computeNewAnchor(
-          current?.custrecord_cryo_fnacimientoconf,
-          current?.custrecord_cryo_fecha_ini_ultima_a,
-          fechaNacimiento,
-        );
+        const oldConf = current?.custrecord_cryo_fnacimientoconf || null;
+        const oldConfDate = parseNsDate(oldConf);
+        const isSameDate = oldConfDate && oldConfDate.getTime() === new Date(`${fechaNacimiento}T00:00:00Z`).getTime();
+
+        if (!isSameDate) {
+          const newAnchor = await shiftAnnuityDates(resolved.id, fechaNacimiento, oldConf);
+          if (newAnchor) {
+            updateBody.custrecord_cryo_fecha_ini_ultima_a = newAnchor;
+          }
+        }
       }
 
       await netsuiteService.updateRecord('customrecord1184', resolved.id, updateBody);

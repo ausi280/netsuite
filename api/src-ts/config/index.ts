@@ -14,6 +14,7 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   payment: '40 1 * * *',
   employee: '50 1 * * *',
   receivable: '0 2 * * *',
+  hospital: '55 1 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -52,6 +53,7 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     PAYMENT: mergeEntityConfig('payment', raw?.PAYMENT),
     EMPLOYEE: mergeEntityConfig('employee', raw?.EMPLOYEE),
     RECEIVABLE: mergeEntityConfig('receivable', raw?.RECEIVABLE),
+    HOSPITAL: mergeEntityConfig('hospital', raw?.HOSPITAL),
   };
 }
 
