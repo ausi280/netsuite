@@ -12,7 +12,8 @@ export type SyncEntityName =
   | 'payment'
   | 'employee'
   | 'receivable'
-  | 'hospital';
+  | 'hospital'
+  | 'partida';
 
 export interface RetryConfig {
   MAX_ATTEMPTS: number;
@@ -42,6 +43,7 @@ export interface ErpSyncConfig {
   EMPLOYEE: EntitySyncConfig;
   RECEIVABLE: EntitySyncConfig;
   HOSPITAL: EntitySyncConfig;
+  PARTIDA: EntitySyncConfig;
 }
 
 export interface ErpConfig {

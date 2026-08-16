@@ -13,6 +13,7 @@ const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   employee: 'EMPLOYEE',
   receivable: 'RECEIVABLE',
   hospital: 'HOSPITAL',
+  partida: 'PARTIDA',
 };
 
 /**

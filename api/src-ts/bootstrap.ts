@@ -15,6 +15,7 @@ import { PaymentRepository } from './repositories/paymentRepository';
 import { EmployeeRepository } from './repositories/employeeRepository';
 import { ReceivableRepository } from './repositories/receivableRepository';
 import { HospitalRepository } from './repositories/hospitalRepository';
+import { PartidaRepository } from './repositories/partidaRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
 import { FamilyMemberSyncService } from './services/familyMemberSyncService';
@@ -24,6 +25,7 @@ import { PaymentSyncService } from './services/paymentSyncService';
 import { EmployeeSyncService } from './services/employeeSyncService';
 import { ReceivableSyncService } from './services/receivableSyncService';
 import { HospitalSyncService } from './services/hospitalSyncService';
+import { PartidaSyncService } from './services/partidaSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
 import type { EntitySyncService } from './services/types';
 
@@ -56,6 +58,7 @@ export function bootstrap(): Bootstrapped {
     new EmployeeSyncService(db, http, syncState, rawStore, new EmployeeRepository(db), overlapMinutes),
     new ReceivableSyncService(db, http, syncState, rawStore, new ReceivableRepository(db)),
     new HospitalSyncService(db, http, syncState, rawStore, new HospitalRepository(db), overlapMinutes),
+    new PartidaSyncService(db, http, syncState, rawStore, new PartidaRepository(db), overlapMinutes),
   ];
 
   const entityLimiter = new Bottleneck({ maxConcurrent: config.erp.SYNC.MAX_CONCURRENT_ENTITIES });

@@ -1,0 +1,40 @@
+import type { PartidaRow } from '../repositories/partidaRepository';
+import { parseNetSuiteDate, toStringOrNull } from './utils';
+
+export function mapPartida(raw: Record<string, any>): PartidaRow {
+  return {
+    netsuite_id: String(raw.id),
+    name: toStringOrNull(raw.name),
+    created: toStringOrNull(raw.created),
+    lastmodified: toStringOrNull(raw.lastmodified),
+    lastmodifieddate_dt: parseNetSuiteDate(raw.lastmodified),
+    links: raw.links ? JSON.stringify(raw.links) : null,
+    custrecord1401: toStringOrNull(raw.custrecord1401),
+    custrecord_cryo_aniopartida: toStringOrNull(raw.custrecord_cryo_aniopartida),
+    custrecord_cryo_articulopartida: toStringOrNull(raw.custrecord_cryo_articulopartida),
+    custrecord_cryo_concepto: toStringOrNull(raw.custrecord_cryo_concepto),
+    custrecord_cryo_estatuspartida: toStringOrNull(raw.custrecord_cryo_estatuspartida),
+    custrecord_cryo_fechalimitepago: toStringOrNull(raw.custrecord_cryo_fechalimitepago),
+    custrecord_cryo_fechapartida: toStringOrNull(raw.custrecord_cryo_fechapartida),
+    custrecord_cryo_finvigencia: toStringOrNull(raw.custrecord_cryo_finvigencia),
+    custrecord_cryo_importepartida: toStringOrNull(raw.custrecord_cryo_importepartida),
+    custrecord_cryo_iniciovigencia: toStringOrNull(raw.custrecord_cryo_iniciovigencia),
+    custrecord_cryo_interes: toStringOrNull(raw.custrecord_cryo_interes),
+    custrecord_cryo_linea_anticipo: toStringOrNull(raw.custrecord_cryo_linea_anticipo),
+    custrecord_cryo_linea_anticipo_ini: toStringOrNull(raw.custrecord_cryo_linea_anticipo_ini),
+    custrecord_cryo_linea_procesamiento: toStringOrNull(raw.custrecord_cryo_linea_procesamiento),
+    custrecord_cryo_linea_saldo_inicial_mr: toStringOrNull(raw.custrecord_cryo_linea_saldo_inicial_mr),
+    custrecord_cryo_monedapartida: toStringOrNull(raw.custrecord_cryo_monedapartida),
+    custrecord_cryo_numcontrato: toStringOrNull(raw.custrecord_cryo_numcontrato),
+    custrecord_cryo_servtipo: toStringOrNull(raw.custrecord_cryo_servtipo),
+    custrecord_cryo_statusservicio: toStringOrNull(raw.custrecord_cryo_statusservicio),
+    custrecord_cryo_subsidiaria_partida: toStringOrNull(raw.custrecord_cryo_subsidiaria_partida),
+    custrecord_cryo_titular_partida: toStringOrNull(raw.custrecord_cryo_titular_partida),
+    externalid: toStringOrNull(raw.externalid),
+    isinactive: toStringOrNull(raw.isinactive),
+    lastmodifiedby: toStringOrNull(raw.lastmodifiedby),
+    owner: toStringOrNull(raw.owner),
+    scriptid: toStringOrNull(raw.scriptid),
+    raw_data: JSON.stringify(raw),
+  };
+}

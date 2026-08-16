@@ -50,7 +50,8 @@
                 "PAYMENT": { "ENABLED": false, "CRON": "40 23 * * *" },
                 "EMPLOYEE": { "ENABLED": true, "CRON": "15 2,14 * * *" },
                 "RECEIVABLE": { "ENABLED": false, "CRON": "0 8 * * *" },
-                "HOSPITAL": { "ENABLED": true, "CRON": "25 2,14 * * *" }
+                "HOSPITAL": { "ENABLED": true, "CRON": "25 2,14 * * *" },
+                "PARTIDA": { "ENABLED": true, "CRON": "35 7 * * *" }
             }
         },
         "META" : {
