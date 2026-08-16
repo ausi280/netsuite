@@ -50,7 +50,7 @@ export function registerNetsuiteTsJobs(cronLib: typeof NodeCron): void {
           inFlight.delete(entity);
         }
       },
-      { timezone: 'America/Mexico_City' },
+      { timezone: 'UTC' },
     );
 
     logger.info(`Registered cron for '${entity}': ${entityConfig.CRON}`);

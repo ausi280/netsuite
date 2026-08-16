@@ -1,0 +1,73 @@
+{
+    "API" : {
+        "URL" : "http://localhost",
+        "PORT" : "3000"
+    },
+    "APP" : {
+        "URL" : "http://localhost",
+        "PORT" : "5174"
+    },
+    "DB" : {
+        "development": {
+            "DRIVER" : "sqlserver",
+            "CLIENT" : "mssql",
+            "HOST" : "cryoholdco.homeip.net",
+            "PORT" : 1433,
+            "DATABASE" : "PaymentCryoholdcoLatam_DEV"
+        },
+        "production": {
+            "DRIVER" : "sqlserver",
+            "CLIENT" : "mssql",
+            "HOST" : "cryoholdco.homeip.net",
+            "PORT" : 1433,
+            "DATABASE" : "PaymentCryoholdcoLatam_PROD"
+        }
+    },
+    "SERVICES" : {
+        "TEST" : {
+            "NAME" : "Test",
+            "SLUG" : "/test"
+        },
+        "GOOGLESHEETS" : {
+            "NAME" : "Google Sheets",
+            "SLUG" : "/google-sheets"
+        },
+        "ERP" : {
+            "NAME" : "NetSuite",
+            "SLUG" : "/erp",
+            "SYNC": {
+                "OVERLAP_BUFFER_MINUTES": 15,
+                "MAX_CONCURRENT_ENTITIES": 2,
+                "PAGE_SIZE": 100,
+                "HTTP_TIMEOUT_MS": 30000,
+                "RETRY": { "MAX_ATTEMPTS": 5, "MIN_TIMEOUT_MS": 500, "MAX_TIMEOUT_MS": 30000 },
+                "RATE_LIMIT": { "MAX_CONCURRENT_REQUESTS": 3, "MIN_TIME_MS": 250 },
+                "LOG_LEVEL": "info",
+                "CUSTOMER": { "ENABLED": false, "CRON": "03 18 * * *" },
+                "CONTRACT": { "ENABLED": true, "CRON": "20 2,14 * * *" },
+                "FAMILY_MEMBER": { "ENABLED": true, "CRON": "15 2,14 * * *" },
+                "INVOICE": { "ENABLED": false, "CRON": "40 23 * * *" },
+                "PAYMENT": { "ENABLED": false, "CRON": "40 23 * * *" },
+                "EMPLOYEE": { "ENABLED": true, "CRON": "15 2,14 * * *" },
+                "RECEIVABLE": { "ENABLED": false, "CRON": "0 8 * * *" },
+                "HOSPITAL": { "ENABLED": true, "CRON": "25 2,14 * * *" }
+            }
+        },
+        "META" : {
+            "NAME" : "Meta",
+            "SLUG" : "/webhooks/meta"
+        }
+    },
+    "SUBSIDIARIES": [
+        {
+            "id": 5,
+            "name": "Cryo-Cell",
+            "paymentoption": 1,
+            "currency": 1,
+            "account": 431,
+            "department": 17,
+            "class": 1,
+            "location": 6
+        }
+    ]
+}
