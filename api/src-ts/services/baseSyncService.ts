@@ -45,7 +45,7 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
     protected readonly overlapBufferMinutes: number,
   ) {}
 
-  protected abstract buildQuery(watermark: Date | null): string;
+  protected abstract buildQuery(watermark: Date | null, tieBreakId?: string | null): string;
   protected abstract mapRow(raw: TRaw): TRow;
 
   protected extractTimestamp(raw: TRaw): Date | null {
@@ -53,6 +53,30 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
     if (!value) return null;
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  /**
+   * Finds the max NetSuite internal id seen in a page, used as the
+   * continuation cursor once we can no longer trust the timestamp (see
+   * queryBuilder.ts's whereWatermark doc for why). Scans the whole page
+   * rather than trusting page order, since a page hit while still on
+   * lastmodified-ordering (i.e. the very first time the cap is hit) isn't
+   * guaranteed id-ordered.
+   */
+  private findMaxId(lastPage: TRaw[]): string | null {
+    let maxId: string | null = null;
+    let maxIdNum = -Infinity;
+
+    for (const raw of lastPage) {
+      const idNum = Number(raw.id);
+      const isGreater = Number.isNaN(idNum) || Number.isNaN(maxIdNum) ? String(raw.id) > String(maxId) : idNum > maxIdNum;
+      if (maxId === null || isGreater) {
+        maxId = String(raw.id);
+        maxIdNum = idNum;
+      }
+    }
+
+    return maxId;
   }
 
   async run(ctx: SyncRunContext): Promise<SyncResult> {
@@ -77,6 +101,17 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
     let failed = 0;
     let maxSeenTimestamp: Date | null = null;
     let lastError: string | undefined;
+    // The first page to hit the offset cap is still ordered by (usually)
+    // lastmodified, not id — record ids are scattered essentially randomly
+    // relative to that order (verified in production), so "max id in that
+    // page" is not a safe boundary: a single high-id/old-lastmodified
+    // outlier can inflate it and cause later id-cursor rounds to silently
+    // skip every not-yet-fetched record whose id falls below it. Once we
+    // switch to id-ordering the risk is gone (ascending id order guarantees
+    // the last page holds the true max id of everything fetched so far),
+    // so only the very first switch needs to restart from id 0 instead of
+    // trusting the page it was triggered from.
+    let idModeActive = false;
 
     try {
       await this.http.executeSuiteQL<TRaw>(query, {
@@ -122,23 +157,28 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
           }
         },
         continueBeyondOffsetCap: ({ lastPage, fetchedSoFar, totalResults }) => {
-          let anchor: Date | null = null;
-          for (const raw of lastPage) {
-            const ts = this.extractTimestamp(raw);
-            if (ts && (!anchor || ts > anchor)) anchor = ts;
+          if (!idModeActive) {
+            idModeActive = true;
+            ctx.logger.warn(
+              { fetchedSoFar, totalResults },
+              'NetSuite pagination cap (100k) reached on a lastmodified-ordered page; switching to a full id-ordered pass from the start of the watermark-scoped range (an id derived from this page is not a safe boundary)',
+            );
+            return this.buildQuery(effectiveWatermark, '0');
           }
-          if (!anchor) {
+
+          const maxId = this.findMaxId(lastPage);
+          if (!maxId) {
             ctx.logger.error(
               { fetchedSoFar, totalResults },
-              'Hit NetSuite pagination cap (100k) but could not determine a continuation anchor from the last page; stopping here',
+              'Hit NetSuite pagination cap (100k) but could not determine a continuation id from the last page; stopping here',
             );
             return null;
           }
           ctx.logger.warn(
-            { fetchedSoFar, totalResults, continueFrom: anchor.toISOString() },
-            'NetSuite pagination cap (100k) reached, continuing from last seen timestamp',
+            { fetchedSoFar, totalResults, tieBreakId: maxId },
+            'NetSuite pagination cap (100k) reached; continuing by id cursor (watermark pinned) since timestamp text can lose precision',
           );
-          return this.buildQuery(anchor);
+          return this.buildQuery(effectiveWatermark, maxId);
         },
       });
     } catch (error: any) {
@@ -169,6 +209,7 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
 
     let fetched = 0;
     let mapErrors = 0;
+    let idModeActive = false;
 
     await this.http.executeSuiteQL<TRaw>(query, {
       pageCallback: async (page) => {
@@ -183,14 +224,15 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
         }
       },
       continueBeyondOffsetCap: ({ lastPage, fetchedSoFar, totalResults }) => {
-        let anchor: Date | null = null;
-        for (const raw of lastPage) {
-          const ts = this.extractTimestamp(raw);
-          if (ts && (!anchor || ts > anchor)) anchor = ts;
+        if (!idModeActive) {
+          idModeActive = true;
+          ctx.logger.warn({ fetchedSoFar, totalResults }, 'Dry run: pagination cap reached on a lastmodified-ordered page; switching to id-ordered pass from the start');
+          return this.buildQuery(effectiveWatermark, '0');
         }
-        if (!anchor) return null;
-        ctx.logger.warn({ fetchedSoFar, totalResults, continueFrom: anchor.toISOString() }, 'Dry run: pagination cap reached, continuing');
-        return this.buildQuery(anchor);
+        const maxId = this.findMaxId(lastPage);
+        if (!maxId) return null;
+        ctx.logger.warn({ fetchedSoFar, totalResults, tieBreakId: maxId }, 'Dry run: pagination cap reached, continuing by id cursor');
+        return this.buildQuery(effectiveWatermark, maxId);
       },
     });
 

@@ -2,7 +2,7 @@ import type { Knex } from 'knex';
 import { upsertRows } from './upsertHelper';
 
 /**
- * Mirrors `customrecord_cryo_hospitales` ("HOSPITALES-CLINICAS"). Field set
+ * Mirrors `customrecord_cryo_arg_hospitales` ("Hospitales"). Field set
  * matches the raw sample exactly rather than being pruned down, since this
  * is a new/unfamiliar custom record.
  */
@@ -13,8 +13,9 @@ export interface HospitalRow {
   lastmodified: string | null;
   lastmodifieddate_dt: Date | null;
   links: string | null;
-  custrecord1399: string | null;
-  custrecordcryo_provincias: string | null;
+  custrecord_hospitales_subsidiria: string | null;
+  custrecord_cryo_provinciaarg: string | null;
+  custrecord_cryo_direccionhospital: string | null;
   externalid: string | null;
   isinactive: string | null;
   lastmodifiedby: string | null;

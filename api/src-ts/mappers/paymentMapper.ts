@@ -1,16 +1,16 @@
 import type { PaymentRow } from '../repositories/paymentRepository';
-import { toDate, toNumber, toStringOrNull } from './utils';
+import { parseNetSuiteDate, toNumber, toStringOrNull } from './utils';
 
 export function mapPayment(raw: Record<string, any>): PaymentRow {
   return {
     netsuite_id: String(raw.id),
     tranid: toStringOrNull(raw.tranid),
     customer_id: toStringOrNull(raw.entity),
-    trandate: toDate(raw.trandate),
+    trandate: parseNetSuiteDate(raw.trandate),
     amount: toNumber(raw.total),
     status: toStringOrNull(raw.status),
     currency: toStringOrNull(raw.currency),
-    lastmodifieddate: toDate(raw.lastmodifieddate),
+    lastmodifieddate: parseNetSuiteDate(raw.lastmodifieddate),
     raw_data: JSON.stringify(raw),
   };
 }

@@ -1,5 +1,5 @@
 import type { CustomerRow } from '../repositories/customerRepository';
-import { toBool, toDate, toStringOrNull } from './utils';
+import { toBool, parseNetSuiteDate, toStringOrNull } from './utils';
 
 export function mapCustomer(raw: Record<string, any>): CustomerRow {
   return {
@@ -9,8 +9,8 @@ export function mapCustomer(raw: Record<string, any>): CustomerRow {
     email: toStringOrNull(raw.email),
     phone: toStringOrNull(raw.phone),
     isinactive: toBool(raw.isinactive),
-    datecreated: toDate(raw.datecreated),
-    lastmodifieddate: toDate(raw.lastmodifieddate),
+    datecreated: parseNetSuiteDate(raw.datecreated),
+    lastmodifieddate: parseNetSuiteDate(raw.lastmodifieddate),
     raw_data: JSON.stringify(raw),
   };
 }

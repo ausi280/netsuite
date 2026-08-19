@@ -13,9 +13,9 @@ import type { SyncEntityName } from '../config/types';
 export class FamilyMemberSyncService extends BaseSyncService<RawNetSuiteRecord, FamilyMemberRow> {
   readonly entityName: SyncEntityName = 'familyMember';
 
-  protected buildQuery(watermark: Date | null): string {
+  protected buildQuery(watermark: Date | null, tieBreakId?: string | null): string {
     return SuiteQlQueryBuilder.from('customrecord_cryo_familia')
-      .whereWatermark('lastmodified', watermark)
+      .whereWatermark('lastmodified', watermark, tieBreakId)
       .orderBy('lastmodified', 'ASC')
       .build();
   }

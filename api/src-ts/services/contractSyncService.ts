@@ -13,9 +13,9 @@ import type { SyncEntityName } from '../config/types';
 export class ContractSyncService extends BaseSyncService<RawNetSuiteRecord, ContractRow> {
   readonly entityName: SyncEntityName = 'contract';
 
-  protected buildQuery(watermark: Date | null): string {
+  protected buildQuery(watermark: Date | null, tieBreakId?: string | null): string {
     return SuiteQlQueryBuilder.from('customrecord1184')
-      .whereWatermark('lastmodified', watermark)
+      .whereWatermark('lastmodified', watermark, tieBreakId)
       .orderBy('lastmodified', 'ASC')
       .build();
   }

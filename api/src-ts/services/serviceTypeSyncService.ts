@@ -8,9 +8,9 @@ import type { SyncEntityName } from '../config/types';
 export class ServiceTypeSyncService extends BaseSyncService<RawNetSuiteRecord, ServiceTypeRow> {
   readonly entityName: SyncEntityName = 'serviceType';
 
-  protected buildQuery(watermark: Date | null): string {
+  protected buildQuery(watermark: Date | null, tieBreakId?: string | null): string {
     return SuiteQlQueryBuilder.from('customlist_cryo_tiposervicio')
-      .whereWatermark('lastmodified', watermark)
+      .whereWatermark('lastmodified', watermark, tieBreakId)
       .orderBy('lastmodified', 'ASC')
       .build();
   }

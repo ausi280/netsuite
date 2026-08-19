@@ -1,5 +1,5 @@
 import type { ReceivableRow } from '../repositories/receivableRepository';
-import { toDate, toNumber, toStringOrNull } from './utils';
+import { parseNetSuiteDate, toNumber, toStringOrNull } from './utils';
 
 export function mapReceivable(raw: Record<string, any>, computedAt: Date): ReceivableRow {
   return {
@@ -7,8 +7,8 @@ export function mapReceivable(raw: Record<string, any>, computedAt: Date): Recei
     customer_netsuite_id: toStringOrNull(raw.entity),
     amountremaining: toNumber(raw.amountremaining),
     currency: toStringOrNull(raw.currency),
-    trandate: toDate(raw.trandate),
-    duedate: toDate(raw.duedate),
+    trandate: parseNetSuiteDate(raw.trandate),
+    duedate: parseNetSuiteDate(raw.duedate),
     computed_at: computedAt,
     raw_data: JSON.stringify(raw),
   };

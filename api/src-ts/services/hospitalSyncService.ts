@@ -13,9 +13,9 @@ import type { SyncEntityName } from '../config/types';
 export class HospitalSyncService extends BaseSyncService<RawNetSuiteRecord, HospitalRow> {
   readonly entityName: SyncEntityName = 'hospital';
 
-  protected buildQuery(watermark: Date | null): string {
-    return SuiteQlQueryBuilder.from('customrecord_cryo_hospitales')
-      .whereWatermark('lastmodified', watermark)
+  protected buildQuery(watermark: Date | null, tieBreakId?: string | null): string {
+    return SuiteQlQueryBuilder.from('customrecord_cryo_arg_hospitales')
+      .whereWatermark('lastmodified', watermark, tieBreakId)
       .orderBy('lastmodified', 'ASC')
       .build();
   }
