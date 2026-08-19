@@ -4,6 +4,7 @@ const axios = require('axios');
 const OAuth = require('oauth-1.0a'); 
 const crypto = require('crypto');
 const knex = require('knex');
+const pRetry = require('p-retry');
 
 const netsuiteService = require('../services/netsuiteService');
 const db = require('../../database');
@@ -140,34 +141,80 @@ class ErpController {
         });
       }
 
-      const updateBody = {};
-      if (fechaColecta) updateBody.custrecord_cryo_fechaprocesamientoi = fechaColecta;
-
+      // Read the OLD confirmed birth date before writing anything — needed
+      // below to compute the annuity day-shift, and must be read before we
+      // overwrite it.
+      let oldConf = null;
       if (fechaNacimiento) {
-        updateBody.custrecord_cryo_fnacimientoconf = fechaNacimiento;
-
         const [current] = await netsuiteService.runSuiteQL(
           `SELECT custrecord_cryo_fnacimientoconf FROM customrecord1184 WHERE id = ${resolved.id}`,
         );
-        const oldConf = current?.custrecord_cryo_fnacimientoconf || null;
+        oldConf = current?.custrecord_cryo_fnacimientoconf || null;
+      }
+
+      // Write the user-facing fields FIRST, before touching any partidas.
+      // Updating a contract's partidas can bump the parent contract's own
+      // internal revision in NetSuite, causing a later PATCH on the
+      // contract to be rejected with a "record has changed" conflict even
+      // though nothing here modified it concurrently — writing these fields
+      // while the record is still untouched avoids that race for the
+      // fields that matter most.
+      const updated = {};
+      if (fechaColecta) updated.custrecord_cryo_fechaprocesamientoi = fechaColecta;
+      if (fechaNacimiento) updated.custrecord_cryo_fnacimientoconf = fechaNacimiento;
+
+      await this.#updateContractWithRetry(resolved.id, updated);
+
+      let warning = null;
+
+      if (fechaNacimiento) {
         const oldConfDate = parseNsDate(oldConf);
         const isSameDate = oldConfDate && oldConfDate.getTime() === new Date(`${fechaNacimiento}T00:00:00Z`).getTime();
 
         if (!isSameDate) {
           const newAnchor = await shiftAnnuityDates(resolved.id, fechaNacimiento, oldConf);
           if (newAnchor) {
-            updateBody.custrecord_cryo_fecha_ini_ultima_a = newAnchor;
+            // This PATCH still comes after the partida writes above, so it
+            // remains exposed to the same conflict. Retry it same as above,
+            // but don't fail the whole request if it doesn't clear in
+            // time — fechaNacimiento/fechaColecta already saved above.
+            try {
+              await this.#updateContractWithRetry(resolved.id, { custrecord_cryo_fecha_ini_ultima_a: newAnchor });
+              updated.custrecord_cryo_fecha_ini_ultima_a = newAnchor;
+            } catch (error) {
+              warning = `fechaNacimiento/fechaColecta saved, but the annuity anchor date could not be updated: ${error.message}`;
+              console.error(`Contract ${resolved.id}:`, warning);
+            }
           }
         }
       }
 
-      await netsuiteService.updateRecord('customrecord1184', resolved.id, updateBody);
-
-      return res.status(200).json({ success: true, contractId: resolved.id, updated: updateBody });
+      return res.status(200).json({ success: true, contractId: resolved.id, updated, ...(warning ? { warning } : {}) });
     } catch (error) {
       console.error('Error updating contract fechas:', error);
       return res.status(500).json({ success: false, message: error.message || 'Failed to update contract fechas.' });
     }
+  }
+
+  /** Retries a customrecord1184 PATCH on the known "record has changed" conflict; aborts immediately on anything else. */
+  #updateContractWithRetry = async (contractId, body) => {
+    return pRetry(async () => {
+      try {
+        await netsuiteService.updateRecord('customrecord1184', contractId, body);
+      } catch (error) {
+        if (error.message && error.message.includes('ha cambiado')) {
+          throw error;
+        }
+        throw new pRetry.AbortError(error);
+      }
+    }, {
+      retries: 3,
+      minTimeout: 500,
+      factor: 2,
+      onFailedAttempt: (error) => {
+        console.warn(`Contract ${contractId} update conflict, retrying (${error.retriesLeft} left)`);
+      },
+    });
   }
 
 }

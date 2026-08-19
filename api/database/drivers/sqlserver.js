@@ -14,6 +14,10 @@ const getKnex = () => {
         user: env.DB[nodeEnv].USER,
         password: env.DB[nodeEnv].PASSWORD,
         database: env.DB[nodeEnv].DATABASE,
+        // Defaults are 15s each, too short for large per-row sync upserts
+        // against this server under load.
+        connectionTimeout: 60000,
+        requestTimeout: 120000,
         authentication: {
           type: 'default'
         },

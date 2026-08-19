@@ -43,15 +43,18 @@
                 "RETRY": { "MAX_ATTEMPTS": 5, "MIN_TIMEOUT_MS": 500, "MAX_TIMEOUT_MS": 30000 },
                 "RATE_LIMIT": { "MAX_CONCURRENT_REQUESTS": 3, "MIN_TIME_MS": 250 },
                 "LOG_LEVEL": "info",
-                "CUSTOMER": { "ENABLED": false, "CRON": "03 18 * * *" },
-                "CONTRACT": { "ENABLED": true, "CRON": "20 2,14 * * *" },
-                "FAMILY_MEMBER": { "ENABLED": true, "CRON": "15 2,14 * * *" },
-                "INVOICE": { "ENABLED": false, "CRON": "40 23 * * *" },
-                "PAYMENT": { "ENABLED": false, "CRON": "40 23 * * *" },
-                "EMPLOYEE": { "ENABLED": true, "CRON": "15 2,14 * * *" },
-                "RECEIVABLE": { "ENABLED": false, "CRON": "0 8 * * *" },
-                "HOSPITAL": { "ENABLED": true, "CRON": "25 2,14 * * *" },
-                "PARTIDA": { "ENABLED": true, "CRON": "35 7 * * *" }
+                "CUSTOMER": { "ENABLED": true, "CRON": "0 6 * * *" },
+                "CONTRACT": { "ENABLED": true, "CRON": "10 6 * * *" },
+                "FAMILY_MEMBER": { "ENABLED": true, "CRON": "20 6 * * *" },
+                "INVOICE": { "ENABLED": false, "CRON": "30 6 * * *" },
+                "PAYMENT": { "ENABLED": false, "CRON": "40 6 * * *" },
+                "EMPLOYEE": { "ENABLED": true, "CRON": "50 6 * * *" },
+                "RECEIVABLE": { "ENABLED": false, "CRON": "0 7 * * *" },
+                "HOSPITAL": { "ENABLED": true, "CRON": "10 7 * * *" },
+                "PARTIDA": { "ENABLED": true, "CRON": "20 7 * * *" },
+                "SERVICE": { "ENABLED": true, "CRON": "30 7 * * *" },
+                "SERVICE_TYPE": { "ENABLED": false, "CRON": "40 7 * * *" },
+                "SERVICE_PACKAGE": { "ENABLED": false, "CRON": "50 7 * * *" }
             }
         },
         "META" : {

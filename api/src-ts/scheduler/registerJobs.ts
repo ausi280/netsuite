@@ -14,6 +14,8 @@ const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   receivable: 'RECEIVABLE',
   hospital: 'HOSPITAL',
   partida: 'PARTIDA',
+  serviceType: 'SERVICE_TYPE',
+  servicePackage: 'SERVICE_PACKAGE',
 };
 
 /**

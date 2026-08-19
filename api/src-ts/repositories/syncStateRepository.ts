@@ -24,6 +24,12 @@ export interface SyncStateRow {
 export class SyncStateRepository {
   private readonly table = 'netsuite_sync_state';
 
+  // If a run dies mid-flight (crashed process, dropped DB connection) before
+  // reaching completeRun(), its 'running' lock would otherwise never clear —
+  // permanently blocking every future run of that entity, including nightly
+  // cron. Treat a 'running' lock older than this as abandoned and reclaimable.
+  private static readonly STALE_LOCK_MINUTES = 180;
+
   constructor(private readonly db: Knex) {}
 
   async get(entity: SyncEntityName): Promise<SyncStateRow | undefined> {
@@ -37,14 +43,23 @@ export class SyncStateRepository {
     }
   }
 
-  /** Atomically claims the run; returns false when another run is already in progress. */
+  /**
+   * Atomically claims the run; returns false when another run is genuinely
+   * still in progress. A 'running' lock older than STALE_LOCK_MINUTES is
+   * treated as abandoned (its owning process died without completing) and
+   * can be reclaimed rather than blocking forever.
+   */
   async tryStartRun(entity: SyncEntityName, runId: string): Promise<boolean> {
     await this.ensure(entity);
+
+    const staleCutoff = new Date(Date.now() - SyncStateRepository.STALE_LOCK_MINUTES * 60_000);
 
     const affected = await this.db(this.table)
       .where({ entity })
       .where((qb) => {
-        qb.whereNull('last_run_status').orWhereNot('last_run_status', 'running');
+        qb.whereNull('last_run_status')
+          .orWhereNot('last_run_status', 'running')
+          .orWhere('last_run_started_at', '<', staleCutoff);
       })
       .update({
         last_run_id: runId,

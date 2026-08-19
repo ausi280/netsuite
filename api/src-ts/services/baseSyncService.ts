@@ -4,6 +4,16 @@ import type { SyncStateRepository } from '../repositories/syncStateRepository';
 import type { RawStoreRepository } from '../repositories/rawStoreRepository';
 import type { SyncEntityName } from '../config/types';
 import type { EntitySyncService, SyncRunContext, SyncResult, SyncStatus } from './types';
+import { withDbRetry, type DbRetryConfig } from '../db/retry';
+
+// A page-write hitting "Can't rollback transaction" or a dropped connection
+// shouldn't kill a multi-hour sync run outright — retry that one page with
+// a fresh transaction before giving up on it.
+const DB_RETRY_CONFIG: DbRetryConfig = {
+  MAX_ATTEMPTS: 3,
+  MIN_TIMEOUT_MS: 1000,
+  MAX_TIMEOUT_MS: 15000,
+};
 
 export interface RawNetSuiteRecord {
   id: string | number;
@@ -73,18 +83,30 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
         pageCallback: async (page) => {
           if (page.length === 0) return;
           fetched += page.length;
+          ctx.logger.info({ pageSize: page.length, fetchedSoFar: fetched }, 'Page fetched from NetSuite, starting DB write');
+          const dbWriteStart = Date.now();
 
           try {
-            await this.db.transaction(async (trx) => {
-              await this.rawStore.upsertMany(
-                trx,
-                this.entityName,
-                page.map((raw) => ({ netsuiteId: String(raw.id), raw })),
-                ctx.runId,
-              );
-              const rows = page.map((raw) => this.mapRow(raw));
-              upserted += await this.repo.upsertMany(trx, rows);
-            });
+            const upsertedThisPage = await withDbRetry(
+              () =>
+                this.db.transaction(async (trx) => {
+                  await this.rawStore.upsertMany(
+                    trx,
+                    this.entityName,
+                    page.map((raw) => ({ netsuiteId: String(raw.id), raw })),
+                    ctx.runId,
+                  );
+                  const rows = page.map((raw) => this.mapRow(raw));
+                  return this.repo.upsertMany(trx, rows);
+                }),
+              DB_RETRY_CONFIG,
+              ctx.logger,
+            );
+            upserted += upsertedThisPage;
+            ctx.logger.info(
+              { pageSize: page.length, upsertedSoFar: upserted, dbWriteMs: Date.now() - dbWriteStart },
+              'Page persisted',
+            );
 
             for (const raw of page) {
               const ts = this.extractTimestamp(raw);
@@ -95,9 +117,28 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
           } catch (error: any) {
             failed += page.length;
             lastError = error?.message ?? String(error);
-            ctx.logger.error({ error: lastError }, 'Page failed to persist, stopping pagination');
+            ctx.logger.error({ error: lastError }, 'Page failed to persist after retries, stopping pagination');
             throw error; // stops the http client's pagination loop
           }
+        },
+        continueBeyondOffsetCap: ({ lastPage, fetchedSoFar, totalResults }) => {
+          let anchor: Date | null = null;
+          for (const raw of lastPage) {
+            const ts = this.extractTimestamp(raw);
+            if (ts && (!anchor || ts > anchor)) anchor = ts;
+          }
+          if (!anchor) {
+            ctx.logger.error(
+              { fetchedSoFar, totalResults },
+              'Hit NetSuite pagination cap (100k) but could not determine a continuation anchor from the last page; stopping here',
+            );
+            return null;
+          }
+          ctx.logger.warn(
+            { fetchedSoFar, totalResults, continueFrom: anchor.toISOString() },
+            'NetSuite pagination cap (100k) reached, continuing from last seen timestamp',
+          );
+          return this.buildQuery(anchor);
         },
       });
     } catch (error: any) {
@@ -140,6 +181,16 @@ export abstract class BaseSyncService<TRaw extends RawNetSuiteRecord, TRow> impl
             ctx.logger.warn({ id: raw.id, error: error?.message ?? String(error) }, 'Dry run: mapper failed for record');
           }
         }
+      },
+      continueBeyondOffsetCap: ({ lastPage, fetchedSoFar, totalResults }) => {
+        let anchor: Date | null = null;
+        for (const raw of lastPage) {
+          const ts = this.extractTimestamp(raw);
+          if (ts && (!anchor || ts > anchor)) anchor = ts;
+        }
+        if (!anchor) return null;
+        ctx.logger.warn({ fetchedSoFar, totalResults, continueFrom: anchor.toISOString() }, 'Dry run: pagination cap reached, continuing');
+        return this.buildQuery(anchor);
       },
     });
 

@@ -5,17 +5,20 @@ import type { AppConfig, EntitySyncConfig, ErpSyncConfig, SyncEntityName } from 
 // same source instead of introducing a parallel dotenv-based config system.
 const legacyConfig = require('../../config') as { env: Record<string, any> };
 
+// One staggered nightly batch, 10 minutes apart, starting 06:00 UTC.
 const DEFAULT_CRON: Record<SyncEntityName, string> = {
-  customer: '10 1 * * *',
-  contract: '20 1 * * *',
-  familyMember: '25 1 * * *',
-  service: '27 1 * * *',
-  invoice: '30 1 * * *',
-  payment: '40 1 * * *',
-  employee: '50 1 * * *',
-  receivable: '0 2 * * *',
-  hospital: '55 1 * * *',
-  partida: '35 1 * * *',
+  customer: '0 6 * * *',
+  contract: '10 6 * * *',
+  familyMember: '20 6 * * *',
+  invoice: '30 6 * * *',
+  payment: '40 6 * * *',
+  employee: '50 6 * * *',
+  receivable: '0 7 * * *',
+  hospital: '10 7 * * *',
+  partida: '20 7 * * *',
+  service: '30 7 * * *',
+  serviceType: '40 7 * * *',
+  servicePackage: '50 7 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -56,6 +59,8 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     RECEIVABLE: mergeEntityConfig('receivable', raw?.RECEIVABLE),
     HOSPITAL: mergeEntityConfig('hospital', raw?.HOSPITAL),
     PARTIDA: mergeEntityConfig('partida', raw?.PARTIDA),
+    SERVICE_TYPE: mergeEntityConfig('serviceType', raw?.SERVICE_TYPE),
+    SERVICE_PACKAGE: mergeEntityConfig('servicePackage', raw?.SERVICE_PACKAGE),
   };
 }
 
