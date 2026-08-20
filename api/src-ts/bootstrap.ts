@@ -18,6 +18,7 @@ import { HospitalRepository } from './repositories/hospitalRepository';
 import { PartidaRepository } from './repositories/partidaRepository';
 import { ServiceTypeRepository } from './repositories/serviceTypeRepository';
 import { ServicePackageRepository } from './repositories/servicePackageRepository';
+import { SerialNumberRepository } from './repositories/serialNumberRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
 import { FamilyMemberSyncService } from './services/familyMemberSyncService';
@@ -30,6 +31,7 @@ import { HospitalSyncService } from './services/hospitalSyncService';
 import { PartidaSyncService } from './services/partidaSyncService';
 import { ServiceTypeSyncService } from './services/serviceTypeSyncService';
 import { ServicePackageSyncService } from './services/servicePackageSyncService';
+import { SerialNumberSyncService } from './services/serialNumberSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
 import type { EntitySyncService } from './services/types';
 
@@ -65,6 +67,7 @@ export function bootstrap(): Bootstrapped {
     new PartidaSyncService(db, http, syncState, rawStore, new PartidaRepository(db), overlapMinutes),
     new ServiceTypeSyncService(db, http, syncState, rawStore, new ServiceTypeRepository(db), overlapMinutes),
     new ServicePackageSyncService(db, http, syncState, rawStore, new ServicePackageRepository(db), overlapMinutes),
+    new SerialNumberSyncService(db, http, syncState, rawStore, new SerialNumberRepository(db), overlapMinutes),
   ];
 
   const entityLimiter = new Bottleneck({ maxConcurrent: config.erp.SYNC.MAX_CONCURRENT_ENTITIES });

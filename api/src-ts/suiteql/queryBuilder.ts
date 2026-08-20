@@ -13,10 +13,15 @@ export class SuiteQlQueryBuilder {
   // Set whenever whereWatermark() gets a tie-break id, so build() pages by
   // id instead — see whereWatermark() for why the timestamp can't be used.
   private useIdOrder = false;
+  // Plain 'id' is ambiguous once `table` is a join (e.g. "inventorynumber n
+  // JOIN item i ON n.item = i.id") — pass a qualified name (e.g. 'n.id') via
+  // from()'s second argument in that case.
+  private idColumn = 'id';
 
-  static from(table: string): SuiteQlQueryBuilder {
+  static from(table: string, idColumn = 'id'): SuiteQlQueryBuilder {
     const builder = new SuiteQlQueryBuilder();
     builder.table = table;
+    builder.idColumn = idColumn;
     return builder;
   }
 
@@ -60,7 +65,7 @@ export class SuiteQlQueryBuilder {
     }
 
     if (tieBreakId !== undefined && tieBreakId !== null) {
-      this.conditions.push(`id > ${SuiteQlQueryBuilder.idLiteral(tieBreakId)}`);
+      this.conditions.push(`${this.idColumn} > ${SuiteQlQueryBuilder.idLiteral(tieBreakId)}`);
       this.useIdOrder = true;
     }
 
@@ -80,7 +85,7 @@ export class SuiteQlQueryBuilder {
       query += ` WHERE ${this.conditions.join(' AND ')}`;
     }
 
-    const effectiveOrderColumn = this.useIdOrder ? 'id' : this.orderByColumn;
+    const effectiveOrderColumn = this.useIdOrder ? this.idColumn : this.orderByColumn;
     if (effectiveOrderColumn) {
       query += ` ORDER BY ${effectiveOrderColumn} ${this.orderByDirection}`;
     }

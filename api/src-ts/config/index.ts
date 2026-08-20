@@ -19,6 +19,7 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   service: '30 7 * * *',
   serviceType: '40 7 * * *',
   servicePackage: '50 7 * * *',
+  serialNumber: '0 8 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -61,6 +62,7 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     PARTIDA: mergeEntityConfig('partida', raw?.PARTIDA),
     SERVICE_TYPE: mergeEntityConfig('serviceType', raw?.SERVICE_TYPE),
     SERVICE_PACKAGE: mergeEntityConfig('servicePackage', raw?.SERVICE_PACKAGE),
+    SERIAL_NUMBER: mergeEntityConfig('serialNumber', raw?.SERIAL_NUMBER),
   };
 }
 

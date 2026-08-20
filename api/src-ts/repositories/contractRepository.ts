@@ -36,6 +36,7 @@ export interface ContractRow {
   custrecord_cryo_garantia_completa: string | null;
   custrecord_cryo_garantiafallecimiento: string | null;
   custrecord_cryo_mensaje_email_mostrado: string | null;
+  custrecord_cryo_mx_kit: string | null;
   custrecord_cryo_mesnac_letra: string | null;
   custrecord_cryo_mesnacimiento: string | null;
   custrecord_cryo_moneda: string | null;

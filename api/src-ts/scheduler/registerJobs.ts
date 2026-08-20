@@ -16,6 +16,7 @@ const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   partida: 'PARTIDA',
   serviceType: 'SERVICE_TYPE',
   servicePackage: 'SERVICE_PACKAGE',
+  serialNumber: 'SERIAL_NUMBER',
 };
 
 /**

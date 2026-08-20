@@ -34,6 +34,7 @@ export function mapContract(raw: Record<string, any>): ContractRow {
     custrecord_cryo_garantia_completa: toStringOrNull(raw.custrecord_cryo_garantia_completa),
     custrecord_cryo_garantiafallecimiento: toStringOrNull(raw.custrecord_cryo_garantiafallecimiento),
     custrecord_cryo_mensaje_email_mostrado: toStringOrNull(raw.custrecord_cryo_mensaje_email_mostrado),
+    custrecord_cryo_mx_kit: toStringOrNull(raw.custrecord_cryo_mx_kit),
     custrecord_cryo_mesnac_letra: toStringOrNull(raw.custrecord_cryo_mesnac_letra),
     custrecord_cryo_mesnacimiento: toStringOrNull(raw.custrecord_cryo_mesnacimiento),
     custrecord_cryo_moneda: toStringOrNull(raw.custrecord_cryo_moneda),

@@ -54,7 +54,8 @@
                 "PARTIDA": { "ENABLED": true, "CRON": "20 7 * * *" },
                 "SERVICE": { "ENABLED": true, "CRON": "30 7 * * *" },
                 "SERVICE_TYPE": { "ENABLED": false, "CRON": "40 7 * * *" },
-                "SERVICE_PACKAGE": { "ENABLED": false, "CRON": "50 7 * * *" }
+                "SERVICE_PACKAGE": { "ENABLED": false, "CRON": "50 7 * * *" },
+                "SERIAL_NUMBER": { "ENABLED": true, "CRON": "0 8 * * *" }
             }
         },
         "META" : {
