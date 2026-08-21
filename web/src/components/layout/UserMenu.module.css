@@ -1,0 +1,91 @@
+.wrapper {
+  position: relative;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-fluent);
+}
+
+.trigger:hover {
+  background: var(--color-neutral-100);
+}
+
+.avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.name {
+  font-size: 14px;
+  color: var(--color-neutral-900);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  color: var(--color-secondary);
+  transition: transform var(--duration-fast) var(--ease-fluent);
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  min-width: 220px;
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-tile-hover);
+  padding: 10px;
+  z-index: 20;
+}
+
+.dropdownEmail {
+  padding: 6px 8px 10px;
+  font-size: 13px;
+  color: var(--color-secondary);
+  border-bottom: 1px solid var(--color-neutral-100);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.signOutButton {
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: none;
+  color: var(--color-neutral-900);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-fluent);
+}
+
+.signOutButton:hover {
+  background: var(--color-neutral-100);
+}

@@ -16,7 +16,9 @@ export type SyncEntityName =
   | 'partida'
   | 'serviceType'
   | 'servicePackage'
-  | 'serialNumber';
+  | 'serialNumber'
+  | 'medico'
+  | 'medicoColombia';
 
 export interface RetryConfig {
   MAX_ATTEMPTS: number;
@@ -50,6 +52,8 @@ export interface ErpSyncConfig {
   SERVICE_TYPE: EntitySyncConfig;
   SERVICE_PACKAGE: EntitySyncConfig;
   SERIAL_NUMBER: EntitySyncConfig;
+  MEDICO: EntitySyncConfig;
+  MEDICO_COLOMBIA: EntitySyncConfig;
 }
 
 export interface ErpConfig {

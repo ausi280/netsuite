@@ -20,6 +20,8 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   serviceType: '40 7 * * *',
   servicePackage: '50 7 * * *',
   serialNumber: '0 8 * * *',
+  medico: '10 8 * * *',
+  medicoColombia: '20 8 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -63,6 +65,8 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     SERVICE_TYPE: mergeEntityConfig('serviceType', raw?.SERVICE_TYPE),
     SERVICE_PACKAGE: mergeEntityConfig('servicePackage', raw?.SERVICE_PACKAGE),
     SERIAL_NUMBER: mergeEntityConfig('serialNumber', raw?.SERIAL_NUMBER),
+    MEDICO: mergeEntityConfig('medico', raw?.MEDICO),
+    MEDICO_COLOMBIA: mergeEntityConfig('medicoColombia', raw?.MEDICO_COLOMBIA),
   };
 }
 
@@ -101,6 +105,34 @@ export function getConfig(): AppConfig {
     cached = loadConfig();
   }
   return cached;
+}
+
+export interface AzureAdConfig {
+  tenantId: string;
+  clientId: string;
+}
+
+/**
+ * Reads AZURE_AD.TENANT_ID/CLIENT_ID from config/env.json. Deliberately not
+ * called from loadConfig()/getConfig() — the reporting API is the only
+ * consumer, and it's expected to be blank until the Entra ID app
+ * registration is completed, so this only throws when a caller actually
+ * needs it (buildEntraAuthMiddleware, at reporting-router build time), not
+ * at general app startup.
+ */
+export function getAzureAdConfig(): AzureAdConfig {
+  const raw = legacyConfig.env && legacyConfig.env.AZURE_AD;
+  const tenantId = raw && raw.TENANT_ID;
+  const clientId = raw && raw.CLIENT_ID;
+
+  if (!tenantId || !clientId) {
+    throw new Error(
+      'Missing AZURE_AD.TENANT_ID/CLIENT_ID configuration in config/env.json. ' +
+        'Complete the Entra ID app registration and populate these values before the reporting API can validate requests.',
+    );
+  }
+
+  return { tenantId, clientId };
 }
 
 export * from './types';

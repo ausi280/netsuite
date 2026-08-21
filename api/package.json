@@ -6,6 +6,7 @@
   "scripts": {
     "setup": "cross-env NODE_ENV=development node scripts/setup.js",
     "setup:prod": "cross-env NODE_ENV=production node scripts/setup.js",
+    "prestart": "npm run build:ts",
     "start": "cross-env NODE_ENV=production node server.js",
     "dev": "cross-env NODE_ENV=development nodemon server.js",
     "build:ts": "tsc -p tsconfig.json",
@@ -25,7 +26,9 @@
     "cross-env": "^10.1.0",
     "crypto": "^1.0.1",
     "express": "^5.1.0",
+    "express-jwt": "^8.5.1",
     "googleapis": "^171.4.0",
+    "jwks-rsa": "^4.1.0",
     "knex": "^3.1.0",
     "mercadopago": "^2.12.0",
     "mssql": "^12.2.0",
@@ -37,6 +40,7 @@
     "pino": "^9.5.0"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^22.10.2",
     "@types/node-cron": "^3.0.11",
     "nodemon": "^1.0.2",

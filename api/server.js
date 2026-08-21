@@ -9,7 +9,8 @@ const path = require('path');
 
 const allowedOrigins = [
     'https://testrenovaciones.cryo-cell.com.mx',
-    'https://renovaciones.cryo-cell.com.mx'
+    'https://renovaciones.cryo-cell.com.mx',
+    'https://reportes.cryoholdco.com'
 ];
 
 if (env.APP && env.APP.URL) {
@@ -35,6 +36,14 @@ app.use((req, res, next) => {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+
+try {
+  const { buildReportingRouter } = require('./dist-ts/reporting/router');
+  app.use('/api/reports', buildReportingRouter());
+  console.log('Reporting API mounted at /api/reports');
+} catch (error) {
+  console.error('[Reporting API] failed to load, skipping:', error.message);
+}
 
 console.log('Loaded Services Configuration:', JSON.stringify(env.SERVICES, null, 2));
 
@@ -73,9 +82,17 @@ if (env.SERVICES) {
 }
 
 
-app.get('/', (req, res) => {
-    res.send('API is up and running');
-});
+const frontendDist = path.join(__dirname, 'public');
+if (fs.existsSync(path.join(frontendDist, 'index.html'))) {
+    app.use(express.static(frontendDist));
+    app.get(/^\/(?!api\/).*/, (req, res) => {
+        res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+} else {
+    app.get('/', (req, res) => {
+        res.send('API is up and running');
+    });
+}
 
 app.use((req, res) => {
     console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);

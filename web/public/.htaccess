@@ -1,0 +1,11 @@
+# SPA client-side routing fallback: serve index.html for any request that isn't a
+# real file/directory on disk, so React Router can handle paths like /login or
+# /reports/:entityKey directly (deep links, refreshes) instead of the server 404ing.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  RewriteRule ^ index.html [L]
+</IfModule>
