@@ -34,11 +34,11 @@ export function LoginPage() {
         </div>
         <h1 className={styles.title}>Cryoholdco Reportes</h1>
         <p className={styles.subtitle}>Panel de reportes de datos sincronizados desde NetSuite.</p>
-        {
+        {/*
         <p className={styles.credits}>
           Créditos: a mi mamá, María, Mike, al Jefazo Jorge, a todos los directores de marketing y Juan
         </p>
-        }
+        */}
         {isMsalConfigured ? (
           <button type="button" className={styles.loginButton} onClick={handleLogin}>
             <MicrosoftLogo />

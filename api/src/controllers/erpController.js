@@ -161,7 +161,19 @@ class ErpController {
       // fields that matter most.
       const updated = {};
       if (fechaColecta) updated.custrecord_cryo_fechaprocesamientoi = fechaColecta;
-      if (fechaNacimiento) updated.custrecord_cryo_fnacimientoconf = fechaNacimiento;
+      if (fechaNacimiento) {
+        updated.custrecord_cryo_fnacimientoconf = fechaNacimiento;
+
+        // Derived from the "YYYY-MM-DD" string directly (not a parsed Date) to sidestep
+        // timezone/day-month-swap pitfalls. custrecord_cryo_mesnacimiento is zero-padded
+        // ("08"), custrecord_cryo_mesnac_letra is not ("8") — matches the values NetSuite
+        // itself already stores on existing contracts (see confirmed real records).
+        const mesNacimiento = fechaNacimiento.split('-')[1];
+        if (mesNacimiento) {
+          updated.custrecord_cryo_mesnacimiento = mesNacimiento;
+          updated.custrecord_cryo_mesnac_letra = String(parseInt(mesNacimiento, 10));
+        }
+      }
 
       await this.#updateContractWithRetry(resolved.id, updated);
 

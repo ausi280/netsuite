@@ -73,6 +73,22 @@
   word-break: break-all;
 }
 
+.adminLink {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  color: var(--color-neutral-900);
+  font-size: 14px;
+  text-decoration: none;
+  transition: background var(--duration-fast) var(--ease-fluent);
+}
+
+.adminLink:hover {
+  background: var(--color-neutral-100);
+}
+
 .signOutButton {
   width: 100%;
   text-align: left;

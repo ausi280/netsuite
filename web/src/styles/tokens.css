@@ -13,6 +13,18 @@
   --color-danger: #d64545;
   --color-danger-soft: rgba(214, 69, 69, 0.1);
 
+  /* Chart chrome - hairline grid/axis, one step off the chart surface (white) */
+  --chart-grid: #e1e0d9;
+  --chart-axis: #c3c2b7;
+  --chart-muted: #898781;
+
+  /* Fixed status palette (never themed) - reserved for values that mean good/bad,
+     never reused as a generic categorical series color. */
+  --status-good: #0ca30c;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+
   --radius-md: 12px;
   --radius-lg: 20px;
 

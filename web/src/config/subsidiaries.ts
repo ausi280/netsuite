@@ -18,3 +18,6 @@ const SUBSIDIARY_LABELS: Record<string, string> = {
 export function subsidiaryLabel(id: string): string {
   return SUBSIDIARY_LABELS[id] ?? `Subsidiaria ${id}`;
 }
+
+/** Every subsidiary id we have a real label for - used by the admin permissions screen's checklist. */
+export const KNOWN_SUBSIDIARY_IDS: string[] = Object.keys(SUBSIDIARY_LABELS);

@@ -1,0 +1,141 @@
+.chartCard {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  padding: 24px;
+}
+
+.chartWrapper {
+  width: 100%;
+  height: 360px;
+}
+
+.tooltip {
+  background: var(--color-white);
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-tile);
+  font-family: var(--font-body);
+}
+
+.tooltipLabel {
+  font-size: 12px;
+  color: var(--color-secondary);
+  margin-bottom: 4px;
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tooltipKey {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.tooltipValue {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+}
+
+.tooltipMetric {
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.legendRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-neutral-200);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-neutral-800);
+}
+
+.legendSwatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legendIcon {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.tableSection {
+  margin-top: 16px;
+}
+
+.tableToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--color-secondary);
+  font-size: 13px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.tableToggle:hover {
+  color: var(--color-primary);
+}
+
+.chevron {
+  transition: transform var(--duration-fast) var(--ease-fluent);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.table th {
+  text-align: left;
+  color: var(--color-secondary);
+  font-weight: 500;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-neutral-200);
+}
+
+.table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-neutral-100);
+  color: var(--color-neutral-900);
+  font-variant-numeric: tabular-nums;
+}
+
+.table td:first-child {
+  font-variant-numeric: normal;
+}
+
+.emptyState {
+  padding: 48px 0;
+  text-align: center;
+  color: var(--color-secondary);
+  font-size: 14px;
+}

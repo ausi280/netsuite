@@ -7,7 +7,8 @@ import { useEntities } from '../hooks/useEntities';
 import styles from './DashboardPage.module.css';
 
 export function DashboardPage() {
-  const { data: entities, isLoading, isError, error, refetch } = useEntities();
+  const { data, isLoading, isError, error, refetch } = useEntities();
+  const entities = data?.entities;
 
   return (
     <AppShell>

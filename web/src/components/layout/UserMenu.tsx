@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMsal } from '@azure/msal-react';
+import { Link } from 'react-router-dom';
+import { useEntities } from '../../hooks/useEntities';
 import styles from './UserMenu.module.css';
 
 function getInitials(name: string): string {
@@ -13,6 +15,9 @@ export function UserMenu() {
   const { instance, accounts } = useMsal();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  // Reuses the same react-query cache entry the dashboard's tile fetch already populated (same
+  // queryKey) - no extra request just to know whether to show the admin link.
+  const { data } = useEntities();
 
   const account = accounts[0];
 
@@ -68,6 +73,11 @@ export function UserMenu() {
       {open ? (
         <div className={styles.dropdown} role="menu">
           <div className={styles.dropdownEmail}>{account.username}</div>
+          {data?.isAdmin ? (
+            <Link to="/admin/users" className={styles.adminLink} role="menuitem" onClick={() => setOpen(false)}>
+              Administrar usuarios
+            </Link>
+          ) : null}
           <button type="button" className={styles.signOutButton} role="menuitem" onClick={handleSignOut}>
             Cerrar sesión
           </button>

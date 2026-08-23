@@ -45,7 +45,7 @@ function subsidiaryContainsClause(qb: Knex.QueryBuilder, column: string, id: str
  * "allowed to see zero subsidiaries" and must return no rows at all - not "unrestricted" - since
  * an empty OR-group would otherwise add no real condition.
  */
-function applySubsidiaryRestriction(qb: Knex.QueryBuilder, column: string, allowedIds: Set<string>): void {
+export function applySubsidiaryRestriction(qb: Knex.QueryBuilder, column: string, allowedIds: Set<string>): void {
   if (allowedIds.size === 0) {
     qb.whereRaw('1 = 0');
     return;

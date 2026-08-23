@@ -1,5 +1,23 @@
 import { apiFetch } from './apiClient';
-import type { ApiSuccess, EntitySummary, PaginatedRows, ReportEntityKey, ReportRecord, SortDir } from './types';
+import type {
+  AdminUserSummary,
+  ApiSuccess,
+  EntitiesResponse,
+  EntitySummary,
+  PaginatedRows,
+  PartidaAnalyticsResponse,
+  PartidaBreakdownRow,
+  PartidaDimension,
+  ReportEntityKey,
+  ReportRecord,
+  SortDir,
+  UserPermissionUpdate,
+} from './types';
+
+export interface EntitiesResult {
+  entities: EntitySummary[];
+  isAdmin: boolean;
+}
 
 export interface EntityRowsParams {
   page: number;
@@ -10,9 +28,9 @@ export interface EntityRowsParams {
   subsidiary: string;
 }
 
-export async function fetchEntities(token: string | null): Promise<EntitySummary[]> {
-  const result = await apiFetch<ApiSuccess<EntitySummary[]>>('/reports/entities', { token });
-  return result.data;
+export async function fetchEntities(token: string | null): Promise<EntitiesResult> {
+  const result = await apiFetch<EntitiesResponse>('/reports/entities', { token });
+  return { entities: result.data, isAdmin: result.isAdmin };
 }
 
 export async function fetchEntityRows(
@@ -36,6 +54,33 @@ export async function fetchEntityRows(
 export async function fetchSubsidiaryOptions(token: string | null, entityKey: ReportEntityKey): Promise<string[]> {
   const result = await apiFetch<ApiSuccess<string[]>>(`/reports/${entityKey}/subsidiaries`, { token });
   return result.data;
+}
+
+/** Aggregated count+sum breakdown for the partidas graphs page. Only 'partidas' supports this today. */
+export async function fetchPartidaAnalytics(
+  token: string | null,
+  dimension: PartidaDimension
+): Promise<PartidaBreakdownRow[]> {
+  const result = await apiFetch<PartidaAnalyticsResponse>(`/reports/partidas/analytics?dimension=${dimension}`, {
+    token,
+  });
+  return result.data;
+}
+
+/** Admin-only: every registered user (auto-provisioned on first login) and their current access. 403s for a non-admin caller. */
+export async function fetchAdminUsers(token: string | null): Promise<AdminUserSummary[]> {
+  const result = await apiFetch<ApiSuccess<AdminUserSummary[]>>('/reports/admin/users', { token });
+  return result.data;
+}
+
+/** Admin-only: overwrites one user's isAdmin/allowedEntities/allowedSubsidiaries. */
+export async function updateAdminUserPermissions(token: string | null, oid: string, update: UserPermissionUpdate): Promise<void> {
+  await apiFetch(`/reports/admin/users/${encodeURIComponent(oid)}`, {
+    token,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(update),
+  });
 }
 
 export async function fetchEntityRecord(

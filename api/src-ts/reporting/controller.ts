@@ -2,11 +2,13 @@ import type { Request, Response } from 'express';
 import knex from '../db/connection';
 import { getEntityConfig, listEntityConfigs } from './entityRegistry';
 import { getEntitySummaries, getPagedRows, getRowById, getSubsidiaryOptions } from './reportingRepository';
+import { getPartidaBreakdown, PARTIDA_DIMENSIONS } from './partidaAnalyticsRepository';
+import type { PartidaDimension } from './partidaAnalyticsRepository';
 import type { UserPermissions } from './permissionsRepository';
 import type { EntityConfig } from './types';
 
 /** Express 5's ParamsDictionary types named params as `string | string[]` to account for wildcard segments; our routes only ever use simple `:name` segments, which are always plain strings at runtime. */
-function paramString(value: string | string[]): string {
+export function paramString(value: string | string[]): string {
   return Array.isArray(value) ? value[0] ?? '' : value;
 }
 
@@ -27,7 +29,7 @@ export async function listEntitySummaries(req: Request, res: Response): Promise<
   const configs = listEntityConfigs().filter((c) => isEntityAllowed(permissions, c));
 
   const data = await getEntitySummaries(knex, configs, subsidiaryRestrictionFor(permissions));
-  res.status(200).json({ success: true, data });
+  res.status(200).json({ success: true, data, isAdmin: permissions.isAdmin });
 }
 
 /** GET /api/reports/:entity?page=&pageSize=&search=&sortBy=&sortDir=&subsidiary= */
@@ -98,4 +100,45 @@ export async function listSubsidiaryOptions(req: Request, res: Response): Promis
 
   const data = await getSubsidiaryOptions(knex, config, subsidiaryRestrictionFor(permissions));
   res.status(200).json({ success: true, data });
+}
+
+function isPartidaDimension(value: unknown): value is PartidaDimension {
+  return typeof value === 'string' && (PARTIDA_DIMENSIONS as string[]).includes(value);
+}
+
+/**
+ * GET /api/reports/:entity/analytics?dimension=month|status|subsidiary|servicetype
+ * Only 'partidas' supports analytics today; other entities 400. Enforces the same
+ * entity + subsidiary permission checks as every other reporting route.
+ */
+export async function getPartidaAnalytics(req: Request, res: Response): Promise<void> {
+  const entityKey = paramString(req.params.entity);
+  const config = getEntityConfig(entityKey);
+  if (!config) {
+    res.status(404).json({ success: false, message: `Unknown report entity: ${entityKey}` });
+    return;
+  }
+
+  if (entityKey !== 'partidas') {
+    res.status(400).json({ success: false, message: `Analytics are not available for '${entityKey}'.` });
+    return;
+  }
+
+  const permissions = req.permissions;
+  if (!permissions || !isEntityAllowed(permissions, config)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const { dimension } = req.query;
+  if (!isPartidaDimension(dimension)) {
+    res.status(400).json({
+      success: false,
+      message: `Invalid dimension. Expected one of: ${PARTIDA_DIMENSIONS.join(', ')}.`,
+    });
+    return;
+  }
+
+  const data = await getPartidaBreakdown(knex, dimension, subsidiaryRestrictionFor(permissions));
+  res.status(200).json({ success: true, dimension, data });
 }

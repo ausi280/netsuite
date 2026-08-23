@@ -44,6 +44,43 @@ export interface ApiSuccess<T> {
   data: T;
 }
 
+export type PartidaDimension = 'month' | 'status' | 'subsidiary' | 'servicetype';
+
+export interface PartidaBreakdownRow {
+  key: string;
+  count: number;
+  sum: number;
+}
+
+export interface PartidaAnalyticsResponse {
+  success: true;
+  dimension: PartidaDimension;
+  data: PartidaBreakdownRow[];
+}
+
+export interface EntitiesResponse {
+  success: true;
+  data: EntitySummary[];
+  isAdmin: boolean;
+}
+
+export interface AdminUserSummary {
+  oid: string;
+  email: string | null;
+  displayName: string | null;
+  isAdmin: boolean;
+  allowedEntities: ReportEntityKey[];
+  allowedSubsidiaries: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserPermissionUpdate {
+  isAdmin: boolean;
+  allowedEntities: ReportEntityKey[];
+  allowedSubsidiaries: string[];
+}
+
 export interface ApiError {
   success: false;
   message: string;

@@ -1,0 +1,19 @@
+.heading {
+  margin-bottom: 20px;
+}
+
+.title {
+  font-size: 24px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--color-secondary);
+  margin-top: 4px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

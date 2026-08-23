@@ -1,4 +1,4 @@
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { ReportToolbar } from '../components/table/ReportToolbar';
 import { ReportTable } from '../components/table/ReportTable';
@@ -123,6 +123,16 @@ export function ReportPage() {
     <AppShell breadcrumbs={[{ label: 'Reportes', to: '/' }, { label: config.label }]}>
       <div className={styles.heading}>
         <h1 className={styles.title}>{config.label}</h1>
+        {entityKey === 'partidas' ? (
+          <Link to="/reports/partidas/graphs" className={styles.graphsLink}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <line x1="12" y1="20" x2="12" y2="10" />
+              <line x1="18" y1="20" x2="18" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="16" />
+            </svg>
+            Ver gráficos
+          </Link>
+        ) : null}
       </div>
       <ReportToolbar
         initialSearch={search}

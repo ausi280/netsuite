@@ -7,13 +7,14 @@ import { getAzureAdConfig } from '../../config';
 interface DecodedAccessToken {
   oid?: string;
   preferred_username?: string;
+  name?: string;
   [claim: string]: unknown;
 }
 
 declare module 'express-serve-static-core' {
   interface Request {
     /** Populated after a successful token validation; absent otherwise. */
-    auditUser?: { oid: string | null; username: string | null };
+    auditUser?: { oid: string | null; username: string | null; name: string | null };
     /** Set by express-jwt (requestProperty default) to the decoded token payload. */
     auth?: DecodedAccessToken;
   }
@@ -57,6 +58,7 @@ export function buildEntraAuthMiddleware(): RequestHandler {
         req.auditUser = {
           oid: req.auth.oid ?? null,
           username: req.auth.preferred_username ?? null,
+          name: req.auth.name ?? null,
         };
       }
 

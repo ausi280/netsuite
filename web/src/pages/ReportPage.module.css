@@ -1,7 +1,26 @@
 .heading {
   margin-bottom: 20px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .title {
   font-size: 24px;
+}
+
+.graphsLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.graphsLink:hover {
+  text-decoration: underline;
 }
