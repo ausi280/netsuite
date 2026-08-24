@@ -5,6 +5,7 @@ import { buildEntraAuthMiddleware } from './auth/entraAuth';
 import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
 import { getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
 import { listUsers, updateUserPermissions } from './adminController';
+import { getCommissionsReportRoute, getContractDossierRoute } from './contractReportsController';
 
 /**
  * Assembles the read-only reporting API router: Entra ID access-token auth
@@ -32,6 +33,9 @@ export function buildReportingRouter(): Router {
   // and "users" as an id value.
   router.get('/admin/users', listUsers);
   router.patch('/admin/users/:oid', updateUserPermissions);
+  // Must be registered before /:entity/:id, or that route would swallow "commissions" as an id value.
+  router.get('/contracts/commissions', getCommissionsReportRoute);
+  router.get('/contracts/:id/dossier', getContractDossierRoute);
   // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics" as an id value.
   router.get('/:entity/subsidiaries', listSubsidiaryOptions);
   router.get('/:entity/analytics', getPartidaAnalytics);

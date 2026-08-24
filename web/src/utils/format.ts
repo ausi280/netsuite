@@ -21,9 +21,24 @@ const dateTimeFormatter = new Intl.DateTimeFormat('es-MX', {
   minute: '2-digit',
 });
 
+// NetSuite text-date fields (e.g. custrecord_cryo_finicio) come back as "DD/MM/YYYY", which
+// JS's native Date parser treats ambiguously as MM/DD/YYYY - parse this shape explicitly before
+// falling back to native parsing, or day/month get silently swapped for any day <= 12.
+const DDMMYYYY = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+
 function toDate(value: unknown): Date | null {
   if (value === null || value === undefined || value === '') return null;
-  const date = value instanceof Date ? value : new Date(String(value));
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+
+  const str = String(value).trim();
+  const match = DDMMYYYY.exec(str);
+  if (match) {
+    const [, day, month, year] = match;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const date = new Date(str);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 

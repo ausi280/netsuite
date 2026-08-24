@@ -5,8 +5,10 @@ import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
 import { entityColumns } from '../config/entityColumns';
 import { useEntityRecord } from '../hooks/useEntityRecord';
+import { useContractDossier } from '../hooks/useContractDossier';
 import type { ReportEntityKey } from '../api/types';
 import { formatCellValue, humanizeKey } from '../utils/format';
+import { ContractDossierView } from '../components/reports/ContractDossierView';
 import { NotFoundPage } from './NotFoundPage';
 import styles from './ReportDetailPage.module.css';
 
@@ -22,15 +24,26 @@ export function ReportDetailPage() {
   const entityKey = (isValid ? rawEntityKey : 'customers') as ReportEntityKey;
   const id = rawId ?? '';
   const config = entityColumns[entityKey];
+  // Contracts get a richer dossier view (resolved names, services, annuities) instead of the
+  // generic key-value grid every other entity uses.
+  const isContract = isValid && entityKey === 'contracts';
 
-  const { data, isLoading, isError, error, refetch } = useEntityRecord(entityKey, id, { enabled: isValid });
+  const genericRecord = useEntityRecord(entityKey, id, { enabled: isValid && !isContract });
+  const dossierRecord = useContractDossier(id, { enabled: isContract });
+  const { data: genericData, isLoading: genericLoading, isError: genericIsError, error: genericError, refetch: genericRefetch } = genericRecord;
+  const { data: dossierData, isLoading: dossierLoading, isError: dossierIsError, error: dossierError, refetch: dossierRefetch } = dossierRecord;
+
+  const isLoading = isContract ? dossierLoading : genericLoading;
+  const isError = isContract ? dossierIsError : genericIsError;
+  const error = isContract ? dossierError : genericError;
+  const refetch = isContract ? dossierRefetch : genericRefetch;
 
   if (!isValid) {
     return <NotFoundPage />;
   }
 
-  const fields = data
-    ? Object.entries(data).filter(([key]) => key !== 'raw_data')
+  const fields = genericData
+    ? Object.entries(genericData).filter(([key]) => key !== 'raw_data')
     : [];
 
   return (
@@ -51,7 +64,8 @@ export function ReportDetailPage() {
           onRetry={() => refetch()}
         />
       ) : null}
-      {data ? (
+      {isContract && dossierData ? <ContractDossierView dossier={dossierData} /> : null}
+      {!isContract && genericData ? (
         <>
           <div className={styles.card}>
             <div className={styles.grid}>
@@ -84,7 +98,7 @@ export function ReportDetailPage() {
               </svg>
               Datos completos (JSON)
             </button>
-            {showRaw ? <pre className={styles.rawContent}>{JSON.stringify(data.raw_data, null, 2)}</pre> : null}
+            {showRaw ? <pre className={styles.rawContent}>{JSON.stringify(genericData.raw_data, null, 2)}</pre> : null}
           </div>
         </>
       ) : null}

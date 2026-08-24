@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ReportPage } from './pages/ReportPage';
 import { ReportDetailPage } from './pages/ReportDetailPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
+import { CommissionsPage } from './pages/CommissionsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 // recharts is a sizeable dependency only needed on this one page - lazy-loading it keeps the
@@ -59,6 +60,16 @@ export function App() {
                 <Suspense fallback={<LoadingState label="Cargando gráficos..." />}>
                   <PartidaAnalyticsPage />
                 </Suspense>
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/contracts/commissions"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <CommissionsPage />
               </PageTransition>
             </RequireAuth>
           }

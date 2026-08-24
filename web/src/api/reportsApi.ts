@@ -2,6 +2,9 @@ import { apiFetch } from './apiClient';
 import type {
   AdminUserSummary,
   ApiSuccess,
+  CommissionRow,
+  CommissionsResponse,
+  ContractDossier,
   EntitiesResponse,
   EntitySummary,
   PaginatedRows,
@@ -81,6 +84,25 @@ export async function updateAdminUserPermissions(token: string | null, oid: stri
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
   });
+}
+
+/** Rich single-contract view (resolved names, its services, its annuities/partidas). */
+export async function fetchContractDossier(token: string | null, id: string): Promise<ContractDossier> {
+  const result = await apiFetch<ApiSuccess<ContractDossier>>(`/reports/contracts/${encodeURIComponent(id)}/dossier`, { token });
+  return result.data;
+}
+
+/** New-contract salesperson commissions grid for one calendar month, optionally narrowed to one subsidiary. */
+export async function fetchCommissions(
+  token: string | null,
+  month: number,
+  year: number,
+  subsidiary?: string
+): Promise<CommissionRow[]> {
+  const query = new URLSearchParams({ month: String(month), year: String(year) });
+  if (subsidiary) query.set('subsidiary', subsidiary);
+  const result = await apiFetch<CommissionsResponse>(`/reports/contracts/commissions?${query.toString()}`, { token });
+  return result.data;
 }
 
 export async function fetchEntityRecord(

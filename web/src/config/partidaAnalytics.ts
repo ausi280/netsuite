@@ -1,5 +1,6 @@
 import type { PartidaDimension } from '../api/types';
 import { subsidiaryLabel } from './subsidiaries';
+import { PARTIDA_STATUS_LABELS, SERVICE_TYPE_LABELS } from './labels';
 
 export type ChartKind = 'trend' | 'bar';
 
@@ -24,14 +25,6 @@ function monthLabel(key: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-// Real NetSuite list labels (resolved via BUILTIN.DF against customrecord_cryo_partidas).
-const STATUS_LABELS: Record<string, string> = {
-  '1': 'Pagado',
-  '2': 'Parcialmente pagado',
-  '3': 'Pendiente',
-  '4': 'Vencido',
-};
-
 // Status is a fixed, reserved palette (never themed) - it means good/bad here, so each bar
 // wears its real status color rather than the single nominal-category hue used elsewhere.
 const STATUS_COLORS: Record<string, string> = {
@@ -48,16 +41,6 @@ const STATUS_ICONS: Record<string, string> = {
   '4': '!',
 };
 
-const SERVICE_TYPE_LABELS: Record<string, string> = {
-  '1': 'Sangre',
-  '2': 'Tejido',
-  '3': 'ADN',
-  '4': 'Diente',
-  '7': 'Fibroblastos',
-  '14': 'Pulpa Dental',
-  '15': 'Placenta',
-};
-
 export const partidaDimensions: DimensionConfig[] = [
   {
     key: 'month',
@@ -69,7 +52,7 @@ export const partidaDimensions: DimensionConfig[] = [
     key: 'status',
     label: 'Por Estatus',
     chartType: 'bar',
-    keyLabel: (key) => STATUS_LABELS[key] ?? `Estatus ${key}`,
+    keyLabel: (key) => PARTIDA_STATUS_LABELS[key] ?? `Estatus ${key}`,
     keyColor: (key) => STATUS_COLORS[key] ?? 'var(--color-primary)',
     keyIcon: (key) => STATUS_ICONS[key],
   },
