@@ -109,30 +109,22 @@ class ErpController {
 
   updateContractFechas = async (req, res) => {
     try {
-      const { contractName, fechaNacimiento, especimenNombre } = req.body;
+      const { contractId, contractName, fechaNacimiento, especimenNombre } = req.body;
       // fechaColecta and fechaProcesamiento are accepted as aliases for the same input -
       // callers have used both names; fechaColecta wins if both are somehow sent.
       const fechaColecta = req.body.fechaColecta || req.body.fechaProcesamiento;
 
-      // PATCH /contracts/:contractId supplies the id via the URL, unambiguously - the
-      // body-based "contractId or contractName" mutual-exclusion check below only applies
-      // to the legacy POST /contracts/fechas shape, which has no URL param to draw it from.
-      let contractId = req.params.contractId;
-      if (!contractId) {
-        const bodyContractId = req.body.contractId;
-        const hasId = bodyContractId !== undefined && bodyContractId !== null && bodyContractId !== '';
-        const hasName = contractName !== undefined && contractName !== null && contractName !== '';
+      const hasId = contractId !== undefined && contractId !== null && contractId !== '';
+      const hasName = contractName !== undefined && contractName !== null && contractName !== '';
 
-        if (hasId === hasName) {
-          return res.status(400).json({
-            success: false,
-            message: 'Provide exactly one of "contractId" or "contractName".',
-          });
-        }
-        contractId = bodyContractId;
+      if (hasId === hasName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Provide exactly one of "contractId" or "contractName".',
+        });
       }
 
-      if (contractId !== undefined && contractId !== null && contractId !== '' && !/^\d+$/.test(String(contractId).trim())) {
+      if (hasId && !/^\d+$/.test(String(contractId).trim())) {
         return res.status(400).json({ success: false, message: '"contractId" must be numeric.' });
       }
 
