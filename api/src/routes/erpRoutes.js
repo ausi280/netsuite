@@ -14,4 +14,9 @@ router.route('/suiteql')
 router.route('/contracts/fechas')
             .post(apiKeyAuth, erpController.updateContractFechas);
 
+// RESTful equivalent of POST /contracts/fechas - the contract id comes from the URL instead
+// of the body, so callers only send the fields they want to update.
+router.route('/contracts/:contractId')
+            .patch(apiKeyAuth, erpController.updateContractFechas);
+
 module.exports = router;
