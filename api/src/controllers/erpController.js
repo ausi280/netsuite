@@ -109,7 +109,10 @@ class ErpController {
 
   updateContractFechas = async (req, res) => {
     try {
-      const { contractId, contractName, fechaNacimiento, fechaColecta } = req.body;
+      const { contractId, contractName, fechaNacimiento, especimenNombre } = req.body;
+      // fechaColecta and fechaProcesamiento are accepted as aliases for the same input -
+      // callers have used both names; fechaColecta wins if both are somehow sent.
+      const fechaColecta = req.body.fechaColecta || req.body.fechaProcesamiento;
 
       const hasId = contractId !== undefined && contractId !== null && contractId !== '';
       const hasName = contractName !== undefined && contractName !== null && contractName !== '';
@@ -125,10 +128,12 @@ class ErpController {
         return res.status(400).json({ success: false, message: '"contractId" must be numeric.' });
       }
 
-      if (!fechaNacimiento && !fechaColecta) {
+      const trimmedEspecimenNombre = typeof especimenNombre === 'string' ? especimenNombre.trim() : '';
+
+      if (!fechaNacimiento && !fechaColecta && !trimmedEspecimenNombre) {
         return res.status(400).json({
           success: false,
-          message: 'Provide at least one of "fechaNacimiento" or "fechaColecta" to update.',
+          message: 'Provide at least one of "fechaNacimiento", "fechaColecta" (or "fechaProcesamiento"), or "especimenNombre" to update.',
         });
       }
 
@@ -141,15 +146,24 @@ class ErpController {
         });
       }
 
-      // Read the OLD confirmed birth date before writing anything — needed
-      // below to compute the annuity day-shift, and must be read before we
-      // overwrite it.
+      // Read the OLD confirmed birth date (needed below to compute the annuity day-shift) and/or
+      // the linked espécimen id (custrecord_cryo_especimen, a customrecord_cryo_familia record)
+      // before writing anything — both must be read before any write can invalidate them.
       let oldConf = null;
-      if (fechaNacimiento) {
+      let especimenId = null;
+      if (fechaNacimiento || trimmedEspecimenNombre) {
         const [current] = await netsuiteService.runSuiteQL(
-          `SELECT custrecord_cryo_fnacimientoconf FROM customrecord1184 WHERE id = ${resolved.id}`,
+          `SELECT custrecord_cryo_fnacimientoconf, custrecord_cryo_especimen FROM customrecord1184 WHERE id = ${resolved.id}`,
         );
         oldConf = current?.custrecord_cryo_fnacimientoconf || null;
+        especimenId = current?.custrecord_cryo_especimen || null;
+      }
+
+      if (trimmedEspecimenNombre && !especimenId) {
+        return res.status(422).json({
+          success: false,
+          message: `Contract ${resolved.id} has no linked espécimen (custrecord_cryo_especimen) to rename.`,
+        });
       }
 
       // Write the user-facing fields FIRST, before touching any partidas.
@@ -175,7 +189,17 @@ class ErpController {
         }
       }
 
-      await this.#updateContractWithRetry(resolved.id, updated);
+      if (Object.keys(updated).length > 0) {
+        await this.#updateRecordWithRetry('customrecord1184', resolved.id, updated);
+      }
+
+      let especimenUpdated = null;
+      if (trimmedEspecimenNombre) {
+        await this.#updateRecordWithRetry('customrecord_cryo_familia', especimenId, {
+          custrecord_cryo_nombremiembro: trimmedEspecimenNombre,
+        });
+        especimenUpdated = { id: especimenId, nombre: trimmedEspecimenNombre };
+      }
 
       let warning = null;
 
@@ -191,7 +215,7 @@ class ErpController {
             // but don't fail the whole request if it doesn't clear in
             // time — fechaNacimiento/fechaColecta already saved above.
             try {
-              await this.#updateContractWithRetry(resolved.id, { custrecord_cryo_fecha_ini_ultima_a: newAnchor });
+              await this.#updateRecordWithRetry('customrecord1184', resolved.id, { custrecord_cryo_fecha_ini_ultima_a: newAnchor });
               updated.custrecord_cryo_fecha_ini_ultima_a = newAnchor;
             } catch (error) {
               warning = `fechaNacimiento/fechaColecta saved, but the annuity anchor date could not be updated: ${error.message}`;
@@ -201,18 +225,24 @@ class ErpController {
         }
       }
 
-      return res.status(200).json({ success: true, contractId: resolved.id, updated, ...(warning ? { warning } : {}) });
+      return res.status(200).json({
+        success: true,
+        contractId: resolved.id,
+        updated,
+        ...(especimenUpdated ? { especimenUpdated } : {}),
+        ...(warning ? { warning } : {}),
+      });
     } catch (error) {
       console.error('Error updating contract fechas:', error);
       return res.status(500).json({ success: false, message: error.message || 'Failed to update contract fechas.' });
     }
   }
 
-  /** Retries a customrecord1184 PATCH on the known "record has changed" conflict; aborts immediately on anything else. */
-  #updateContractWithRetry = async (contractId, body) => {
+  /** Retries a NetSuite record PATCH on the known "record has changed" conflict; aborts immediately on anything else. */
+  #updateRecordWithRetry = async (recordType, id, body) => {
     return pRetry(async () => {
       try {
-        await netsuiteService.updateRecord('customrecord1184', contractId, body);
+        await netsuiteService.updateRecord(recordType, id, body);
       } catch (error) {
         if (error.message && error.message.includes('ha cambiado')) {
           throw error;
