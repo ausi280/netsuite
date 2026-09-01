@@ -27,6 +27,11 @@
             "DATABASE" : "PaymentCryoholdcoLatam_PROD"
         }
     },
+    "LEGACY_DB" : {
+        "HOST" : "cryoholdco.homeip.net",
+        "PORT" : 1433,
+        "DATABASE" : "CryoCell"
+    },
     "SERVICES" : {
         "TEST" : {
             "NAME" : "Test",

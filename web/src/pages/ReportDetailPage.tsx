@@ -9,6 +9,7 @@ import { useContractDossier } from '../hooks/useContractDossier';
 import type { ReportEntityKey } from '../api/types';
 import { formatCellValue, humanizeKey } from '../utils/format';
 import { ContractDossierView } from '../components/reports/ContractDossierView';
+import { NotasCobranzaSection } from '../components/reports/NotasCobranzaSection';
 import { NotFoundPage } from './NotFoundPage';
 import styles from './ReportDetailPage.module.css';
 
@@ -46,6 +47,15 @@ export function ReportDetailPage() {
     ? Object.entries(genericData).filter(([key]) => key !== 'raw_data')
     : [];
 
+  // Contracts: "Contratos · 138805 / MX-CC-2026-000145-1 / BCN011679-2" - id, NetSuite name, and
+  // the legacy CryoCell folio (custrecord_cryo_contratosistemaanterior), when each is available.
+  const titleParts = [config.label, id];
+  if (isContract && dossierData) {
+    if (dossierData.contract.name) titleParts.push(dossierData.contract.name);
+    if (dossierData.contract.folio_sistema_anterior) titleParts.push(dossierData.contract.folio_sistema_anterior);
+  }
+  const title = `${titleParts[0]} · ${titleParts.slice(1).join(' / ')}`;
+
   return (
     <AppShell breadcrumbs={[{ label: 'Reportes', to: '/' }, { label: config.label, to: `/reports/${entityKey}` }, { label: id }]}>
       <Link to={`/reports/${entityKey}`} className={styles.backLink}>
@@ -55,7 +65,7 @@ export function ReportDetailPage() {
         Volver a {config.label}
       </Link>
       <div className={styles.heading}>
-        <h1 className={styles.title}>{config.label} · {id}</h1>
+        <h1 className={styles.title}>{title}</h1>
       </div>
       {isLoading ? <LoadingState label="Cargando registro..." /> : null}
       {isError ? (
@@ -64,7 +74,14 @@ export function ReportDetailPage() {
           onRetry={() => refetch()}
         />
       ) : null}
-      {isContract && dossierData ? <ContractDossierView dossier={dossierData} /> : null}
+      {isContract && dossierData ? (
+        <>
+          <ContractDossierView dossier={dossierData} />
+          <div className={styles.notasSection}>
+            <NotasCobranzaSection contractId={id} />
+          </div>
+        </>
+      ) : null}
       {!isContract && genericData ? (
         <>
           <div className={styles.card}>

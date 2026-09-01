@@ -11,6 +11,8 @@ export interface EntityColumn {
   format?: ColumnFormat;
   /** Whether clicking the header should request server-side sorting on this column. */
   sortable?: boolean;
+  /** For format:'currency' only - the row's sibling column holding the NetSuite currency id (e.g. custrecord_cryo_moneda), so the amount renders with its real currency instead of a guess. */
+  currencyColumn?: string;
 }
 
 export interface EntityColumnConfig {
@@ -30,7 +32,7 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'custrecord_cryo_numerocontrato', header: 'No. Contrato' },
       { key: 'custrecord_cryo_titularcontrato', header: 'Titular' },
       { key: 'custrecord_cryo_estatus', header: 'Estatus' },
-      { key: 'custrecord_cryo_saldo_inicial', header: 'Saldo Inicial', format: 'currency' },
+      { key: 'custrecord_cryo_saldo_inicial', header: 'Saldo Inicial', format: 'currency', currencyColumn: 'custrecord_cryo_moneda' },
       { key: 'custrecord_cryo_finicio', header: 'Fecha Inicio', format: 'date' },
       { key: 'custrecord_cryo_subsidiariacontrato', header: 'Subsidiaria', format: 'subsidiary' },
       { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
@@ -91,7 +93,7 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'name', header: 'Nombre' },
       { key: 'custrecord_cryo_concepto', header: 'Concepto' },
       { key: 'custrecord_cryo_estatuspartida', header: 'Estatus' },
-      { key: 'custrecord_cryo_importepartida', header: 'Importe', format: 'currency' },
+      { key: 'custrecord_cryo_importepartida', header: 'Importe', format: 'currency', currencyColumn: 'custrecord_cryo_monedapartida' },
       { key: 'custrecord_cryo_fechapartida', header: 'Fecha', format: 'date' },
       { key: 'custrecord_cryo_numcontrato', header: 'No. Contrato' },
       { key: 'custrecord_cryo_subsidiaria_partida', header: 'Subsidiaria', format: 'subsidiary' },
@@ -106,7 +108,7 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'name', header: 'Nombre' },
       { key: 'custrecord_cryo_serviciocontratado', header: 'Servicio Contratado' },
       { key: 'custrecord_cryo_estatusservicio', header: 'Estatus' },
-      { key: 'custrecord_cryo_costoanualidad', header: 'Costo Anualidad', format: 'currency' },
+      { key: 'custrecord_cryo_costoanualidad', header: 'Costo Anualidad', format: 'currency', currencyColumn: 'custrecord_cryo_monedaserv' },
       { key: 'custrecord_cryo_idcontrato', header: 'Contrato' },
       { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
       { key: 'lastmodifieddate_dt', header: 'Última Modificación', format: 'datetime', sortable: true },

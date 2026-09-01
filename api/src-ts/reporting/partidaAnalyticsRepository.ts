@@ -9,12 +9,15 @@ export const PARTIDA_DIMENSIONS: PartidaDimension[] = ['month', 'status', 'subsi
 export interface PartidaBreakdownRow {
   /** Raw key: "YYYY-MM" for month, the raw NetSuite list-value id for the others. Display labels are owned by the frontend. */
   key: string;
+  /** NetSuite currency internal id (e.g. "1" for MXN), or null if the partida has no currency set. */
+  currency: string | null;
   count: number;
   sum: number;
 }
 
 const TABLE = 'netsuite_partidas';
 const SUBSIDIARY_COLUMN = 'custrecord_cryo_subsidiaria_partida';
+const CURRENCY_COLUMN = 'custrecord_cryo_monedapartida';
 // custrecord_cryo_importepartida is stored as plain decimal text ("156", "80.5" - confirmed
 // 100% TRY_CONVERT-able in this table), not a numeric column, hence the explicit cast in every
 // SUM below rather than knex's plain `.sum(column)` helper.
@@ -37,9 +40,13 @@ const MONTH_BUCKET_SQL = `FORMAT(TRY_CONVERT(date, custrecord_cryo_fechapartida,
 
 /**
  * Aggregated count + sum of custrecord_cryo_importepartida, grouped by one of the 4 supported
- * dimensions. `restrictSubsidiaries` (null = unrestricted/admin) is always enforced regardless
- * of which dimension is requested, so a subsidiary-restricted user's charts - including the
- * "by subsidiary" one - never surface totals for subsidiaries they can't see.
+ * dimensions AND by currency. `restrictSubsidiaries` (null = unrestricted/admin) is always
+ * enforced regardless of which dimension is requested, so a subsidiary-restricted user's charts -
+ * including the "by subsidiary" one - never surface totals for subsidiaries they can't see.
+ *
+ * Always grouped by currency (custrecord_cryo_monedapartida) in addition to the requested
+ * dimension - this account mixes MXN/USD/EUR/COP/ARS/PEN/BRL, so a single blended sum per bucket
+ * would be meaningless. The frontend splits the flat result back out into one panel per currency.
  */
 export async function getPartidaBreakdown(
   db: Knex,
@@ -48,33 +55,55 @@ export async function getPartidaBreakdown(
 ): Promise<PartidaBreakdownRow[]> {
   if (dimension === 'month') {
     const qb = db(TABLE)
-      .select(db.raw(`${MONTH_BUCKET_SQL} AS bucket, COUNT(*) AS cnt, SUM(${AMOUNT_SQL}) AS total`))
+      .select(
+        db.raw(
+          `${MONTH_BUCKET_SQL} AS bucket, ?? AS currency, COUNT(*) AS cnt, SUM(${AMOUNT_SQL}) AS total`,
+          [CURRENCY_COLUMN],
+        ),
+      )
       .whereNotNull('custrecord_cryo_fechapartida')
-      .groupBy(db.raw(MONTH_BUCKET_SQL));
+      .groupBy(db.raw(MONTH_BUCKET_SQL))
+      .groupBy(CURRENCY_COLUMN);
 
     if (restrictSubsidiaries !== null) {
       applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
     }
 
-    const rows = (await qb) as Array<{ bucket: string | null; cnt: number | string; total: number | string | null }>;
+    const rows = (await qb) as Array<{
+      bucket: string | null;
+      currency: string | null;
+      cnt: number | string;
+      total: number | string | null;
+    }>;
     return rows
       .filter((row) => row.bucket)
-      .map((row) => ({ key: row.bucket as string, count: Number(row.cnt), sum: Number(row.total ?? 0) }))
+      .map((row) => ({
+        key: row.bucket as string,
+        currency: row.currency,
+        count: Number(row.cnt),
+        sum: Number(row.total ?? 0),
+      }))
       .sort((a, b) => a.key.localeCompare(b.key));
   }
 
   const column = DIMENSION_COLUMNS[dimension];
   const qb = db(TABLE)
-    .select(db.raw(`??  AS grp, COUNT(*) AS cnt, SUM(${AMOUNT_SQL}) AS total`, [column]))
-    .groupBy(column);
+    .select(db.raw(`?? AS grp, ?? AS currency, COUNT(*) AS cnt, SUM(${AMOUNT_SQL}) AS total`, [column, CURRENCY_COLUMN]))
+    .groupBy(column)
+    .groupBy(CURRENCY_COLUMN);
 
   if (restrictSubsidiaries !== null) {
     applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
   }
 
-  const rows = (await qb) as Array<{ grp: string | null; cnt: number | string; total: number | string | null }>;
+  const rows = (await qb) as Array<{
+    grp: string | null;
+    currency: string | null;
+    cnt: number | string;
+    total: number | string | null;
+  }>;
   return rows
     .filter((row) => row.grp !== null && row.grp !== '')
-    .map((row) => ({ key: String(row.grp), count: Number(row.cnt), sum: Number(row.total ?? 0) }))
+    .map((row) => ({ key: String(row.grp), currency: row.currency, count: Number(row.cnt), sum: Number(row.total ?? 0) }))
     .sort((a, b) => b.sum - a.sum);
 }

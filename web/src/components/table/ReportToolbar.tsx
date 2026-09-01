@@ -14,12 +14,15 @@ interface ReportToolbarProps {
   totalLabel: string;
   /** Omit entirely when the entity has no subsidiary column synced - the dropdown won't render. */
   subsidiaryFilter?: SubsidiaryFilterProps;
+  /** Omit to hide the export button entirely (not used yet on every page that renders this toolbar). */
+  onExport?: () => void;
+  isExporting?: boolean;
 }
 
 const DEBOUNCE_MS = 350;
 
 /** Search input debounced ~350ms before bubbling up to the URL-driven query state. */
-export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsidiaryFilter }: ReportToolbarProps) {
+export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsidiaryFilter, onExport, isExporting }: ReportToolbarProps) {
   const [value, setValue] = useState(initialSearch);
 
   // Keep the local input in sync if the URL param changes from elsewhere (e.g. back/forward nav).
@@ -79,6 +82,16 @@ export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsi
         </select>
       ) : null}
       <span className={styles.total}>{totalLabel}</span>
+      {onExport ? (
+        <button type="button" className={styles.exportButton} onClick={onExport} disabled={isExporting}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M12 3v12" />
+            <path d="M7 10l5 5 5-5" />
+            <path d="M4 20h16" />
+          </svg>
+          {isExporting ? 'Exportando...' : 'Exportar CSV'}
+        </button>
+      ) : null}
     </div>
   );
 }

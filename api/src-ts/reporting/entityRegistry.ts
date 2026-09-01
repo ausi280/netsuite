@@ -25,6 +25,7 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
       'custrecord_cryo_titularcontrato',
       'custrecord_cryo_estatus',
       'custrecord_cryo_saldo_inicial',
+      'custrecord_cryo_moneda',
       'custrecord_cryo_finicio',
       'custrecord_cryo_servicio',
       'custrecord_cryo_subsidiariacontrato',
@@ -32,7 +33,10 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
       'lastmodifieddate_dt',
     ],
     sortableColumns: ['name', 'custrecord_cryo_finicio', 'custrecord_cryo_saldo_inicial', 'lastmodifieddate_dt'],
-    searchableColumns: ['name', 'custrecord_cryo_numerocontrato', 'custrecord_cryo_titularcontrato'],
+    // custrecord_cryo_contratosistemaanterior is the legacy CryoCell system's folio (e.g.
+    // "BCN011679-2") - staff still look contracts up by it, since that's what the old system
+    // and its NotasCobranza notes use.
+    searchableColumns: ['name', 'custrecord_cryo_numerocontrato', 'custrecord_cryo_titularcontrato', 'custrecord_cryo_contratosistemaanterior'],
     defaultSort: { column: 'lastmodifieddate_dt', dir: 'desc' },
     subsidiaryColumn: 'custrecord_cryo_subsidiariacontrato',
   },
@@ -110,6 +114,7 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
       'custrecord_cryo_concepto',
       'custrecord_cryo_estatuspartida',
       'custrecord_cryo_importepartida',
+      'custrecord_cryo_monedapartida',
       'custrecord_cryo_fechapartida',
       'custrecord_cryo_numcontrato',
       'custrecord_cryo_subsidiaria_partida',
@@ -133,6 +138,7 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
       'custrecord_cryo_serviciocontratado',
       'custrecord_cryo_estatusservicio',
       'custrecord_cryo_costoanualidad',
+      'custrecord_cryo_monedaserv',
       'custrecord_cryo_idcontrato',
       'isinactive',
       'lastmodifieddate_dt',

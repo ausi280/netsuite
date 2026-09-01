@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { ReportToolbar } from '../components/table/ReportToolbar';
@@ -9,6 +10,9 @@ import { EmptyState } from '../components/common/EmptyState';
 import { entityColumns, getSubsidiaryColumnKey } from '../config/entityColumns';
 import { useEntityRows } from '../hooks/useEntityRows';
 import { useSubsidiaryOptions } from '../hooks/useSubsidiaryOptions';
+import { fetchEntityExportCsv } from '../api/reportsApi';
+import { useApiToken } from '../auth/useApiToken';
+import { downloadBlob } from '../utils/downloadBlob';
 import type { ReportEntityKey, ReportRow, SortDir } from '../api/types';
 import { NotFoundPage } from './NotFoundPage';
 import styles from './ReportPage.module.css';
@@ -48,6 +52,9 @@ export function ReportPage() {
   } = useEntityRows(entityKey, { page, pageSize, search, sortBy, sortDir, subsidiary }, { enabled: isValid });
 
   const { data: subsidiaryOptions } = useSubsidiaryOptions(entityKey, { enabled: isValid && Boolean(subsidiaryColumn) });
+  const { getAccessToken } = useApiToken();
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   if (!isValid) {
     return <NotFoundPage />;
@@ -116,6 +123,20 @@ export function ReportPage() {
     }
   }
 
+  async function handleExport() {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const token = await getAccessToken();
+      const blob = await fetchEntityExportCsv(token, entityKey, { search, sortBy, sortDir, subsidiary });
+      downloadBlob(blob, `${entityKey}.csv`);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : 'No se pudo exportar el CSV.');
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   const numberFormatter = new Intl.NumberFormat('es-MX');
   const totalLabel = data ? `${numberFormatter.format(data.total)} registros` : '';
 
@@ -152,7 +173,12 @@ export function ReportPage() {
             ? { value: subsidiary, options: subsidiaryOptions ?? [], onChange: handleSubsidiaryChange }
             : undefined
         }
+        onExport={handleExport}
+        isExporting={isExporting}
       />
+      {exportError ? (
+        <ErrorState message={exportError} onRetry={() => handleExport()} />
+      ) : null}
       {isLoading ? <LoadingState label={`Cargando ${config.label.toLowerCase()}...`} /> : null}
       {isError ? (
         <ErrorState

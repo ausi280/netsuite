@@ -3,6 +3,7 @@ import { SimpleTable } from '../table/SimpleTable';
 import type { SimpleColumn } from '../table/SimpleTable';
 import { contractStatusLabel, partidaStatusLabel, serviceTypeLabel } from '../../config/labels';
 import { subsidiaryLabel } from '../../config/subsidiaries';
+import { currencyLabel } from '../../config/currencies';
 import { formatCurrency, formatDate, formatCellValue } from '../../utils/format';
 import styles from './ContractDossierView.module.css';
 
@@ -34,6 +35,7 @@ interface AnnuityRow {
   custrecord_cryo_fechalimitepago: string | null;
   custrecord_cryo_iniciovigencia: string | null;
   custrecord_cryo_finvigencia: string | null;
+  custrecord_cryo_monedapartida: string | null;
   isinactive: string | null;
 }
 
@@ -41,16 +43,28 @@ const SERVICE_COLUMNS: SimpleColumn<ServiceRow>[] = [
   { key: 'name', header: 'Servicio', render: (r) => formatCellValue(r.name) },
   { key: 'tipo', header: 'Tipo', render: (r) => serviceTypeLabel(r.custrecord_cryo_tipodeserv) },
   { key: 'estatus', header: 'Estatus', render: (r) => formatCellValue(r.custrecord_cryo_estatusservicio) },
-  { key: 'costo', header: 'Costo Anualidad', render: (r) => formatCurrency(r.custrecord_cryo_costoanualidad) },
-  { key: 'procesamiento', header: 'Precio Procesamiento', render: (r) => formatCurrency(r.custrecord_cryo_precioprocesamiento) },
-  { key: 'moneda', header: 'Moneda', render: (r) => formatCellValue(r.custrecord_cryo_monedaserv) },
+  {
+    key: 'costo',
+    header: 'Costo Anualidad',
+    render: (r) => formatCurrency(r.custrecord_cryo_costoanualidad, r.custrecord_cryo_monedaserv),
+  },
+  {
+    key: 'procesamiento',
+    header: 'Precio Procesamiento',
+    render: (r) => formatCurrency(r.custrecord_cryo_precioprocesamiento, r.custrecord_cryo_monedaserv),
+  },
+  { key: 'moneda', header: 'Moneda', render: (r) => currencyLabel(r.custrecord_cryo_monedaserv) },
 ];
 
 const ANNUITY_COLUMNS: SimpleColumn<AnnuityRow>[] = [
   { key: 'anio', header: 'Año', render: (r) => formatCellValue(r.custrecord_cryo_aniopartida) },
   { key: 'concepto', header: 'Concepto', render: (r) => formatCellValue(r.custrecord_cryo_concepto) },
   { key: 'estatus', header: 'Estatus', render: (r) => partidaStatusLabel(r.custrecord_cryo_estatuspartida) },
-  { key: 'importe', header: 'Importe', render: (r) => formatCurrency(r.custrecord_cryo_importepartida) },
+  {
+    key: 'importe',
+    header: 'Importe',
+    render: (r) => formatCurrency(r.custrecord_cryo_importepartida, r.custrecord_cryo_monedapartida),
+  },
   { key: 'fecha', header: 'Fecha', render: (r) => formatDate(r.custrecord_cryo_fechapartida) },
   { key: 'limite', header: 'Fecha Límite Pago', render: (r) => formatDate(r.custrecord_cryo_fechalimitepago) },
   {
@@ -70,12 +84,12 @@ export function ContractDossierView({ dossier }: ContractDossierViewProps) {
     ['Actividad', activityLabel(contract.isinactive)],
     ['Fecha Inicio', formatDate(contract.fecha_inicio)],
     ['Subsidiaria', contract.subsidiaria_id ? subsidiaryLabel(contract.subsidiaria_id) : '—'],
-    ['Moneda', formatCellValue(contract.moneda)],
+    ['Moneda', currencyLabel(contract.moneda)],
     ['Tipo de Cambio', formatCellValue(contract.tipo_cambio)],
-    ['Saldo Inicial', formatCurrency(contract.saldo_inicial)],
-    ['Total', formatCurrency(contract.total)],
-    ['Total Adeudos', formatCurrency(contract.total_adeudos)],
-    ['Total Partidas', formatCurrency(contract.total_partidas)],
+    ['Saldo Inicial', formatCurrency(contract.saldo_inicial, contract.moneda)],
+    ['Total', formatCurrency(contract.total, contract.moneda)],
+    ['Total Adeudos', formatCurrency(contract.total_adeudos, contract.moneda)],
+    ['Total Partidas', formatCurrency(contract.total_partidas, contract.moneda)],
     ['Titular', contract.titular_nombre ?? '—'],
     ['Email Titular', contract.titular_email ?? '—'],
     ['Padres', contract.padres_nombre ?? '—'],

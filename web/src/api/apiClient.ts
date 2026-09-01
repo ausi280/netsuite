@@ -54,3 +54,33 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions): Promi
 
   return body as T;
 }
+
+/** Like apiFetch, but for a binary/CSV response - the export endpoint returns a file, not JSON,
+ * so this can't reuse apiFetch's `response.json()` parsing. Errors still come back as JSON, so
+ * those are parsed and surfaced the same way apiFetch does. */
+export async function apiFetchBlob(path: string, options: ApiFetchOptions): Promise<Blob> {
+  const { token, headers, ...rest } = options;
+
+  const response = await fetch(`${BASE_PATH}${path}`, {
+    ...rest,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+  });
+
+  if (!response.ok) {
+    let message = `Request failed with status ${response.status}`;
+    try {
+      const body = await response.json();
+      if (body && typeof body === 'object' && typeof body.message === 'string') {
+        message = body.message;
+      }
+    } catch {
+      // Non-JSON error body - keep the generic message.
+    }
+    throw new ApiClientError(message, response.status);
+  }
+
+  return response.blob();
+}

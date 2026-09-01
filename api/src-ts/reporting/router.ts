@@ -3,9 +3,9 @@ import { Router } from 'express';
 import { UnauthorizedError } from 'express-jwt';
 import { buildEntraAuthMiddleware } from './auth/entraAuth';
 import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
-import { getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
+import { exportEntityRows, getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
 import { listUsers, updateUserPermissions } from './adminController';
-import { getCommissionsReportRoute, getContractDossierRoute } from './contractReportsController';
+import { getCommissionsReportRoute, getContractDossierRoute, getContractNotasRoute } from './contractReportsController';
 
 /**
  * Assembles the read-only reporting API router: Entra ID access-token auth
@@ -36,9 +36,11 @@ export function buildReportingRouter(): Router {
   // Must be registered before /:entity/:id, or that route would swallow "commissions" as an id value.
   router.get('/contracts/commissions', getCommissionsReportRoute);
   router.get('/contracts/:id/dossier', getContractDossierRoute);
-  // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics" as an id value.
+  router.get('/contracts/:id/notas', getContractNotasRoute);
+  // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics"/"export" as an id value.
   router.get('/:entity/subsidiaries', listSubsidiaryOptions);
   router.get('/:entity/analytics', getPartidaAnalytics);
+  router.get('/:entity/export', exportEntityRows);
   router.get('/:entity/:id', getEntityRowDetail);
   router.get('/:entity', listEntityRows);
 

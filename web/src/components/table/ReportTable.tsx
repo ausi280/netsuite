@@ -43,7 +43,10 @@ export function ReportTable({ columns, rows, sortBy, sortDir, onSortChange, onRo
     id: col.key,
     accessorFn: (row) => row[col.key],
     header: col.header,
-    cell: (info) => formatCellValue(info.getValue(), col.format),
+    cell: (info) => {
+      const currencyId = col.currencyColumn ? (info.row.original[col.currencyColumn] as string | null | undefined) : undefined;
+      return formatCellValue(info.getValue(), col.format, currencyId);
+    },
   }));
 
   const table = useReactTable({

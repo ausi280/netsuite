@@ -95,6 +95,27 @@ function buildFilteredQuery(
   return qb;
 }
 
+/** Same filters as getPagedRows (search/subsidiary/permission-restriction/sort) but unpaginated -
+ * for CSV export, which streams every matching row rather than one page. */
+export function buildExportQuery(
+  db: Knex,
+  config: EntityConfig,
+  params: Pick<PagedQueryParams, 'search' | 'sortBy' | 'sortDir' | 'subsidiary'>,
+  restrictSubsidiaries: Set<string> | null,
+): Knex.QueryBuilder {
+  const { column, dir } = resolveSort(config, params.sortBy, params.sortDir);
+  const search = typeof params.search === 'string' ? params.search.trim() : '';
+  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+
+  // A secondary sort by idColumn keeps OFFSET/LIMIT pagination stable across the export's batched
+  // reads - without a deterministic tiebreaker, SQL Server doesn't guarantee row order is
+  // preserved between two queries differing only by OFFSET when the primary sort column has ties.
+  return buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries)
+    .select(config.listColumns)
+    .orderBy(column, dir)
+    .orderBy(config.idColumn, 'asc');
+}
+
 export async function getPagedRows(
   db: Knex,
   config: EntityConfig,

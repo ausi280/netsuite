@@ -1,11 +1,12 @@
 import type { Request, Response } from 'express';
 import knex from '../db/connection';
 import { getEntityConfig, listEntityConfigs } from './entityRegistry';
-import { getEntitySummaries, getPagedRows, getRowById, getSubsidiaryOptions } from './reportingRepository';
+import { buildExportQuery, getEntitySummaries, getPagedRows, getRowById, getSubsidiaryOptions } from './reportingRepository';
 import { getPartidaBreakdown, PARTIDA_DIMENSIONS } from './partidaAnalyticsRepository';
 import type { PartidaDimension } from './partidaAnalyticsRepository';
 import type { UserPermissions } from './permissionsRepository';
 import type { EntityConfig } from './types';
+import { csvRow, formatExportValue, humanizeColumnName } from './csvExport';
 
 /** Express 5's ParamsDictionary types named params as `string | string[]` to account for wildcard segments; our routes only ever use simple `:name` segments, which are always plain strings at runtime. */
 export function paramString(value: string | string[]): string {
@@ -100,6 +101,51 @@ export async function listSubsidiaryOptions(req: Request, res: Response): Promis
 
   const data = await getSubsidiaryOptions(knex, config, subsidiaryRestrictionFor(permissions));
   res.status(200).json({ success: true, data });
+}
+
+const EXPORT_BATCH_SIZE = 5000;
+
+/** GET /api/reports/:entity/export?search=&sortBy=&sortDir=&subsidiary= — the same filtered/sorted
+ * rows listEntityRows would page through, streamed out as one CSV file instead of JSON pages. */
+export async function exportEntityRows(req: Request, res: Response): Promise<void> {
+  const entityKey = paramString(req.params.entity);
+  const config = getEntityConfig(entityKey);
+  if (!config) {
+    res.status(404).json({ success: false, message: `Unknown report entity: ${entityKey}` });
+    return;
+  }
+
+  const permissions = req.permissions;
+  if (!permissions || !isEntityAllowed(permissions, config)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const { search, sortBy, sortDir, subsidiary } = req.query;
+  const restrictSubsidiaries = subsidiaryRestrictionFor(permissions);
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${entityKey}.csv"`);
+  // UTF-8 BOM so Excel (which otherwise guesses the system codepage) renders accented
+  // characters/ñ correctly instead of mangling them.
+  res.write('﻿');
+  res.write(csvRow(config.listColumns.map(humanizeColumnName)));
+
+  let offset = 0;
+  for (;;) {
+    const batch = (await buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
+      .offset(offset)
+      .limit(EXPORT_BATCH_SIZE)) as Array<Record<string, unknown>>;
+
+    for (const row of batch) {
+      res.write(csvRow(config.listColumns.map((column) => formatExportValue(column, row[column]))));
+    }
+
+    if (batch.length < EXPORT_BATCH_SIZE) break;
+    offset += batch.length;
+  }
+
+  res.end();
 }
 
 function isPartidaDimension(value: unknown): value is PartidaDimension {

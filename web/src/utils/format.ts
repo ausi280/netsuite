@@ -1,11 +1,24 @@
 import type { ColumnFormat } from '../config/entityColumns';
 import { subsidiaryLabel } from '../config/subsidiaries';
+import { currencyIsoCode } from '../config/currencies';
 
-const currencyFormatter = new Intl.NumberFormat('es-MX', {
-  style: 'currency',
-  currency: 'USD',
+// Fallback only for values with no known NetSuite currency id attached - this account mixes
+// MXN/USD/EUR/COP/ARS/PEN/BRL, so this must never be presented as an assumption of USD.
+const fallbackCurrencyFormatter = new Intl.NumberFormat('es-MX', {
+  minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+
+const currencyFormatterCache = new Map<string, Intl.NumberFormat>();
+
+function getCurrencyFormatter(isoCode: string): Intl.NumberFormat {
+  let formatter = currencyFormatterCache.get(isoCode);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('es-MX', { style: 'currency', currency: isoCode, maximumFractionDigits: 2 });
+    currencyFormatterCache.set(isoCode, formatter);
+  }
+  return formatter;
+}
 
 const dateFormatter = new Intl.DateTimeFormat('es-MX', {
   year: 'numeric',
@@ -52,11 +65,16 @@ function isTruthy(value: unknown): boolean {
   return Boolean(value);
 }
 
-export function formatCurrency(value: unknown): string {
+/** `currencyId` is the NetSuite currency internal id (e.g. contract's custrecord_cryo_moneda) -
+ * without it, falls back to a plain number with no currency symbol rather than guessing USD. */
+export function formatCurrency(value: unknown, currencyId?: string | null): string {
   if (value === null || value === undefined || value === '') return '—';
   const numeric = typeof value === 'number' ? value : Number(value);
   if (Number.isNaN(numeric)) return String(value);
-  return currencyFormatter.format(numeric);
+
+  const isoCode = currencyIsoCode(currencyId);
+  if (!isoCode) return fallbackCurrencyFormatter.format(numeric);
+  return getCurrencyFormatter(isoCode).format(numeric);
 }
 
 export function formatDate(value: unknown): string {
@@ -75,10 +93,11 @@ export function formatBoolean(value: unknown, inverted = false): string {
   return displayValue ? 'Sí' : 'No';
 }
 
-export function formatCellValue(value: unknown, format?: ColumnFormat): string {
+/** `currencyId` resolves a 'currency' column's sibling currency-id value (see EntityColumn.currencyColumn) - omit for formats that don't need it. */
+export function formatCellValue(value: unknown, format?: ColumnFormat, currencyId?: string | null): string {
   switch (format) {
     case 'currency':
-      return formatCurrency(value);
+      return formatCurrency(value, currencyId);
     case 'date':
       return formatDate(value);
     case 'datetime':

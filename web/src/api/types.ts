@@ -48,6 +48,8 @@ export type PartidaDimension = 'month' | 'status' | 'subsidiary' | 'servicetype'
 
 export interface PartidaBreakdownRow {
   key: string;
+  /** NetSuite currency internal id (e.g. "1" for MXN), or null if the partida has no currency set. */
+  currency: string | null;
   count: number;
   sum: number;
 }
@@ -84,6 +86,7 @@ export interface UserPermissionUpdate {
 export interface ContractDossierHeader {
   netsuite_id: string;
   name: string | null;
+  folio_sistema_anterior: string | null;
   numero_contrato: string | null;
   estatus: string | null;
   isinactive: string | null;
@@ -121,6 +124,7 @@ export interface CommissionRow {
   fecha_inicio: string | null;
   estatus: string | null;
   subsidiaria_id: string | null;
+  moneda: string | null;
   titular_nombre: string | null;
   vendedor_id: string;
   vendedor_nombre: string | null;
@@ -133,6 +137,21 @@ export interface CommissionsResponse {
   data: CommissionRow[];
   month: number;
   year: number;
+}
+
+/** A collection-call note from the pre-NetSuite CryoCell system (table NotasCobranza). */
+export interface NotaCobranza {
+  fecha: string | null;
+  usuario: string | null;
+  nota: string | null;
+  urgente: boolean;
+}
+
+export interface ContractNotasResponse {
+  success: true;
+  data: NotaCobranza[];
+  /** The legacy folio these notes were looked up by, or null if this contract has none (created directly in NetSuite). */
+  folio: string | null;
 }
 
 export interface ApiError {

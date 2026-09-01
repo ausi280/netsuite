@@ -41,6 +41,10 @@
   margin-top: 24px;
 }
 
+.notasSection {
+  margin-top: 28px;
+}
+
 .rawToggle {
   display: flex;
   align-items: center;

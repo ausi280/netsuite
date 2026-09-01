@@ -135,4 +135,34 @@ export function getAzureAdConfig(): AzureAdConfig {
   return { tenantId, clientId };
 }
 
+export interface LegacyDbConfig {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+}
+
+/**
+ * Reads LEGACY_DB from config/env.json (host/port/database are non-secret defaults from
+ * config.json; user/password are the gitignored secret overlay) - the old CryoCell SQL Server
+ * database (pre-NetSuite), queried read-only for records not yet migrated (e.g. NotasCobranza).
+ * Lazily read (not part of loadConfig/getConfig) since only the reporting API's legacy-notes
+ * route needs it.
+ */
+export function getLegacyDbConfig(): LegacyDbConfig {
+  const raw = legacyConfig.env && legacyConfig.env.LEGACY_DB;
+  if (!raw || !raw.HOST || !raw.DATABASE || !raw.USER || !raw.PASSWORD) {
+    throw new Error('Missing LEGACY_DB configuration (HOST/DATABASE/USER/PASSWORD) in config/env.json.');
+  }
+
+  return {
+    host: raw.HOST,
+    port: raw.PORT || 1433,
+    database: raw.DATABASE,
+    user: raw.USER,
+    password: raw.PASSWORD,
+  };
+}
+
 export * from './types';

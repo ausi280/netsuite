@@ -244,8 +244,8 @@ const syncGoogleLeads = async () => {
                     const nombre = row[headers.indexOf('full_name')] || null;
                     const apellido = row[headers.indexOf('Last Name')] || null;
                     const platform = row[headers.indexOf('platform')] || 'Google Sheets';
-                    const mensaje = row[headers.indexOf('fecha_probable_del_parto')] || ' ' + row[headers.indexOf('semanas_de_embarazo')] || ' ';
-                    const ciudad = row[headers.indexOf('ciudad')] || null;
+                    const mensaje = row[headers.indexOf('city')] + ' ' + row[headers.indexOf('fecha_probable_del_parto')] || ' ' + row[headers.indexOf('semanas_de_embarazo')] || ' ';
+                    const ciudad = row[headers.indexOf('city')] || null;
 
                     await db.raw(`
                         EXEC [dbo].[SW_InsertarProspecto]

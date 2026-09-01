@@ -79,3 +79,17 @@
   color: var(--color-primary);
   font-weight: 600;
 }
+
+.currencyPanels {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.panelTitle {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  margin-bottom: 16px;
+}

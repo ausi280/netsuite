@@ -1,9 +1,12 @@
 import type { Request, Response } from 'express';
 import knex from '../db/connection';
+import { getLegacyDb } from '../db/legacyDbConnection';
 import { paramString } from './controller';
 import { getEntityConfig } from './entityRegistry';
 import { getContractDossier } from './contractDossierRepository';
 import { getNewContractCommissions } from './commissionsRepository';
+import { getNotasCobranza } from './notasCobranzaRepository';
+import { applySubsidiaryRestriction } from './reportingRepository';
 import type { UserPermissions } from './permissionsRepository';
 
 const CONTRACTS_CONFIG = getEntityConfig('contracts')!;
@@ -55,6 +58,50 @@ export async function getCommissionsReportRoute(req: Request, res: Response): Pr
   }
 
   const subsidiary = typeof req.query.subsidiary === 'string' ? req.query.subsidiary.trim() : undefined;
-  const data = await getNewContractCommissions(knex, month, year, subsidiaryRestrictionFor(permissions!), subsidiary);
+  const currency = typeof req.query.currency === 'string' ? req.query.currency.trim() : undefined;
+  const data = await getNewContractCommissions(knex, month, year, subsidiaryRestrictionFor(permissions!), subsidiary, currency);
   res.status(200).json({ success: true, data, month, year });
+}
+
+/**
+ * GET /api/reports/contracts/:id/notas — collection-call notes from the pre-NetSuite CryoCell
+ * system (NotasCobranza), until NetSuite-native notes exist. Looks up the contract's legacy folio
+ * (custrecord_cryo_contratosistemaanterior) first, enforcing the same subsidiary restriction as
+ * the dossier route so this can't be used to probe a contract the caller isn't allowed to see.
+ */
+export async function getContractNotasRoute(req: Request, res: Response): Promise<void> {
+  const permissions = req.permissions;
+  if (!isContractsAllowed(permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const id = paramString(req.params.id);
+  const contractQuery = knex('netsuite_contracts')
+    .where('netsuite_id', id)
+    .select('custrecord_cryo_contratosistemaanterior as folio');
+
+  const restrictSubsidiaries = subsidiaryRestrictionFor(permissions!);
+  if (restrictSubsidiaries !== null) {
+    applySubsidiaryRestriction(contractQuery, 'custrecord_cryo_subsidiariacontrato', restrictSubsidiaries);
+  }
+
+  const contract = (await contractQuery.first()) as { folio: string | null } | undefined;
+  if (!contract) {
+    res.status(404).json({ success: false, message: `Contract record not found for id ${id}` });
+    return;
+  }
+
+  if (!contract.folio) {
+    res.status(200).json({ success: true, data: [], folio: null });
+    return;
+  }
+
+  try {
+    const data = await getNotasCobranza(getLegacyDb(), contract.folio);
+    res.status(200).json({ success: true, data, folio: contract.folio });
+  } catch (error) {
+    console.error(`Error fetching legacy notas for contract ${id} (folio ${contract.folio}):`, error);
+    res.status(502).json({ success: false, message: 'No se pudieron cargar las notas del sistema anterior.' });
+  }
 }

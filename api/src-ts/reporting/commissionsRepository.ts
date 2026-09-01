@@ -8,6 +8,7 @@ export interface CommissionRow {
   fecha_inicio: string | null;
   estatus: string | null;
   subsidiaria_id: string | null;
+  moneda: string | null;
   titular_nombre: string | null;
   vendedor_id: string;
   vendedor_nombre: string | null;
@@ -16,6 +17,7 @@ export interface CommissionRow {
 }
 
 const SUBSIDIARY_COLUMN = 'C.custrecord_cryo_subsidiariacontrato';
+const CURRENCY_COLUMN = 'C.custrecord_cryo_moneda';
 // custrecord_cryo_finicio is a raw NetSuite locale date string ("DD/MM/YYYY", confirmed 100%
 // parseable on this table, same as the other custom-record date fields handled this session).
 const FECHA_INICIO_DATE_SQL = `TRY_CONVERT(date, C.custrecord_cryo_finicio, 103)`;
@@ -32,6 +34,7 @@ export async function getNewContractCommissions(
   year: number,
   restrictSubsidiaries: Set<string> | null,
   subsidiary?: string,
+  currency?: string,
 ): Promise<CommissionRow[]> {
   const qb = db('netsuite_contracts as C')
     .leftJoin('netsuite_customers as CUST', 'CUST.netsuite_id', 'C.custrecord_cryo_titularcontrato')
@@ -46,6 +49,7 @@ export async function getNewContractCommissions(
       'C.custrecord_cryo_finicio as fecha_inicio',
       'C.custrecord_cryo_estatus as estatus',
       'C.custrecord_cryo_subsidiariacontrato as subsidiaria_id',
+      'C.custrecord_cryo_moneda as moneda',
       'CUST.companyname as titular_nombre',
       'C.custrecord_cryo_vendedor as vendedor_id',
       'VEND.entityid as vendedor_nombre',
@@ -63,6 +67,9 @@ export async function getNewContractCommissions(
   }
   if (subsidiary) {
     applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, new Set([subsidiary]));
+  }
+  if (currency) {
+    qb.andWhere(CURRENCY_COLUMN, currency);
   }
 
   const rows = (await qb) as Array<CommissionRow & { raw_data: string }>;

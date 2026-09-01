@@ -4,6 +4,7 @@ import { applySubsidiaryRestriction } from './reportingRepository';
 export interface ContractDossierHeader {
   netsuite_id: string;
   name: string | null;
+  folio_sistema_anterior: string | null;
   numero_contrato: string | null;
   estatus: string | null;
   isinactive: string | null;
@@ -55,6 +56,7 @@ export async function getContractDossier(
     .select(
       'C.netsuite_id',
       'C.name',
+      'C.custrecord_cryo_contratosistemaanterior as folio_sistema_anterior',
       'C.custrecord_cryo_numerocontrato as numero_contrato',
       'C.custrecord_cryo_estatus as estatus',
       'C.isinactive',
@@ -128,6 +130,7 @@ export async function getContractDossier(
         'custrecord_cryo_concepto',
         'custrecord_cryo_estatuspartida',
         'custrecord_cryo_importepartida',
+        'custrecord_cryo_monedapartida',
         'custrecord_cryo_fechapartida',
         'custrecord_cryo_fechalimitepago',
         'custrecord_cryo_iniciovigencia',
