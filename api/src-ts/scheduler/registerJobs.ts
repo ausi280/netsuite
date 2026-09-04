@@ -19,6 +19,9 @@ const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   serialNumber: 'SERIAL_NUMBER',
   medico: 'MEDICO',
   medicoColombia: 'MEDICO_COLOMBIA',
+  vendor: 'VENDOR',
+  vendorTransaction: 'VENDOR_TRANSACTION',
+  vendorBillPayment: 'VENDOR_BILL_PAYMENT',
 };
 
 /**

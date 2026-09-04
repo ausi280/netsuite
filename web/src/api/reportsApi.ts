@@ -2,6 +2,8 @@ import { apiFetch, apiFetchBlob } from './apiClient';
 import type {
   AdminUserSummary,
   ApiSuccess,
+  ChargeDomiciledRequest,
+  ChargeDomiciledResponse,
   CommissionRow,
   CommissionsResponse,
   ContractDossier,
@@ -13,6 +15,7 @@ import type {
   PartidaAnalyticsResponse,
   PartidaBreakdownRow,
   PartidaDimension,
+  PaymentRow,
   ReportEntityKey,
   ReportRecord,
   SortDir,
@@ -31,6 +34,10 @@ export interface EntityRowsParams {
   sortBy: string;
   sortDir: SortDir;
   subsidiary: string;
+  /** Partidas-only status filter (custrecord_cryo_estatuspartida) - ignored by every other entity. */
+  estatus?: string;
+  /** vendor-transactions-only: narrows to one vendor's rows (the per-vendor drill-down view) - ignored by every other entity. */
+  vendorId?: string;
 }
 
 export async function fetchEntities(token: string | null): Promise<EntitiesResult> {
@@ -51,6 +58,8 @@ export async function fetchEntityRows(
   if (params.sortBy) query.set('sortBy', params.sortBy);
   if (params.sortDir) query.set('sortDir', params.sortDir);
   if (params.subsidiary) query.set('subsidiary', params.subsidiary);
+  if (params.estatus) query.set('estatus', params.estatus);
+  if (params.vendorId) query.set('vendorId', params.vendorId);
 
   return apiFetch<PaginatedRows>(`/reports/${entityKey}?${query.toString()}`, { token });
 }
@@ -60,6 +69,8 @@ export interface EntityExportParams {
   sortBy: string;
   sortDir: SortDir;
   subsidiary: string;
+  estatus?: string;
+  vendorId?: string;
 }
 
 /** CSV of every row matching the current search/subsidiary/sort filters (unpaginated - the whole filtered set). */
@@ -73,6 +84,8 @@ export async function fetchEntityExportCsv(
   if (params.sortBy) query.set('sortBy', params.sortBy);
   if (params.sortDir) query.set('sortDir', params.sortDir);
   if (params.subsidiary) query.set('subsidiary', params.subsidiary);
+  if (params.estatus) query.set('estatus', params.estatus);
+  if (params.vendorId) query.set('vendorId', params.vendorId);
 
   return apiFetchBlob(`/reports/${entityKey}/export?${query.toString()}`, { token });
 }
@@ -138,6 +151,43 @@ export async function fetchCommissions(
 export async function fetchContractNotas(token: string | null, id: string): Promise<{ notas: NotaCobranza[]; folio: string | null }> {
   const result = await apiFetch<ContractNotasResponse>(`/reports/contracts/${encodeURIComponent(id)}/notas`, { token });
   return { notas: result.data, folio: result.folio };
+}
+
+export interface PaymentsListParams {
+  page: number;
+  pageSize: number;
+  search: string;
+  /** The NetSuite subsidiary id of the payment's linked contract - not payloadRequest's own copy. */
+  subsidiary?: string;
+  /** Both "YYYY-MM-DD" - filters on the payment's created_at, inclusive of the entire dateTo day. */
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+/** Payments grid rows - a dedicated fetcher (not fetchEntityRows) since this list has no sort, just
+ * page/pageSize/search/subsidiary/date-range. */
+export async function fetchPaymentsList(token: string | null, params: PaymentsListParams): Promise<PaginatedRows<PaymentRow>> {
+  const query = new URLSearchParams({
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+  });
+  if (params.search) query.set('search', params.search);
+  if (params.subsidiary) query.set('subsidiary', params.subsidiary);
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
+
+  return apiFetch<PaginatedRows<PaymentRow>>(`/reports/payments?${query.toString()}`, { token });
+}
+
+/** Proxies the "cobro domiciliado" action to the live payment.cryoholdco.com API through our own
+ * backend - this app never talks to MercadoPago/that API directly. */
+export async function chargeDomiciled(token: string | null, body: ChargeDomiciledRequest): Promise<ChargeDomiciledResponse> {
+  return apiFetch<ChargeDomiciledResponse>('/reports/payments/charge-domiciled', {
+    token,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 export async function fetchEntityRecord(

@@ -15,7 +15,11 @@ export type ReportEntityKey =
   | 'services'
   | 'serial-numbers'
   | 'medicos'
-  | 'medicos-colombia';
+  | 'medicos-colombia'
+  | 'fiscal-updates'
+  | 'payments'
+  | 'vendors'
+  | 'vendor-transactions';
 
 export interface SortConfig {
   column: string;

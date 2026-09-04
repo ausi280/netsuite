@@ -27,3 +27,4 @@ public
 
 # Config
 config/env.json
+config/env.production.json

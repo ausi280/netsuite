@@ -1,6 +1,6 @@
 import type { ReportEntityKey } from '../api/types';
 
-export type ColumnFormat = 'currency' | 'date' | 'datetime' | 'boolean' | 'boolean-inverted' | 'subsidiary';
+export type ColumnFormat = 'currency' | 'date' | 'datetime' | 'boolean' | 'boolean-inverted' | 'subsidiary' | 'partida-status' | 'vendor-transaction-type';
 
 export interface EntityColumn {
   /** Raw column key as returned by the API. */
@@ -22,6 +22,13 @@ export interface EntityColumnConfig {
     sortBy: string;
     sortDir: 'asc' | 'desc';
   };
+  /** The row's unique-id field, used to build its detail-page link. Defaults to 'netsuite_id' -
+   * only non-NetSuite-sourced tables (e.g. app_fiscal_info_updates, a plain autoincrement `id`) need to set this. */
+  idColumn?: string;
+}
+
+export function getIdColumnKey(entityKey: ReportEntityKey): string {
+  return entityColumns[entityKey].idColumn ?? 'netsuite_id';
 }
 
 export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
@@ -92,10 +99,12 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
     columns: [
       { key: 'name', header: 'Nombre' },
       { key: 'custrecord_cryo_concepto', header: 'Concepto' },
-      { key: 'custrecord_cryo_estatuspartida', header: 'Estatus' },
+      { key: 'custrecord_cryo_estatuspartida', header: 'Estatus', format: 'partida-status' },
       { key: 'custrecord_cryo_importepartida', header: 'Importe', format: 'currency', currencyColumn: 'custrecord_cryo_monedapartida' },
       { key: 'custrecord_cryo_fechapartida', header: 'Fecha', format: 'date' },
       { key: 'custrecord_cryo_numcontrato', header: 'No. Contrato' },
+      { key: 'contract_name', header: 'Contrato' },
+      { key: 'dueno_nombre', header: 'Dueño' },
       { key: 'custrecord_cryo_subsidiaria_partida', header: 'Subsidiaria', format: 'subsidiary' },
       { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
       { key: 'lastmodifieddate_dt', header: 'Última Modificación', format: 'datetime', sortable: true },
@@ -125,6 +134,64 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
     ],
     defaultSort: { sortBy: 'lastmodifieddate_dt', sortDir: 'desc' },
   },
+  'fiscal-updates': {
+    label: 'Actualizaciones Fiscales',
+    idColumn: 'id',
+    columns: [
+      { key: 'internal_id', header: 'ID Interno' },
+      { key: 'entity_id', header: 'Cliente' },
+      { key: 'status', header: 'Estatus' },
+      { key: 'error_message', header: 'Error' },
+      { key: 'created_at', header: 'Creado', format: 'datetime', sortable: true },
+      { key: 'updated_at', header: 'Actualizado', format: 'datetime', sortable: true },
+    ],
+    defaultSort: { sortBy: 'created_at', sortDir: 'desc' },
+  },
+  payments: {
+    label: 'Pagos',
+    idColumn: 'id',
+    // The list itself renders via a dedicated PaymentsHistoryPage (search/pagination/status
+    // badges/cobro domiciliado action) - these columns only back the generic detail-page fallback
+    // when a row is clicked (raw payloadRequest/Response as JSON text, same as fiscal-updates).
+    columns: [
+      { key: 'payment_id', header: 'ID Pago' },
+      { key: 'description', header: 'Descripción' },
+      { key: 'transaction_amount', header: 'Monto', format: 'currency' },
+      { key: 'payer_email', header: 'Email' },
+      { key: 'payment_method_id', header: 'Método' },
+      { key: 'status', header: 'Estatus' },
+      { key: 'created_at', header: 'Fecha', format: 'datetime', sortable: true },
+    ],
+    defaultSort: { sortBy: 'created_at', sortDir: 'desc' },
+  },
+  vendors: {
+    label: 'Proveedores',
+    columns: [
+      { key: 'entityid', header: 'ID' },
+      { key: 'companyname', header: 'Nombre' },
+      { key: 'email', header: 'Email' },
+      { key: 'phone', header: 'Teléfono' },
+      { key: 'subsidiary', header: 'Subsidiaria', format: 'subsidiary' },
+      { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
+      { key: 'lastmodifieddate', header: 'Última Modificación', format: 'datetime', sortable: true },
+    ],
+    defaultSort: { sortBy: 'lastmodifieddate', sortDir: 'desc' },
+  },
+  'vendor-transactions': {
+    label: 'Transacciones de Proveedores',
+    columns: [
+      { key: 'vendor_name', header: 'Proveedor' },
+      { key: 'tranid', header: 'Número de Documento' },
+      { key: 'type', header: 'Tipo', format: 'vendor-transaction-type' },
+      { key: 'trandate', header: 'Fecha', format: 'date', sortable: true },
+      { key: 'duedate', header: 'Fecha Vencimiento', format: 'date', sortable: true },
+      { key: 'total', header: 'Importe', format: 'currency', currencyColumn: 'currency', sortable: true },
+      { key: 'status', header: 'Estado' },
+      { key: 'orden_pago', header: 'Orden de Pago' },
+      { key: 'dias_pendientes', header: 'Días Pendientes' },
+    ],
+    defaultSort: { sortBy: 'trandate', sortDir: 'desc' },
+  },
 };
 
 /** The column key holding the subsidiary id for this entity, or null if it isn't filterable by subsidiary. */
@@ -143,4 +210,8 @@ export const entityOrder: ReportEntityKey[] = [
   'partidas',
   'services',
   'serial-numbers',
+  'fiscal-updates',
+  'payments',
+  'vendors',
+  'vendor-transactions',
 ];

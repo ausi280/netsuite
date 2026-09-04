@@ -1,6 +1,7 @@
 import type { ColumnFormat } from '../config/entityColumns';
 import { subsidiaryLabel } from '../config/subsidiaries';
 import { currencyIsoCode } from '../config/currencies';
+import { partidaStatusLabel, vendorTransactionTypeLabel } from '../config/labels';
 
 // Fallback only for values with no known NetSuite currency id attached - this account mixes
 // MXN/USD/EUR/COP/ARS/PEN/BRL, so this must never be presented as an assumption of USD.
@@ -108,6 +109,10 @@ export function formatCellValue(value: unknown, format?: ColumnFormat, currencyI
       return formatBoolean(value, true);
     case 'subsidiary':
       return value === null || value === undefined || value === '' ? '—' : subsidiaryLabel(String(value));
+    case 'partida-status':
+      return value === null || value === undefined || value === '' ? '—' : partidaStatusLabel(String(value));
+    case 'vendor-transaction-type':
+      return value === null || value === undefined || value === '' ? '—' : vendorTransactionTypeLabel(String(value));
     default:
       if (value === null || value === undefined || value === '') return '—';
       if (typeof value === 'object') return JSON.stringify(value);

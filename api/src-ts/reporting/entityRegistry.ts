@@ -200,6 +200,71 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
     defaultSort: { column: 'lastmodifieddate_dt', dir: 'desc' },
     // No subsidiary field on this record - it's already scoped to Colombia specifically.
   },
+  'fiscal-updates': {
+    key: 'fiscal-updates',
+    table: 'app_fiscal_info_updates',
+    idColumn: 'id',
+    // Not NetSuite-sourced - written directly by the payment app's fiscal-info-update flow, so
+    // there's no sync watermark row for it.
+    syncEntityName: null,
+    label: 'Actualizaciones Fiscales',
+    listColumns: ['id', 'internal_id', 'entity_id', 'status', 'error_message', 'created_at', 'updated_at'],
+    sortableColumns: ['created_at', 'updated_at'],
+    searchableColumns: ['internal_id', 'entity_id', 'status'],
+    defaultSort: { column: 'created_at', dir: 'desc' },
+  },
+  payments: {
+    key: 'payments',
+    table: 'app_payments',
+    idColumn: 'id',
+    // Not NetSuite-sourced - a MercadoPago payment-gateway log written by the separate `payment`
+    // project (same shared DB), so there's no sync watermark row for it. The list view uses a
+    // dedicated repository (paymentsListRepository.ts) for the resolved contract name and
+    // JSON_VALUE-based contract search; this plain config still backs the detail/summary paths.
+    syncEntityName: null,
+    label: 'Pagos',
+    listColumns: [
+      'id',
+      'payment_id',
+      'transaction_amount',
+      'payer_email',
+      'payment_method_id',
+      'installments',
+      'description',
+      'status',
+      'status_detail',
+      'created_at',
+    ],
+    sortableColumns: ['created_at'],
+    searchableColumns: ['payer_email', 'payment_id', 'description'],
+    defaultSort: { column: 'created_at', dir: 'desc' },
+  },
+  vendors: {
+    key: 'vendors',
+    table: 'netsuite_vendors',
+    idColumn: 'netsuite_id',
+    syncEntityName: 'vendor',
+    label: 'Proveedores',
+    listColumns: ['netsuite_id', 'entityid', 'companyname', 'email', 'phone', 'subsidiary', 'isinactive', 'lastmodifieddate'],
+    sortableColumns: ['companyname', 'entityid', 'lastmodifieddate'],
+    searchableColumns: ['entityid', 'companyname', 'email'],
+    defaultSort: { column: 'lastmodifieddate', dir: 'desc' },
+    subsidiaryColumn: 'subsidiary',
+  },
+  'vendor-transactions': {
+    key: 'vendor-transactions',
+    table: 'netsuite_vendor_transactions',
+    idColumn: 'netsuite_id',
+    syncEntityName: 'vendorTransaction',
+    // The list view uses a dedicated repository (vendorTransactionsListRepository.ts) for the
+    // resolved vendor name, the "Orden de Pago" link, and the computed "Días Pendientes" - this
+    // plain config still backs the detail/summary paths, same pattern as partidas/payments.
+    label: 'Transacciones de Proveedores',
+    listColumns: ['netsuite_id', 'tranid', 'entity_id', 'type', 'status', 'trandate', 'duedate', 'currency', 'total', 'foreigntotal', 'lastmodifieddate'],
+    sortableColumns: ['trandate', 'duedate', 'total', 'lastmodifieddate'],
+    searchableColumns: ['tranid'],
+    defaultSort: { column: 'trandate', dir: 'desc' },
+  },
 };
 
 const ENTITY_ORDER: ReportEntityKey[] = [
@@ -213,6 +278,10 @@ const ENTITY_ORDER: ReportEntityKey[] = [
   'serial-numbers',
   'medicos',
   'medicos-colombia',
+  'fiscal-updates',
+  'payments',
+  'vendors',
+  'vendor-transactions',
 ];
 
 export function getEntityConfig(key: string): EntityConfig | undefined {

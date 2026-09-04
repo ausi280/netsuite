@@ -18,7 +18,10 @@ export type SyncEntityName =
   | 'servicePackage'
   | 'serialNumber'
   | 'medico'
-  | 'medicoColombia';
+  | 'medicoColombia'
+  | 'vendor'
+  | 'vendorTransaction'
+  | 'vendorBillPayment';
 
 export interface RetryConfig {
   MAX_ATTEMPTS: number;
@@ -54,6 +57,9 @@ export interface ErpSyncConfig {
   SERIAL_NUMBER: EntitySyncConfig;
   MEDICO: EntitySyncConfig;
   MEDICO_COLOMBIA: EntitySyncConfig;
+  VENDOR: EntitySyncConfig;
+  VENDOR_TRANSACTION: EntitySyncConfig;
+  VENDOR_BILL_PAYMENT: EntitySyncConfig;
 }
 
 export interface ErpConfig {

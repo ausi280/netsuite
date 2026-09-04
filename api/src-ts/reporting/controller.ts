@@ -4,6 +4,9 @@ import { getEntityConfig, listEntityConfigs } from './entityRegistry';
 import { buildExportQuery, getEntitySummaries, getPagedRows, getRowById, getSubsidiaryOptions } from './reportingRepository';
 import { getPartidaBreakdown, PARTIDA_DIMENSIONS } from './partidaAnalyticsRepository';
 import type { PartidaDimension } from './partidaAnalyticsRepository';
+import { buildEnrichedPartidaExportQuery, getEnrichedPartidaRows, PARTIDA_LIST_EXPORT_COLUMNS } from './partidaListRepository';
+import { getPaymentsList } from './paymentsListRepository';
+import { buildVendorTransactionsExportQuery, getVendorTransactionsList, VENDOR_TRANSACTIONS_EXPORT_COLUMNS } from './vendorTransactionsListRepository';
 import type { UserPermissions } from './permissionsRepository';
 import type { EntityConfig } from './types';
 import { csvRow, formatExportValue, humanizeColumnName } from './csvExport';
@@ -48,13 +51,21 @@ export async function listEntityRows(req: Request, res: Response): Promise<void>
     return;
   }
 
-  const { page, pageSize, search, sortBy, sortDir, subsidiary } = req.query;
-  const result = await getPagedRows(
-    knex,
-    config,
-    { page, pageSize, search, sortBy, sortDir, subsidiary },
-    subsidiaryRestrictionFor(permissions),
-  );
+  const { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo } = req.query;
+  const restrictSubsidiaries = subsidiaryRestrictionFor(permissions);
+
+  // Partidas gets the parent contract's name/dueño joined in, Payments gets its JSON_VALUE-
+  // extracted contract id resolved to a real name (plus that contract's own subsidiary/a date
+  // range), and vendor-transactions gets the vendor name/Orden de Pago/Días Pendientes joined in -
+  // none of these fit the plain generic-entity path every other entity uses.
+  const result =
+    entityKey === 'partidas'
+      ? await getEnrichedPartidaRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary, estatus }, restrictSubsidiaries)
+      : entityKey === 'payments'
+        ? await getPaymentsList(knex, { page, pageSize, search, subsidiary, dateFrom, dateTo }, restrictSubsidiaries)
+        : entityKey === 'vendor-transactions'
+          ? await getVendorTransactionsList(knex, { page, pageSize, search, sortBy, sortDir, subsidiary, vendorId }, restrictSubsidiaries)
+          : await getPagedRows(knex, config, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
 
   res.status(200).json({ success: true, ...result });
 }
@@ -99,7 +110,12 @@ export async function listSubsidiaryOptions(req: Request, res: Response): Promis
     return;
   }
 
-  const data = await getSubsidiaryOptions(knex, config, subsidiaryRestrictionFor(permissions));
+  // vendor-transactions' subsidiary is the linked vendor's own (netsuite_vendors.subsidiary), not
+  // a plain column on netsuite_vendor_transactions itself - reuse the 'vendors' entity's config
+  // (same table + column, and already has a working subsidiaryColumn) to get the real distinct
+  // set instead of nothing.
+  const optionsConfig = entityKey === 'vendor-transactions' ? getEntityConfig('vendors')! : config;
+  const data = await getSubsidiaryOptions(knex, optionsConfig, subsidiaryRestrictionFor(permissions));
   res.status(200).json({ success: true, data });
 }
 
@@ -121,24 +137,31 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
     return;
   }
 
-  const { search, sortBy, sortDir, subsidiary } = req.query;
+  const { search, sortBy, sortDir, subsidiary, estatus, vendorId } = req.query;
   const restrictSubsidiaries = subsidiaryRestrictionFor(permissions);
+  const isPartidas = entityKey === 'partidas';
+  const isVendorTransactions = entityKey === 'vendor-transactions';
+  const exportColumns = isPartidas ? PARTIDA_LIST_EXPORT_COLUMNS : isVendorTransactions ? VENDOR_TRANSACTIONS_EXPORT_COLUMNS : config.listColumns;
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${entityKey}.csv"`);
   // UTF-8 BOM so Excel (which otherwise guesses the system codepage) renders accented
   // characters/ñ correctly instead of mangling them.
   res.write('﻿');
-  res.write(csvRow(config.listColumns.map(humanizeColumnName)));
+  res.write(csvRow(exportColumns.map(humanizeColumnName)));
 
   let offset = 0;
   for (;;) {
-    const batch = (await buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
-      .offset(offset)
-      .limit(EXPORT_BATCH_SIZE)) as Array<Record<string, unknown>>;
+    const query = isPartidas
+      ? buildEnrichedPartidaExportQuery(knex, { search, sortBy, sortDir, subsidiary, estatus }, restrictSubsidiaries)
+      : isVendorTransactions
+        ? buildVendorTransactionsExportQuery(knex, { search, sortBy, sortDir, subsidiary, vendorId }, restrictSubsidiaries)
+        : buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
+
+    const batch = (await query.offset(offset).limit(EXPORT_BATCH_SIZE)) as Array<Record<string, unknown>>;
 
     for (const row of batch) {
-      res.write(csvRow(config.listColumns.map((column) => formatExportValue(column, row[column]))));
+      res.write(csvRow(exportColumns.map((column) => formatExportValue(column, row[column]))));
     }
 
     if (batch.length < EXPORT_BATCH_SIZE) break;

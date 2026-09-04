@@ -43,3 +43,15 @@ export function serviceTypeLabel(code: string | null | undefined): string {
   if (!code) return '—';
   return SERVICE_TYPE_LABELS[code] ?? `Tipo ${code}`;
 }
+
+// The two vendor-side transaction types synced into netsuite_vendor_transactions - confirmed
+// live, this account has no other vendor-side type (no VendCred, etc.) as of this writing.
+export const VENDOR_TRANSACTION_TYPE_LABELS: Record<string, string> = {
+  VendBill: 'Factura',
+  VendPymt: 'Pago',
+};
+
+export function vendorTransactionTypeLabel(code: string | null | undefined): string {
+  if (!code) return '—';
+  return VENDOR_TRANSACTION_TYPE_LABELS[code] ?? code;
+}

@@ -21,6 +21,9 @@ import { ServicePackageRepository } from './repositories/servicePackageRepositor
 import { SerialNumberRepository } from './repositories/serialNumberRepository';
 import { MedicoRepository } from './repositories/medicoRepository';
 import { MedicoColombiaRepository } from './repositories/medicoColombiaRepository';
+import { VendorRepository } from './repositories/vendorRepository';
+import { VendorTransactionRepository } from './repositories/vendorTransactionRepository';
+import { VendorBillPaymentRepository } from './repositories/vendorBillPaymentRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
 import { FamilyMemberSyncService } from './services/familyMemberSyncService';
@@ -36,6 +39,9 @@ import { ServicePackageSyncService } from './services/servicePackageSyncService'
 import { SerialNumberSyncService } from './services/serialNumberSyncService';
 import { MedicoSyncService } from './services/medicoSyncService';
 import { MedicoColombiaSyncService } from './services/medicoColombiaSyncService';
+import { VendorSyncService } from './services/vendorSyncService';
+import { VendorTransactionSyncService } from './services/vendorTransactionSyncService';
+import { VendorBillPaymentSyncService } from './services/vendorBillPaymentSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
 import type { EntitySyncService } from './services/types';
 
@@ -74,6 +80,9 @@ export function bootstrap(): Bootstrapped {
     new SerialNumberSyncService(db, http, syncState, rawStore, new SerialNumberRepository(db), overlapMinutes),
     new MedicoSyncService(db, http, syncState, rawStore, new MedicoRepository(db), overlapMinutes),
     new MedicoColombiaSyncService(db, http, syncState, rawStore, new MedicoColombiaRepository(db), overlapMinutes),
+    new VendorSyncService(db, http, syncState, rawStore, new VendorRepository(db), overlapMinutes),
+    new VendorTransactionSyncService(db, http, syncState, rawStore, new VendorTransactionRepository(db), overlapMinutes),
+    new VendorBillPaymentSyncService(db, http, syncState, rawStore, new VendorBillPaymentRepository(db)),
   ];
 
   const entityLimiter = new Bottleneck({ maxConcurrent: config.erp.SYNC.MAX_CONCURRENT_ENTITIES });

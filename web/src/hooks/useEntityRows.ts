@@ -24,6 +24,8 @@ export function useEntityRows(
       params.sortBy,
       params.sortDir,
       params.subsidiary,
+      params.estatus,
+      params.vendorId,
     ],
     queryFn: async () => {
       const token = await getAccessToken();

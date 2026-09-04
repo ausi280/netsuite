@@ -9,7 +9,11 @@ export type ReportEntityKey =
   | 'hospitals'
   | 'partidas'
   | 'services'
-  | 'serial-numbers';
+  | 'serial-numbers'
+  | 'fiscal-updates'
+  | 'payments'
+  | 'vendors'
+  | 'vendor-transactions';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -152,6 +156,45 @@ export interface ContractNotasResponse {
   data: NotaCobranza[];
   /** The legacy folio these notes were looked up by, or null if this contract has none (created directly in NetSuite). */
   folio: string | null;
+}
+
+/** A MercadoPago payment log row (app_payments, owned by the separate `payment` project - shared DB, read-only here). */
+export interface PaymentRow {
+  id: number;
+  payment_id: string;
+  transaction_amount: number;
+  payer_email: string | null;
+  payment_method_id: string | null;
+  installments: number | null;
+  description: string | null;
+  status: string;
+  status_detail: string | null;
+  /** Raw JSON string - contains contractId/customerId/subsidiariaId/domiciliar/domiciliationInfo, parsed client-side same as the original page did. */
+  payloadRequest: string;
+  created_at: string;
+  /** Resolved via netsuite_contracts - the original page only ever showed the raw internal id. */
+  contract_name: string | null;
+  /** The linked contract's own subsidiary id (custrecord_cryo_subsidiariacontrato) - null if the contract couldn't be resolved. */
+  subsidiary_id: string | null;
+}
+
+export interface ChargeDomiciledRequest {
+  originalPaymentId: string;
+  amount: string;
+  reference: string;
+  subsidiariaId: number;
+  contractId: number;
+  customerId: number;
+  payer: { email: string };
+  summary: { description: string };
+}
+
+export interface ChargeDomiciledResponse {
+  id?: string | number;
+  status?: string;
+  status_detail?: string;
+  authorization_code?: string | number;
+  message?: string;
 }
 
 export interface ApiError {

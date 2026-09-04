@@ -14,13 +14,13 @@ export interface PagedQueryParams {
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 200;
 
-function clampPage(page: unknown): number {
+export function clampPage(page: unknown): number {
   const n = Number(page);
   if (!Number.isFinite(n) || n < 1) return 1;
   return Math.floor(n);
 }
 
-function clampPageSize(pageSize: unknown): number {
+export function clampPageSize(pageSize: unknown): number {
   const n = Number(pageSize);
   if (!Number.isFinite(n) || n < 1) return DEFAULT_PAGE_SIZE;
   return Math.min(MAX_PAGE_SIZE, Math.floor(n));

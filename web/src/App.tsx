@@ -10,6 +10,7 @@ import { ReportPage } from './pages/ReportPage';
 import { ReportDetailPage } from './pages/ReportDetailPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { CommissionsPage } from './pages/CommissionsPage';
+import { PaymentsHistoryPage } from './pages/PaymentsHistoryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 // recharts is a sizeable dependency only needed on this one page - lazy-loading it keeps the
@@ -70,6 +71,16 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CommissionsPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/payments"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <PaymentsHistoryPage />
               </PageTransition>
             </RequireAuth>
           }

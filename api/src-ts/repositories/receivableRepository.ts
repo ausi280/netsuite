@@ -27,6 +27,12 @@ export class ReceivableRepository {
   }
 
   async pruneStale(trx: Knex.Transaction, runStartedAt: Date): Promise<number> {
-    return trx(this.table).where('computed_at', '<', runStartedAt).delete();
+    // SQL Server's DATETIME column rounds on write - a row written with computed_at =
+    // runStartedAt can round-trip to a stored value a few ms LESS than the exact JS Date used
+    // here, so a naive `< runStartedAt` would prune rows this very run just wrote (confirmed
+    // live against netsuite_vendor_bill_payments, same column type/pattern). A 1-minute buffer
+    // safely absorbs that rounding without letting genuinely stale rows survive.
+    const safeThreshold = new Date(runStartedAt.getTime() - 60_000);
+    return trx(this.table).where('computed_at', '<', safeThreshold).delete();
   }
 }

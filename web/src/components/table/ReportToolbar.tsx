@@ -8,12 +8,23 @@ interface SubsidiaryFilterProps {
   onChange: (value: string) => void;
 }
 
+interface SelectFilterProps {
+  value: string;
+  /** Pre-resolved {value,label} pairs - label lookup is entity-specific, so the caller resolves it, not this generic toolbar. */
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  allLabel: string;
+}
+
 interface ReportToolbarProps {
   initialSearch: string;
   onSearchChange: (value: string) => void;
   totalLabel: string;
   /** Omit entirely when the entity has no subsidiary column synced - the dropdown won't render. */
   subsidiaryFilter?: SubsidiaryFilterProps;
+  /** A second, generic single-select filter (e.g. Partidas' Estatus) - omit entirely to hide it. */
+  statusFilter?: SelectFilterProps;
   /** Omit to hide the export button entirely (not used yet on every page that renders this toolbar). */
   onExport?: () => void;
   isExporting?: boolean;
@@ -22,7 +33,7 @@ interface ReportToolbarProps {
 const DEBOUNCE_MS = 350;
 
 /** Search input debounced ~350ms before bubbling up to the URL-driven query state. */
-export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsidiaryFilter, onExport, isExporting }: ReportToolbarProps) {
+export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsidiaryFilter, statusFilter, onExport, isExporting }: ReportToolbarProps) {
   const [value, setValue] = useState(initialSearch);
 
   // Keep the local input in sync if the URL param changes from elsewhere (e.g. back/forward nav).
@@ -77,6 +88,21 @@ export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsi
           {subsidiaryFilter.options.map((id) => (
             <option key={id} value={id}>
               {subsidiaryLabel(id)}
+            </option>
+          ))}
+        </select>
+      ) : null}
+      {statusFilter ? (
+        <select
+          className={styles.subsidiarySelect}
+          value={statusFilter.value}
+          onChange={(event) => statusFilter.onChange(event.target.value)}
+          aria-label={statusFilter.ariaLabel}
+        >
+          <option value="">{statusFilter.allLabel}</option>
+          {statusFilter.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
             </option>
           ))}
         </select>

@@ -79,8 +79,18 @@ export function formatExportValue(column: string, value: unknown): string {
   return String(value);
 }
 
+/** Columns that don't follow the custrecord_/cryo_ naming convention (joined-in columns added for
+ * a specific entity's export, e.g. partidas' enriched contract/dueño columns) get an explicit
+ * header instead of being run through the generic humanizer. */
+const HEADER_OVERRIDES: Record<string, string> = {
+  contract_name: 'Contrato',
+  dueno_nombre: 'Dueño',
+};
+
 /** Strips the custrecord_/cryo_ prefixes and title-cases, matching the web app's humanizeKey(). */
 export function humanizeColumnName(column: string): string {
+  if (HEADER_OVERRIDES[column]) return HEADER_OVERRIDES[column];
+
   let label = column;
   if (label.startsWith('custrecord_')) label = label.slice('custrecord_'.length);
   if (label.startsWith('cryo_')) label = label.slice('cryo_'.length);

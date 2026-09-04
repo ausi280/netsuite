@@ -22,6 +22,9 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   serialNumber: '0 8 * * *',
   medico: '10 8 * * *',
   medicoColombia: '20 8 * * *',
+  vendor: '30 8 * * *',
+  vendorTransaction: '40 8 * * *',
+  vendorBillPayment: '50 8 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -67,6 +70,9 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     SERIAL_NUMBER: mergeEntityConfig('serialNumber', raw?.SERIAL_NUMBER),
     MEDICO: mergeEntityConfig('medico', raw?.MEDICO),
     MEDICO_COLOMBIA: mergeEntityConfig('medicoColombia', raw?.MEDICO_COLOMBIA),
+    VENDOR: mergeEntityConfig('vendor', raw?.VENDOR),
+    VENDOR_TRANSACTION: mergeEntityConfig('vendorTransaction', raw?.VENDOR_TRANSACTION),
+    VENDOR_BILL_PAYMENT: mergeEntityConfig('vendorBillPayment', raw?.VENDOR_BILL_PAYMENT),
   };
 }
 

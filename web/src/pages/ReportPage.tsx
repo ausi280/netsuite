@@ -7,7 +7,8 @@ import { Pagination } from '../components/table/Pagination';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
-import { entityColumns, getSubsidiaryColumnKey } from '../config/entityColumns';
+import { entityColumns, getIdColumnKey, getSubsidiaryColumnKey } from '../config/entityColumns';
+import { PARTIDA_STATUS_LABELS } from '../config/labels';
 import { useEntityRows } from '../hooks/useEntityRows';
 import { useSubsidiaryOptions } from '../hooks/useSubsidiaryOptions';
 import { fetchEntityExportCsv } from '../api/reportsApi';
@@ -40,8 +41,16 @@ export function ReportPage() {
   const search = searchParams.get('search') ?? '';
   const sortBy = searchParams.get('sortBy') ?? config.defaultSort?.sortBy ?? '';
   const sortDir: SortDir = searchParams.get('sortDir') === 'desc' ? 'desc' : searchParams.get('sortDir') === 'asc' ? 'asc' : config.defaultSort?.sortDir ?? 'asc';
+  const isPartidas = entityKey === 'partidas';
+  const estatus = isPartidas ? searchParams.get('estatus') ?? '' : '';
+  const isVendorTransactions = entityKey === 'vendor-transactions';
+  const vendorId = isVendorTransactions ? searchParams.get('vendorId') ?? '' : '';
   const subsidiaryColumn = getSubsidiaryColumnKey(entityKey);
-  const subsidiary = subsidiaryColumn ? searchParams.get('subsidiary') ?? '' : '';
+  // vendor-transactions' subsidiary comes from the joined vendor (netsuite_vendors.subsidiary),
+  // not a plain column on netsuite_vendor_transactions itself, so it has no format:'subsidiary'
+  // column config for getSubsidiaryColumnKey to find - it's special-cased on here instead.
+  const hasSubsidiaryFilter = Boolean(subsidiaryColumn) || isVendorTransactions;
+  const subsidiary = hasSubsidiaryFilter ? searchParams.get('subsidiary') ?? '' : '';
 
   const {
     data,
@@ -49,9 +58,9 @@ export function ReportPage() {
     isError,
     error,
     refetch,
-  } = useEntityRows(entityKey, { page, pageSize, search, sortBy, sortDir, subsidiary }, { enabled: isValid });
+  } = useEntityRows(entityKey, { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId }, { enabled: isValid });
 
-  const { data: subsidiaryOptions } = useSubsidiaryOptions(entityKey, { enabled: isValid && Boolean(subsidiaryColumn) });
+  const { data: subsidiaryOptions } = useSubsidiaryOptions(entityKey, { enabled: isValid && hasSubsidiaryFilter });
   const { getAccessToken } = useApiToken();
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -78,6 +87,10 @@ export function ReportPage() {
 
   function handleSubsidiaryChange(value: string) {
     updateParams({ subsidiary: value || null, page: '1' });
+  }
+
+  function handleEstatusChange(value: string) {
+    updateParams({ estatus: value || null, page: '1' });
   }
 
   function handleSortChange(columnKey: string) {
@@ -117,7 +130,7 @@ export function ReportPage() {
   }
 
   function handleRowClick(row: ReportRow) {
-    const id = row.netsuite_id;
+    const id = row[getIdColumnKey(entityKey)];
     if (id !== undefined && id !== null && id !== '') {
       navigate(`/reports/${entityKey}/${id}`);
     }
@@ -128,7 +141,7 @@ export function ReportPage() {
     setExportError(null);
     try {
       const token = await getAccessToken();
-      const blob = await fetchEntityExportCsv(token, entityKey, { search, sortBy, sortDir, subsidiary });
+      const blob = await fetchEntityExportCsv(token, entityKey, { search, sortBy, sortDir, subsidiary, estatus, vendorId });
       downloadBlob(blob, `${entityKey}.csv`);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'No se pudo exportar el CSV.');
@@ -163,14 +176,34 @@ export function ReportPage() {
             Ver comisiones
           </Link>
         ) : null}
+        {isVendorTransactions && vendorId ? (
+          <Link to="/reports/vendor-transactions" className={styles.graphsLink}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+            Quitar filtro de proveedor
+          </Link>
+        ) : null}
       </div>
       <ReportToolbar
         initialSearch={search}
         onSearchChange={handleSearchChange}
         totalLabel={totalLabel}
         subsidiaryFilter={
-          subsidiaryColumn
+          hasSubsidiaryFilter
             ? { value: subsidiary, options: subsidiaryOptions ?? [], onChange: handleSubsidiaryChange }
+            : undefined
+        }
+        statusFilter={
+          isPartidas
+            ? {
+                value: estatus,
+                options: Object.entries(PARTIDA_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+                onChange: handleEstatusChange,
+                ariaLabel: 'Filtrar por estatus',
+                allLabel: 'Todos los estatus',
+              }
             : undefined
         }
         onExport={handleExport}
