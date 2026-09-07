@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import { applySubsidiaryRestriction, clampPage, clampPageSize } from './reportingRepository';
+import { applySubsidiaryRestriction, clampPage, clampPageSize, parseSubsidiaryFilter } from './reportingRepository';
 import type { Paginated } from './types';
 
 type SortDir = 'asc' | 'desc';
@@ -70,7 +70,7 @@ function buildBaseQuery(
   db: Knex,
   search: string,
   vendorId: string,
-  subsidiary: string,
+  subsidiary: Set<string>,
   restrictSubsidiaries: Set<string> | null,
 ): Knex.QueryBuilder {
   const qb = db(TABLE)
@@ -97,8 +97,8 @@ function buildBaseQuery(
   if (restrictSubsidiaries !== null) {
     applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
   }
-  if (subsidiary) {
-    qb.andWhereRaw(`(',' + REPLACE(CAST(?? AS NVARCHAR(MAX)), ' ', '') + ',') LIKE ?`, [SUBSIDIARY_COLUMN, `%,${subsidiary},%`]);
+  if (subsidiary.size > 0) {
+    applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, subsidiary);
   }
 
   return qb;
@@ -124,7 +124,7 @@ export async function getVendorTransactionsList(
   const pageSize = clampPageSize(params.pageSize);
   const { column, dir } = resolveSort(params.sortBy, params.sortDir);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
   const vendorId = typeof params.vendorId === 'string' ? params.vendorId.trim() : '';
 
   const [rows, countRow] = await Promise.all([
@@ -151,7 +151,7 @@ export function buildVendorTransactionsExportQuery(
 ): Knex.QueryBuilder {
   const { column, dir } = resolveSort(params.sortBy, params.sortDir);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
   const vendorId = typeof params.vendorId === 'string' ? params.vendorId.trim() : '';
 
   return buildBaseQuery(db, search, vendorId, subsidiary, restrictSubsidiaries)

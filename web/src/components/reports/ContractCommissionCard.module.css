@@ -1,0 +1,107 @@
+.card {
+  background: var(--color-neutral-100);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.contractName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  text-decoration: none;
+}
+
+.contractName:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--color-secondary);
+  margin-top: 2px;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.statusBadge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-secondary);
+  background: var(--color-white);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.contractTotal {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-primary);
+  font-family: var(--font-display);
+}
+
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+}
+
+.lineLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tag {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-primary);
+}
+
+.lineDetail {
+  font-size: 12px;
+  color: var(--color-secondary);
+  word-break: break-word;
+}
+
+.lineAmount {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  white-space: nowrap;
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--color-secondary);
+  font-style: italic;
+}

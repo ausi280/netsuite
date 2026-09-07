@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import { applySubsidiaryRestriction, clampPage, clampPageSize } from './reportingRepository';
+import { applySubsidiaryRestriction, clampPage, clampPageSize, parseSubsidiaryFilter } from './reportingRepository';
 import type { Paginated } from './types';
 
 /**
@@ -50,7 +50,7 @@ function nextDayIso(dateStr: string): string {
 function buildBaseQuery(
   db: Knex,
   search: string,
-  subsidiary: string,
+  subsidiary: Set<string>,
   dateFrom: string,
   dateTo: string,
   restrictSubsidiaries: Set<string> | null,
@@ -72,8 +72,8 @@ function buildBaseQuery(
   if (restrictSubsidiaries !== null) {
     applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
   }
-  if (subsidiary) {
-    qb.andWhereRaw(`(',' + REPLACE(CAST(?? AS NVARCHAR(MAX)), ' ', '') + ',') LIKE ?`, [SUBSIDIARY_COLUMN, `%,${subsidiary},%`]);
+  if (subsidiary.size > 0) {
+    applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, subsidiary);
   }
   if (dateFrom) {
     qb.andWhere('P.created_at', '>=', dateFrom);
@@ -103,7 +103,7 @@ export async function getPaymentsList(
   const page = clampPage(params.page);
   const pageSize = clampPageSize(params.pageSize);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
   const dateFrom = typeof params.dateFrom === 'string' ? params.dateFrom.trim() : '';
   const dateTo = typeof params.dateTo === 'string' ? params.dateTo.trim() : '';
 

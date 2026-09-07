@@ -10,7 +10,8 @@ const path = require('path');
 const allowedOrigins = [
     'https://testrenovaciones.cryo-cell.com.mx',
     'https://renovaciones.cryo-cell.com.mx',
-    'https://reportes.cryoholdco.com'
+    'https://reportes.cryoholdco.com',
+    'https://sync.cryoholdco.com'
 ];
 
 if (env.APP && env.APP.URL) {
@@ -22,7 +23,13 @@ const corsOptions = {
         if (!origin || allowedOrigins.indexOf(origin) !== -1) {
             callback(null, true);
         } else {
-            callback(new Error('Not allowed by CORS'));
+            // Reject without throwing - passing an Error here surfaces as an unhandled
+            // exception (Express's default 500 page) for every request from a disallowed
+            // origin, instead of a normal CORS-blocked response, which nukes the whole app
+            // for any origin missing from allowedOrigins above (confirmed live: this exact
+            // bug hid the real https://sync.cryoholdco.com domain being missing from the list).
+            console.warn(`[CORS] Rejected origin: ${origin}`);
+            callback(null, false);
         }
     },
     credentials: true,

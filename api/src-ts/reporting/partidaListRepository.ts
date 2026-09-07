@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import { applySubsidiaryRestriction, clampPage, clampPageSize } from './reportingRepository';
+import { applySubsidiaryRestriction, clampPage, clampPageSize, parseSubsidiaryFilter } from './reportingRepository';
 import type { Paginated } from './types';
 
 type SortDir = 'asc' | 'desc';
@@ -54,7 +54,7 @@ function resolvePartidaSort(sortBy: unknown, sortDir: unknown): { column: string
 function buildBaseQuery(
   db: Knex,
   search: string,
-  subsidiary: string,
+  subsidiary: Set<string>,
   estatus: string,
   restrictSubsidiaries: Set<string> | null,
 ): Knex.QueryBuilder {
@@ -76,8 +76,8 @@ function buildBaseQuery(
   if (restrictSubsidiaries !== null) {
     applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
   }
-  if (subsidiary) {
-    qb.andWhereRaw(`(',' + REPLACE(CAST(?? AS NVARCHAR(MAX)), ' ', '') + ',') LIKE ?`, [SUBSIDIARY_COLUMN, `%,${subsidiary},%`]);
+  if (subsidiary.size > 0) {
+    applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, subsidiary);
   }
   if (estatus) {
     qb.andWhere('P.custrecord_cryo_estatuspartida', estatus);
@@ -105,7 +105,7 @@ export async function getEnrichedPartidaRows(
   const pageSize = clampPageSize(params.pageSize);
   const { column, dir } = resolvePartidaSort(params.sortBy, params.sortDir);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
   const estatus = typeof params.estatus === 'string' ? params.estatus.trim() : '';
 
   const [rows, countRow] = await Promise.all([
@@ -132,7 +132,7 @@ export function buildEnrichedPartidaExportQuery(
 ): Knex.QueryBuilder {
   const { column, dir } = resolvePartidaSort(params.sortBy, params.sortDir);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
   const estatus = typeof params.estatus === 'string' ? params.estatus.trim() : '';
 
   return buildBaseQuery(db, search, subsidiary, estatus, restrictSubsidiaries)

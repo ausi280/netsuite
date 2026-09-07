@@ -26,6 +26,22 @@ export function clampPageSize(pageSize: unknown): number {
   return Math.min(MAX_PAGE_SIZE, Math.floor(n));
 }
 
+/** The wire format for a multi-select subsidiary filter is one query param, comma-separated
+ * ("subsidiary=5,7,20") - Express also hands back an array if the same param repeats, so both
+ * shapes are accepted here. Empty/whitespace-only entries are dropped. */
+export function parseSubsidiaryFilter(value: unknown): Set<string> {
+  const raw = Array.isArray(value) ? value : [value];
+  const ids = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== 'string') continue;
+    for (const part of item.split(',')) {
+      const trimmed = part.trim();
+      if (trimmed) ids.add(trimmed);
+    }
+  }
+  return ids;
+}
+
 /** Resolves sortBy/sortDir against the entity's allow-list, falling back to defaultSort for anything not on it. */
 function resolveSort(config: EntityConfig, sortBy: unknown, sortDir: unknown): SortConfig {
   const column = typeof sortBy === 'string' && config.sortableColumns.includes(sortBy) ? sortBy : config.defaultSort.column;
@@ -34,10 +50,11 @@ function resolveSort(config: EntityConfig, sortBy: unknown, sortDir: unknown): S
 }
 
 /** `(',' + REPLACE(col, ' ', '') + ',') LIKE '%,<id>,%'` — matches a single subsidiary id whether the
- * column holds one scalar value or a comma-separated multi-select ("24, 25"). */
-function subsidiaryContainsClause(qb: Knex.QueryBuilder, column: string, id: string, mode: 'and' | 'or'): void {
-  const method = mode === 'and' ? 'whereRaw' : 'orWhereRaw';
-  qb[method](`(',' + REPLACE(CAST(?? AS NVARCHAR(MAX)), ' ', '') + ',') LIKE ?`, [column, `%,${id},%`]);
+ * column holds one scalar value or a comma-separated multi-select ("24, 25"). Always OR'd into an
+ * enclosing `.where(builder => ...)` group (see applySubsidiaryRestriction) - matching ANY id in a
+ * requested/allowed set, never narrowing to all of them at once. */
+function subsidiaryContainsClause(qb: Knex.QueryBuilder, column: string, id: string): void {
+  qb.orWhereRaw(`(',' + REPLACE(CAST(?? AS NVARCHAR(MAX)), ' ', '') + ',') LIKE ?`, [column, `%,${id},%`]);
 }
 
 /**
@@ -52,7 +69,7 @@ export function applySubsidiaryRestriction(qb: Knex.QueryBuilder, column: string
   }
   qb.where((builder) => {
     for (const id of allowedIds) {
-      subsidiaryContainsClause(builder, column, id, 'or');
+      subsidiaryContainsClause(builder, column, id);
     }
   });
 }
@@ -73,7 +90,7 @@ function buildFilteredQuery(
   db: Knex,
   config: EntityConfig,
   search: string,
-  subsidiary: string,
+  subsidiary: Set<string>,
   restrictSubsidiaries: Set<string> | null,
 ): Knex.QueryBuilder {
   const qb = db(config.table);
@@ -88,8 +105,8 @@ function buildFilteredQuery(
     if (restrictSubsidiaries !== null) {
       applySubsidiaryRestriction(qb, config.subsidiaryColumn, restrictSubsidiaries);
     }
-    if (subsidiary) {
-      subsidiaryContainsClause(qb, config.subsidiaryColumn, subsidiary, 'and');
+    if (subsidiary.size > 0) {
+      applySubsidiaryRestriction(qb, config.subsidiaryColumn, subsidiary);
     }
   }
   return qb;
@@ -105,7 +122,7 @@ export function buildExportQuery(
 ): Knex.QueryBuilder {
   const { column, dir } = resolveSort(config, params.sortBy, params.sortDir);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
 
   // A secondary sort by idColumn keeps OFFSET/LIMIT pagination stable across the export's batched
   // reads - without a deterministic tiebreaker, SQL Server doesn't guarantee row order is
@@ -126,7 +143,7 @@ export async function getPagedRows(
   const pageSize = clampPageSize(params.pageSize);
   const { column, dir } = resolveSort(config, params.sortBy, params.sortDir);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const subsidiary = typeof params.subsidiary === 'string' ? params.subsidiary.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
 
   const [rows, countRow] = await Promise.all([
     buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries)

@@ -4,10 +4,11 @@ import type {
   ApiSuccess,
   ChargeDomiciledRequest,
   ChargeDomiciledResponse,
-  CommissionRow,
+  CommissionLevelTier,
   CommissionsResponse,
   ContractDossier,
   ContractNotasResponse,
+  EmployeeLevel,
   EntitiesResponse,
   EntitySummary,
   NotaCobranza,
@@ -20,6 +21,7 @@ import type {
   ReportRecord,
   SortDir,
   UserPermissionUpdate,
+  VendedorCommissionGroup,
 } from './types';
 
 export interface EntitiesResult {
@@ -33,7 +35,8 @@ export interface EntityRowsParams {
   search: string;
   sortBy: string;
   sortDir: SortDir;
-  subsidiary: string;
+  /** Zero or more subsidiary ids (OR'd) - sent as one comma-separated query param. */
+  subsidiary: string[];
   /** Partidas-only status filter (custrecord_cryo_estatuspartida) - ignored by every other entity. */
   estatus?: string;
   /** vendor-transactions-only: narrows to one vendor's rows (the per-vendor drill-down view) - ignored by every other entity. */
@@ -57,7 +60,7 @@ export async function fetchEntityRows(
   if (params.search) query.set('search', params.search);
   if (params.sortBy) query.set('sortBy', params.sortBy);
   if (params.sortDir) query.set('sortDir', params.sortDir);
-  if (params.subsidiary) query.set('subsidiary', params.subsidiary);
+  if (params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
   if (params.estatus) query.set('estatus', params.estatus);
   if (params.vendorId) query.set('vendorId', params.vendorId);
 
@@ -68,7 +71,7 @@ export interface EntityExportParams {
   search: string;
   sortBy: string;
   sortDir: SortDir;
-  subsidiary: string;
+  subsidiary: string[];
   estatus?: string;
   vendorId?: string;
 }
@@ -83,7 +86,7 @@ export async function fetchEntityExportCsv(
   if (params.search) query.set('search', params.search);
   if (params.sortBy) query.set('sortBy', params.sortBy);
   if (params.sortDir) query.set('sortDir', params.sortDir);
-  if (params.subsidiary) query.set('subsidiary', params.subsidiary);
+  if (params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
   if (params.estatus) query.set('estatus', params.estatus);
   if (params.vendorId) query.set('vendorId', params.vendorId);
 
@@ -130,16 +133,17 @@ export async function fetchContractDossier(token: string | null, id: string): Pr
   return result.data;
 }
 
-/** New-contract salesperson commissions grid for one calendar month, optionally narrowed to one subsidiary and/or currency. */
+/** New-contract salesperson commissions grid for one calendar month, optionally narrowed to one or
+ * more subsidiaries and/or a currency. */
 export async function fetchCommissions(
   token: string | null,
   month: number,
   year: number,
-  subsidiary?: string,
+  subsidiary?: string[],
   currency?: string
-): Promise<CommissionRow[]> {
+): Promise<VendedorCommissionGroup[]> {
   const query = new URLSearchParams({ month: String(month), year: String(year) });
-  if (subsidiary) query.set('subsidiary', subsidiary);
+  if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
   if (currency) query.set('currency', currency);
   const result = await apiFetch<CommissionsResponse>(`/reports/contracts/commissions?${query.toString()}`, { token });
   return result.data;
@@ -157,8 +161,8 @@ export interface PaymentsListParams {
   page: number;
   pageSize: number;
   search: string;
-  /** The NetSuite subsidiary id of the payment's linked contract - not payloadRequest's own copy. */
-  subsidiary?: string;
+  /** The NetSuite subsidiary id(s) of the payment's linked contract - not payloadRequest's own copy. */
+  subsidiary?: string[];
   /** Both "YYYY-MM-DD" - filters on the payment's created_at, inclusive of the entire dateTo day. */
   dateFrom?: string;
   dateTo?: string;
@@ -172,7 +176,7 @@ export async function fetchPaymentsList(token: string | null, params: PaymentsLi
     pageSize: String(params.pageSize),
   });
   if (params.search) query.set('search', params.search);
-  if (params.subsidiary) query.set('subsidiary', params.subsidiary);
+  if (params.subsidiary && params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
   if (params.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params.dateTo) query.set('dateTo', params.dateTo);
 
@@ -188,6 +192,50 @@ export async function chargeDomiciled(token: string | null, body: ChargeDomicile
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+/** Every employee with their currently assigned commission nivel (A/B/C/...), for the "assign
+ * niveles" admin screen. */
+export async function fetchEmployeeLevels(token: string | null): Promise<EmployeeLevel[]> {
+  const result = await apiFetch<ApiSuccess<EmployeeLevel[]>>('/reports/commission-levels/employees', { token });
+  return result.data;
+}
+
+/** Assigns (nivel: a string) or clears (nivel: null) one employee's commission nivel. */
+export async function updateEmployeeLevel(token: string | null, employeeId: string, nivel: string | null): Promise<void> {
+  await apiFetch('/reports/commission-levels/employees/' + encodeURIComponent(employeeId), {
+    token,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nivel }),
+  });
+}
+
+/** Every nivel's commission-rate tiers, for the "configure niveles" admin screen. */
+export async function fetchCommissionTiers(token: string | null): Promise<CommissionLevelTier[]> {
+  const result = await apiFetch<ApiSuccess<CommissionLevelTier[]>>('/reports/commission-levels/tiers', { token });
+  return result.data;
+}
+
+export interface UpsertCommissionTierInput {
+  /** Omit to create a new tier; provide to edit an existing one. */
+  id?: number;
+  nivel: string;
+  min_amount: number;
+  percentage: number;
+}
+
+export async function upsertCommissionTier(token: string | null, input: UpsertCommissionTierInput): Promise<void> {
+  await apiFetch('/reports/commission-levels/tiers', {
+    token,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteCommissionTier(token: string | null, id: number): Promise<void> {
+  await apiFetch(`/reports/commission-levels/tiers/${id}`, { token, method: 'DELETE' });
 }
 
 export async function fetchEntityRecord(

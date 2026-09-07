@@ -1,0 +1,240 @@
+.heading {
+  margin-bottom: 24px;
+}
+
+.title {
+  font-size: 24px;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--color-secondary);
+  margin-top: 4px;
+}
+
+.section {
+  margin-bottom: 32px;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-family: var(--font-display);
+  margin-bottom: 14px;
+}
+
+.levelGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.levelCard {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  padding: 18px 20px;
+}
+
+.levelName {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  margin-bottom: 12px;
+}
+
+.tierTable,
+.employeeTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tierTable {
+  table-layout: fixed;
+}
+
+.tierTable th:nth-child(1),
+.tierTable td:nth-child(1) {
+  width: 36%;
+}
+
+.tierTable th:nth-child(2),
+.tierTable td:nth-child(2) {
+  width: 24%;
+}
+
+.tierTable th:nth-child(3),
+.tierTable td:nth-child(3) {
+  width: 40%;
+}
+
+.tierTable th,
+.employeeTable th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-secondary);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-neutral-100);
+}
+
+.tierTable td,
+.employeeTable td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--color-neutral-100);
+  color: var(--color-neutral-800);
+  vertical-align: middle;
+}
+
+.actionsCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.inlineInput {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  font-size: 13px;
+}
+
+.inlineInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.linkButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.linkButtonMuted {
+  background: none;
+  border: none;
+  color: var(--color-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.linkButtonMuted:hover {
+  text-decoration: underline;
+}
+
+.linkButtonDanger {
+  background: none;
+  border: none;
+  color: var(--color-danger);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.linkButtonDanger:hover {
+  text-decoration: underline;
+}
+
+.linkButtonDanger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.newLevelForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.textInput {
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  font-size: 13px;
+  min-width: 100px;
+}
+
+.textInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.primaryButton {
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--color-primary);
+  color: var(--color-white);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-fluent);
+}
+
+.primaryButton:hover {
+  background: var(--color-primary-hover);
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.errorNote {
+  font-size: 12px;
+  color: var(--color-danger);
+}
+
+.employeeFilters {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-secondary);
+  cursor: pointer;
+}
+
+.employeeTable {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  padding: 4px 12px;
+  display: block;
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.employeeTable thead,
+.employeeTable tbody {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}

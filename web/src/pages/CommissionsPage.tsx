@@ -1,17 +1,17 @@
 import { useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
-import { SimpleTable } from '../components/table/SimpleTable';
-import type { SimpleColumn } from '../components/table/SimpleTable';
+import { EmptyState } from '../components/common/EmptyState';
+import { MultiSelectDropdown } from '../components/common/MultiSelectDropdown';
+import { VendedorGroupCard } from '../components/reports/VendedorGroupCard';
 import { useCommissions } from '../hooks/useCommissions';
 import { useSubsidiaryOptions } from '../hooks/useSubsidiaryOptions';
-import type { CommissionRow } from '../api/types';
-import { contractStatusLabel } from '../config/labels';
 import { subsidiaryLabel } from '../config/subsidiaries';
 import { currencyLabel, KNOWN_CURRENCY_IDS } from '../config/currencies';
-import { formatCurrency, formatDate, formatCellValue } from '../utils/format';
+import { formatCurrency } from '../utils/format';
+import { sumCommissionByCurrency } from '../utils/commissions';
 import styles from './CommissionsPage.module.css';
 
 const MONTH_NAMES = [
@@ -22,28 +22,16 @@ const MONTH_NAMES = [
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, index) => CURRENT_YEAR - index);
 
-const COLUMNS: SimpleColumn<CommissionRow>[] = [
-  { key: 'vendedor', header: 'Vendedor', render: (r) => r.vendedor_nombre ?? r.vendedor_id },
-  { key: 'contrato', header: 'Contrato', render: (r) => r.name ?? r.netsuite_id },
-  { key: 'numero', header: 'No. Contrato', render: (r) => formatCellValue(r.numero_contrato) },
-  { key: 'titular', header: 'Titular', render: (r) => r.titular_nombre ?? '—' },
-  { key: 'fecha', header: 'Fecha Inicio', render: (r) => formatDate(r.fecha_inicio) },
-  { key: 'estatus', header: 'Estatus', render: (r) => contractStatusLabel(r.estatus) },
-  { key: 'subsidiaria', header: 'Subsidiaria', render: (r) => (r.subsidiaria_id ? subsidiaryLabel(r.subsidiaria_id) : '—') },
-  { key: 'moneda', header: 'Moneda', render: (r) => currencyLabel(r.moneda) },
-  { key: 'saldo', header: 'Saldo Inicial', render: (r) => formatCurrency(r.saldo_inicial, r.moneda) },
-  { key: 'total', header: 'Total', render: (r) => formatCurrency(r.total, r.moneda) },
-];
-
-/** Grid of new contracts (start-date month/year filter) with their salesperson, for calculating/paying commissions. */
+/** New-contract sales commissions, grouped by vendedor, with every contract's calculation broken
+ * down (Placenta's flat 3%, the tiered rate on everything else, the $100-per-year anualidad
+ * bonus) so it's clear why each number is what it is. */
 export function CommissionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   const now = new Date();
   const month = Number(searchParams.get('month')) || now.getMonth() + 1;
   const year = Number(searchParams.get('year')) || now.getFullYear();
-  const subsidiary = searchParams.get('subsidiary') ?? '';
+  const subsidiary = (searchParams.get('subsidiary') ?? '').split(',').filter(Boolean);
   const currency = searchParams.get('currency') ?? '';
 
   const { data, isLoading, isError, error, refetch } = useCommissions(month, year, subsidiary, currency);
@@ -51,19 +39,11 @@ export function CommissionsPage() {
 
   const summary = useMemo(() => {
     if (!data) return null;
-    const salespeople = new Set<string>();
-    // Contracts in this account are denominated in MXN/USD/EUR/COP/ARS/PEN/BRL - a single blended
-    // sum across currencies would be meaningless, so totals are kept split by currency id.
-    const totalsByCurrency = new Map<string, number>();
-    for (const row of data) {
-      salespeople.add(row.vendedor_nombre ?? row.vendedor_id);
-      const key = row.moneda ?? '';
-      totalsByCurrency.set(key, (totalsByCurrency.get(key) ?? 0) + (row.total ?? 0));
-    }
+    const allContracts = data.flatMap((group) => group.contracts);
     return {
-      count: data.length,
-      salespeopleCount: salespeople.size,
-      totalsByCurrency: Array.from(totalsByCurrency.entries()),
+      vendedoresCount: data.length,
+      contractsCount: allContracts.length,
+      totalsByCurrency: sumCommissionByCurrency(allContracts),
     };
   }, [data]);
 
@@ -79,10 +59,10 @@ export function CommissionsPage() {
     setSearchParams(next);
   }
 
-  function handleSubsidiaryChange(value: string) {
+  function handleSubsidiaryChange(ids: string[]) {
     const next = new URLSearchParams(searchParams);
-    if (value) {
-      next.set('subsidiary', value);
+    if (ids.length > 0) {
+      next.set('subsidiary', ids.join(','));
     } else {
       next.delete('subsidiary');
     }
@@ -102,10 +82,21 @@ export function CommissionsPage() {
   return (
     <AppShell breadcrumbs={[{ label: 'Reportes', to: '/' }, { label: 'Contratos', to: '/reports/contracts' }, { label: 'Comisiones' }]}>
       <div className={styles.heading}>
-        <h1 className={styles.title}>Comisiones de contratos nuevos</h1>
-        <p className={styles.subtitle}>
-          Contratos nuevos por vendedor, filtrados por el mes y año de su fecha de inicio.
-        </p>
+        <div>
+          <h1 className={styles.title}>Comisiones de contratos nuevos</h1>
+          <p className={styles.subtitle}>
+            Contratos nuevos por vendedor, filtrados por el mes y año de su fecha de inicio.
+          </p>
+        </div>
+        <Link to="/reports/contracts/commission-levels" className={styles.levelsLink}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M4 21V9" />
+            <path d="M4 9l4-4" />
+            <path d="M12 21V3" />
+            <path d="M20 21v-7" />
+          </svg>
+          Configurar niveles
+        </Link>
       </div>
       <div className={styles.filters}>
         <select className={styles.select} value={month} onChange={(event) => handleMonthChange(event.target.value)} aria-label="Mes">
@@ -122,19 +113,14 @@ export function CommissionsPage() {
             </option>
           ))}
         </select>
-        <select
-          className={styles.select}
+        <MultiSelectDropdown
           value={subsidiary}
-          onChange={(event) => handleSubsidiaryChange(event.target.value)}
-          aria-label="Filtrar por subsidiaria"
-        >
-          <option value="">Todas las subsidiarias</option>
-          {(subsidiaryOptions ?? []).map((id) => (
-            <option key={id} value={id}>
-              {subsidiaryLabel(id)}
-            </option>
-          ))}
-        </select>
+          options={subsidiaryOptions ?? []}
+          onChange={handleSubsidiaryChange}
+          labelForId={subsidiaryLabel}
+          placeholder="Todas las subsidiarias"
+          ariaLabel="Filtrar por subsidiaria"
+        />
         <select
           className={styles.select}
           value={currency}
@@ -148,23 +134,26 @@ export function CommissionsPage() {
             </option>
           ))}
         </select>
-        {summary ? (
-          <div className={styles.summary}>
-            <span>
-              <strong>{summary.count}</strong> contratos
-            </span>
-            <span>
-              <strong>{summary.salespeopleCount}</strong> vendedores
-            </span>
-            {summary.totalsByCurrency.map(([id, total]) => (
-              <span key={id || 'sin-moneda'}>
-                <strong>{formatCurrency(total, id || undefined)}</strong>
-                {id ? ` (${currencyLabel(id)})` : ' (sin moneda)'}
-              </span>
-            ))}
-          </div>
-        ) : null}
       </div>
+      {summary ? (
+        <div className={styles.summaryBar}>
+          <div className={styles.summaryStat}>
+            <span className={styles.summaryValue}>{summary.vendedoresCount}</span>
+            <span className={styles.summaryLabel}>vendedores</span>
+          </div>
+          <div className={styles.summaryStat}>
+            <span className={styles.summaryValue}>{summary.contractsCount}</span>
+            <span className={styles.summaryLabel}>contratos nuevos</span>
+          </div>
+          <div className={styles.summaryDivider} />
+          {summary.totalsByCurrency.map(({ currency: curr, total }) => (
+            <div className={styles.summaryStat} key={curr ?? 'sin-moneda'}>
+              <span className={styles.summaryValue}>{formatCurrency(total, curr)}</span>
+              <span className={styles.summaryLabel}>comisión total {curr ? `(${currencyLabel(curr)})` : ''}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       {isLoading ? <LoadingState label="Cargando comisiones..." /> : null}
       {isError ? (
         <ErrorState
@@ -173,13 +162,15 @@ export function CommissionsPage() {
         />
       ) : null}
       {!isLoading && !isError && data ? (
-        <SimpleTable
-          columns={COLUMNS}
-          rows={data}
-          getRowKey={(row) => row.netsuite_id}
-          emptyMessage="No hay contratos nuevos con vendedor asignado para este mes."
-          onRowClick={(row) => navigate(`/reports/contracts/${row.netsuite_id}`)}
-        />
+        data.length > 0 ? (
+          <div className={styles.groups}>
+            {data.map((group) => (
+              <VendedorGroupCard key={group.vendedor_id} group={group} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState message="No hay contratos nuevos con vendedor asignado para este mes." />
+        )
       ) : null}
     </AppShell>
   );

@@ -50,7 +50,7 @@ export function ReportPage() {
   // not a plain column on netsuite_vendor_transactions itself, so it has no format:'subsidiary'
   // column config for getSubsidiaryColumnKey to find - it's special-cased on here instead.
   const hasSubsidiaryFilter = Boolean(subsidiaryColumn) || isVendorTransactions;
-  const subsidiary = hasSubsidiaryFilter ? searchParams.get('subsidiary') ?? '' : '';
+  const subsidiary = hasSubsidiaryFilter ? (searchParams.get('subsidiary') ?? '').split(',').filter(Boolean) : [];
 
   const {
     data,
@@ -85,8 +85,8 @@ export function ReportPage() {
     updateParams({ search: value || null, page: '1' });
   }
 
-  function handleSubsidiaryChange(value: string) {
-    updateParams({ subsidiary: value || null, page: '1' });
+  function handleSubsidiaryChange(ids: string[]) {
+    updateParams({ subsidiary: ids.length > 0 ? ids.join(',') : null, page: '1' });
   }
 
   function handleEstatusChange(value: string) {

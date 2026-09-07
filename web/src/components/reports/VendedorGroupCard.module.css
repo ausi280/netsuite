@@ -1,0 +1,102 @@
+.card {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  overflow: hidden;
+  transition: box-shadow var(--duration-fast) var(--ease-fluent);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-tile-hover);
+}
+
+.header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-body);
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--color-secondary);
+  transition: transform var(--duration-fast) var(--ease-fluent);
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nivelBadge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.contractsCount {
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--color-secondary);
+  white-space: nowrap;
+}
+
+.totals {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.totalAmount {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-neutral-900);
+  white-space: nowrap;
+}
+
+.contracts {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 22px 22px;
+}
+
+.tierExplainer {
+  font-size: 12px;
+  color: var(--color-secondary);
+  background: var(--color-primary-soft);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  line-height: 1.5;
+}

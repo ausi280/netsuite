@@ -121,7 +121,26 @@ export interface ContractDossier {
   annuities: ReportRow[];
 }
 
-export interface CommissionRow {
+/** One service (Sangre/Tejido/ADN/Placenta/etc.) on a contract, with the processing-sale amount
+ * that feeds into the contract's total_servicios. */
+export interface ServiceCommissionLine {
+  netsuite_id: string;
+  /** NetSuite service-type list id - resolve via serviceTypeLabel() for display (e.g. '15' = Placenta). */
+  tipo: string | null;
+  precio_procesamiento: number;
+  is_placenta: boolean;
+}
+
+/** One year's worth of "Anualidad" partidas (storage prepaid in advance) on a contract - each
+ * such partida pays a flat $100 bonus; "Procesamiento" partidas (the processing sale itself,
+ * already covered by ServiceCommissionLine) never count here. */
+export interface AnualidadYearLine {
+  anio: string;
+  count: number;
+  monto: number;
+}
+
+export interface ContractCommission {
   netsuite_id: string;
   name: string | null;
   numero_contrato: string | null;
@@ -130,15 +149,56 @@ export interface CommissionRow {
   subsidiaria_id: string | null;
   moneda: string | null;
   titular_nombre: string | null;
+  services: ServiceCommissionLine[];
+  /** Sum of every active service's precio_procesamiento on this contract, Placenta included - the
+   * base both the tiered commission and the Placenta bonus are computed from. */
+  total_servicios: number;
+  has_placenta: boolean;
+  /** total_servicios * 3%, only when has_placenta - 0 otherwise. A fixed business rule ("no
+   * matter what" nivel), not one of the configurable commission_level_tiers. */
+  placenta_bonus: number;
+  /** total_servicios * the vendedor's resolved tier_percentage / 100. */
+  tier_commission: number;
+  anualidades: AnualidadYearLine[];
+  anualidad_bonus_total: number;
+  total_commission: number;
+}
+
+export interface VendedorCommissionGroup {
   vendedor_id: string;
   vendedor_nombre: string | null;
-  saldo_inicial: string | null;
-  total: number | null;
+  nivel: string | null;
+  /** This vendedor's TOTAL services sum for the period, across every one of their contracts and
+   * subsidiaries (Placenta included) - NOT limited by any subsidiary/currency filter on this
+   * request, since the commission tier reflects true total volume, not one filtered slice of it. */
+  total_servicios_periodo: number;
+  /** The single tiered rate resolved from total_servicios_periodo under this vendedor's nivel -
+   * applied uniformly to every one of their contracts below. Null if the vendedor has no nivel,
+   * or that nivel has no tier covering this amount. */
+  tier_percentage: number | null;
+  contracts: ContractCommission[];
+  contracts_count: number;
+  total_commission: number;
+}
+
+export interface EmployeeLevel {
+  netsuite_id: string;
+  entityid: string | null;
+  email: string | null;
+  isinactive: boolean | null;
+  nivel: string | null;
+}
+
+export interface CommissionLevelTier {
+  id: number;
+  nivel: string;
+  min_amount: number;
+  percentage: number;
 }
 
 export interface CommissionsResponse {
   success: true;
-  data: CommissionRow[];
+  data: VendedorCommissionGroup[];
   month: number;
   year: number;
 }

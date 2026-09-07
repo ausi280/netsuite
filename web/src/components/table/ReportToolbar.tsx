@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { subsidiaryLabel } from '../../config/subsidiaries';
+import { MultiSelectDropdown } from '../common/MultiSelectDropdown';
 import styles from './ReportToolbar.module.css';
 
 interface SubsidiaryFilterProps {
-  value: string;
+  value: string[];
   options: string[];
-  onChange: (value: string) => void;
+  onChange: (value: string[]) => void;
 }
 
 interface SelectFilterProps {
@@ -78,19 +79,14 @@ export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsi
         />
       </div>
       {subsidiaryFilter ? (
-        <select
-          className={styles.subsidiarySelect}
+        <MultiSelectDropdown
           value={subsidiaryFilter.value}
-          onChange={(event) => subsidiaryFilter.onChange(event.target.value)}
-          aria-label="Filtrar por subsidiaria"
-        >
-          <option value="">Todas las subsidiarias</option>
-          {subsidiaryFilter.options.map((id) => (
-            <option key={id} value={id}>
-              {subsidiaryLabel(id)}
-            </option>
-          ))}
-        </select>
+          options={subsidiaryFilter.options}
+          onChange={subsidiaryFilter.onChange}
+          labelForId={subsidiaryLabel}
+          placeholder="Todas las subsidiarias"
+          ariaLabel="Filtrar por subsidiaria"
+        />
       ) : null}
       {statusFilter ? (
         <select

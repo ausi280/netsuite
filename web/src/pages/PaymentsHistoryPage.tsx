@@ -149,7 +149,7 @@ export function PaymentsHistoryPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [search, setSearch] = useState('');
-  const [subsidiary, setSubsidiary] = useState('');
+  const [subsidiary, setSubsidiary] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [chargingRow, setChargingRow] = useState<PaymentRow | null>(null);
@@ -161,8 +161,8 @@ export function PaymentsHistoryPage() {
     setPage(1);
   }
 
-  function handleSubsidiaryChange(value: string) {
-    setSubsidiary(value);
+  function handleSubsidiaryChange(ids: string[]) {
+    setSubsidiary(ids);
     setPage(1);
   }
 

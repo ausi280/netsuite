@@ -4,18 +4,21 @@ import { getLegacyDb } from '../db/legacyDbConnection';
 import { paramString } from './controller';
 import { getEntityConfig } from './entityRegistry';
 import { getContractDossier } from './contractDossierRepository';
-import { getNewContractCommissions } from './commissionsRepository';
+import { getCommissionsByVendedor } from './commissionsRepository';
 import { getNotasCobranza } from './notasCobranzaRepository';
 import { applySubsidiaryRestriction } from './reportingRepository';
 import type { UserPermissions } from './permissionsRepository';
 
 const CONTRACTS_CONFIG = getEntityConfig('contracts')!;
 
-function isContractsAllowed(permissions?: UserPermissions): boolean {
+// Exported for commissionLevelsController.ts - assigning a vendedor's nivel and editing the
+// commission-tier table are both part of the same commissions feature, gated by the same
+// "can see contracts" permission as the commissions report itself, not a separate admin-only check.
+export function isContractsAllowed(permissions?: UserPermissions): boolean {
   return Boolean(permissions?.isAdmin || permissions?.allowedEntities.has(CONTRACTS_CONFIG.key));
 }
 
-function subsidiaryRestrictionFor(permissions: UserPermissions): Set<string> | null {
+export function subsidiaryRestrictionFor(permissions: UserPermissions): Set<string> | null {
   return permissions.isAdmin ? null : permissions.allowedSubsidiaries;
 }
 
@@ -57,9 +60,8 @@ export async function getCommissionsReportRoute(req: Request, res: Response): Pr
     return;
   }
 
-  const subsidiary = typeof req.query.subsidiary === 'string' ? req.query.subsidiary.trim() : undefined;
   const currency = typeof req.query.currency === 'string' ? req.query.currency.trim() : undefined;
-  const data = await getNewContractCommissions(knex, month, year, subsidiaryRestrictionFor(permissions!), subsidiary, currency);
+  const data = await getCommissionsByVendedor(knex, month, year, subsidiaryRestrictionFor(permissions!), req.query.subsidiary, currency);
   res.status(200).json({ success: true, data, month, year });
 }
 

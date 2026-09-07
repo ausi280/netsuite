@@ -10,6 +10,7 @@ import { ReportPage } from './pages/ReportPage';
 import { ReportDetailPage } from './pages/ReportDetailPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { CommissionsPage } from './pages/CommissionsPage';
+import { CommissionLevelsPage } from './pages/CommissionLevelsPage';
 import { PaymentsHistoryPage } from './pages/PaymentsHistoryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -71,6 +72,16 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CommissionsPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/contracts/commission-levels"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <CommissionLevelsPage />
               </PageTransition>
             </RequireAuth>
           }

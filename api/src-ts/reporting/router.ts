@@ -6,6 +6,13 @@ import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
 import { exportEntityRows, getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
 import { listUsers, updateUserPermissions } from './adminController';
 import { getCommissionsReportRoute, getContractDossierRoute, getContractNotasRoute } from './contractReportsController';
+import {
+  deleteCommissionTierRoute,
+  listCommissionTiersRoute,
+  listEmployeeLevelsRoute,
+  updateEmployeeLevelRoute,
+  upsertCommissionTierRoute,
+} from './commissionLevelsController';
 import { chargeDomiciledRoute } from './paymentsChargeController';
 
 /**
@@ -40,6 +47,12 @@ export function buildReportingRouter(): Router {
   router.get('/contracts/:id/notas', getContractNotasRoute);
   // Must be registered before /:entity/:id, or that route would swallow "charge-domiciled" as an id value.
   router.post('/payments/charge-domiciled', chargeDomiciledRoute);
+  // Must be registered before /:entity/:id, or that route would swallow "commission-levels" as an id value.
+  router.get('/commission-levels/employees', listEmployeeLevelsRoute);
+  router.patch('/commission-levels/employees/:id', updateEmployeeLevelRoute);
+  router.get('/commission-levels/tiers', listCommissionTiersRoute);
+  router.post('/commission-levels/tiers', upsertCommissionTierRoute);
+  router.delete('/commission-levels/tiers/:id', deleteCommissionTierRoute);
   // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics"/"export" as an id value.
   router.get('/:entity/subsidiaries', listSubsidiaryOptions);
   router.get('/:entity/analytics', getPartidaAnalytics);
