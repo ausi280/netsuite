@@ -21,7 +21,9 @@ export type SyncEntityName =
   | 'medicoColombia'
   | 'vendor'
   | 'vendorTransaction'
-  | 'vendorBillPayment';
+  | 'vendorBillPayment'
+  | 'otrosContrato'
+  | 'peServicio';
 
 export interface RetryConfig {
   MAX_ATTEMPTS: number;
@@ -60,6 +62,8 @@ export interface ErpSyncConfig {
   VENDOR: EntitySyncConfig;
   VENDOR_TRANSACTION: EntitySyncConfig;
   VENDOR_BILL_PAYMENT: EntitySyncConfig;
+  OTROS_CONTRATO: EntitySyncConfig;
+  PE_SERVICIO: EntitySyncConfig;
 }
 
 export interface ErpConfig {

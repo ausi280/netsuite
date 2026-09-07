@@ -265,6 +265,34 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
     searchableColumns: ['tranid'],
     defaultSort: { column: 'trandate', dir: 'desc' },
   },
+  'otros-contratos': {
+    key: 'otros-contratos',
+    table: 'netsuite_otros_contratos',
+    idColumn: 'netsuite_id',
+    syncEntityName: 'otrosContrato',
+    // The list view uses a dedicated repository (otrosContratoListRepository.ts) for the joined
+    // "Servicio" name/price (netsuite_pe_servicios) - this plain config still backs the
+    // detail/summary paths, same pattern as partidas/payments/vendor-transactions.
+    label: 'Otros Contratos',
+    listColumns: [
+      'netsuite_id',
+      'name',
+      'custrecord_cryo_estado_otroscontratos',
+      'custrecord_cryo_servicio_otroscontratos',
+      'custrecord_cryo_fecha_otroscontratos',
+      'custrecord_cryo_fechaprobable_otroscontr',
+      'custrecord_cryo_hospital_otroscontratos',
+      'custrecord_cryo_titular_otroscontrato',
+      'custrecord_cryo_vendedor_otroscontratos',
+      'custrecord_cryo_subsidiaria_otroscontrat',
+      'isinactive',
+      'lastmodifieddate_dt',
+    ],
+    sortableColumns: ['name', 'custrecord_cryo_fecha_otroscontratos', 'lastmodifieddate_dt'],
+    searchableColumns: ['name'],
+    defaultSort: { column: 'lastmodifieddate_dt', dir: 'desc' },
+    subsidiaryColumn: 'custrecord_cryo_subsidiaria_otroscontrat',
+  },
 };
 
 const ENTITY_ORDER: ReportEntityKey[] = [
@@ -282,6 +310,7 @@ const ENTITY_ORDER: ReportEntityKey[] = [
   'payments',
   'vendors',
   'vendor-transactions',
+  'otros-contratos',
 ];
 
 export function getEntityConfig(key: string): EntityConfig | undefined {

@@ -13,7 +13,8 @@ export type ReportEntityKey =
   | 'fiscal-updates'
   | 'payments'
   | 'vendors'
-  | 'vendor-transactions';
+  | 'vendor-transactions'
+  | 'otros-contratos';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -131,12 +132,15 @@ export interface ServiceCommissionLine {
   is_placenta: boolean;
 }
 
-/** One year's worth of "Anualidad" partidas (storage prepaid in advance) on a contract - each
- * such partida pays a flat $100 bonus; "Procesamiento" partidas (the processing sale itself,
- * already covered by ServiceCommissionLine) never count here. */
+/** One year's worth of "Anualidad" partidas (storage prepaid in advance) on a contract - the whole
+ * year pays a single flat $100 bonus, not one per service-type line; "Procesamiento" partidas (the
+ * processing sale itself, already covered by ServiceCommissionLine) never count here. */
 export interface AnualidadYearLine {
   anio: string;
+  /** How many service-type Anualidad lines (SCU/TCU/ADN/etc.) exist for this año - informational
+   * only, since the $100 bonus is paid once per year regardless of this count. */
   count: number;
+  /** Always $100 - one flat bonus for the year, not count * that amount. */
   monto: number;
 }
 
@@ -164,20 +168,44 @@ export interface ContractCommission {
   total_commission: number;
 }
 
+/** An "Otros Contratos" sale (a distinct sample-collection record type, not a regular contract) -
+ * its linked Servicio package's price feeds the same tiered commission as a contract's services
+ * total, with no Placenta or anualidad bonus equivalent. */
+export interface OtrosContratoCommission {
+  netsuite_id: string;
+  name: string | null;
+  fecha: string | null;
+  servicio_nombre: string | null;
+  monto: number;
+  moneda: string | null;
+  /** monto * the vendedor's resolved tier_percentage / 100. */
+  tier_commission: number;
+}
+
 export interface VendedorCommissionGroup {
   vendedor_id: string;
   vendedor_nombre: string | null;
   nivel: string | null;
-  /** This vendedor's TOTAL services sum for the period, across every one of their contracts and
-   * subsidiaries (Placenta included) - NOT limited by any subsidiary/currency filter on this
-   * request, since the commission tier reflects true total volume, not one filtered slice of it. */
-  total_servicios_periodo: number;
-  /** The single tiered rate resolved from total_servicios_periodo under this vendedor's nivel -
-   * applied uniformly to every one of their contracts below. Null if the vendedor has no nivel,
-   * or that nivel has no tier covering this amount. */
+  /** This vendedor's TOTAL sales sum for the period - every contract's services total PLUS every
+   * Otros Contratos sale's monto, across every subsidiary - NOT limited by any subsidiary/
+   * currency filter on this request, since the commission tier reflects true total volume, not
+   * one filtered slice of it. */
+  total_ventas_periodo: number;
+  /** The single tiered rate resolved from total_ventas_periodo under this vendedor's nivel -
+   * applied uniformly to every one of their contracts and otros-contratos below. Null if the
+   * vendedor has no nivel, or that nivel has no tier covering this amount. */
   tier_percentage: number | null;
   contracts: ContractCommission[];
   contracts_count: number;
+  /** Sum of every contract's total_commission - paid as its own transaction, separate from
+   * otros_contratos_commission (contracts and otros-contratos are two distinct payouts, even
+   * though they share one tier_percentage). */
+  contracts_commission: number;
+  otros_contratos: OtrosContratoCommission[];
+  otros_contratos_count: number;
+  /** Sum of every otros-contrato's tier_commission - its own separate transaction from contracts_commission. */
+  otros_contratos_commission: number;
+  /** contracts_commission + otros_contratos_commission - shown for convenience, not itself a payout. */
   total_commission: number;
 }
 

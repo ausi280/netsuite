@@ -19,7 +19,8 @@ export type ReportEntityKey =
   | 'fiscal-updates'
   | 'payments'
   | 'vendors'
-  | 'vendor-transactions';
+  | 'vendor-transactions'
+  | 'otros-contratos';
 
 export interface SortConfig {
   column: string;

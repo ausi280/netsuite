@@ -69,7 +69,9 @@
                 "MEDICO_COLOMBIA": { "ENABLED": true, "CRON": "20 8 * * *" },
                 "VENDOR": { "ENABLED": true, "CRON": "30 8 * * *" },
                 "VENDOR_TRANSACTION": { "ENABLED": true, "CRON": "40 8 * * *" },
-                "VENDOR_BILL_PAYMENT": { "ENABLED": true, "CRON": "50 8 * * *" }
+                "VENDOR_BILL_PAYMENT": { "ENABLED": true, "CRON": "50 8 * * *" },
+                "OTROS_CONTRATO": { "ENABLED": true, "CRON": "0 9 * * *" },
+                "PE_SERVICIO": { "ENABLED": true, "CRON": "55 8 * * *" }
             }
         },
         "META" : {

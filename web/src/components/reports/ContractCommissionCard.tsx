@@ -72,7 +72,8 @@ export function ContractCommissionCard({ contract, nivel, tierPercentage }: Cont
             <div className={styles.lineLabel}>
               <span className={styles.tag}>Bono de anualidades · $100 c/u</span>
               <span className={styles.lineDetail}>
-                {contract.anualidades.map((a) => `${a.anio}: ${a.count} × $100`).join(' · ')}
+                {contract.anualidades.length} × $100 = {formatCurrency(contract.anualidad_bonus_total, currency)} · Años:{' '}
+                {contract.anualidades.map((a) => a.anio).join(', ')}
               </span>
             </div>
             <span className={styles.lineAmount}>{formatCurrency(contract.anualidad_bonus_total, currency)}</span>

@@ -7,6 +7,7 @@ import type { PartidaDimension } from './partidaAnalyticsRepository';
 import { buildEnrichedPartidaExportQuery, getEnrichedPartidaRows, PARTIDA_LIST_EXPORT_COLUMNS } from './partidaListRepository';
 import { getPaymentsList } from './paymentsListRepository';
 import { buildVendorTransactionsExportQuery, getVendorTransactionsList, VENDOR_TRANSACTIONS_EXPORT_COLUMNS } from './vendorTransactionsListRepository';
+import { buildOtrosContratoExportQuery, getEnrichedOtrosContratoRows, OTROS_CONTRATO_EXPORT_COLUMNS } from './otrosContratoListRepository';
 import type { UserPermissions } from './permissionsRepository';
 import type { EntityConfig } from './types';
 import { csvRow, formatExportValue, humanizeColumnName } from './csvExport';
@@ -56,8 +57,9 @@ export async function listEntityRows(req: Request, res: Response): Promise<void>
 
   // Partidas gets the parent contract's name/dueño joined in, Payments gets its JSON_VALUE-
   // extracted contract id resolved to a real name (plus that contract's own subsidiary/a date
-  // range), and vendor-transactions gets the vendor name/Orden de Pago/Días Pendientes joined in -
-  // none of these fit the plain generic-entity path every other entity uses.
+  // range), vendor-transactions gets the vendor name/Orden de Pago/Días Pendientes joined in, and
+  // otros-contratos gets its linked "Servicio" name/price joined in - none of these fit the plain
+  // generic-entity path every other entity uses.
   const result =
     entityKey === 'partidas'
       ? await getEnrichedPartidaRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary, estatus }, restrictSubsidiaries)
@@ -65,7 +67,9 @@ export async function listEntityRows(req: Request, res: Response): Promise<void>
         ? await getPaymentsList(knex, { page, pageSize, search, subsidiary, dateFrom, dateTo }, restrictSubsidiaries)
         : entityKey === 'vendor-transactions'
           ? await getVendorTransactionsList(knex, { page, pageSize, search, sortBy, sortDir, subsidiary, vendorId }, restrictSubsidiaries)
-          : await getPagedRows(knex, config, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
+          : entityKey === 'otros-contratos'
+            ? await getEnrichedOtrosContratoRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
+            : await getPagedRows(knex, config, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
 
   res.status(200).json({ success: true, ...result });
 }
@@ -141,7 +145,14 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
   const restrictSubsidiaries = subsidiaryRestrictionFor(permissions);
   const isPartidas = entityKey === 'partidas';
   const isVendorTransactions = entityKey === 'vendor-transactions';
-  const exportColumns = isPartidas ? PARTIDA_LIST_EXPORT_COLUMNS : isVendorTransactions ? VENDOR_TRANSACTIONS_EXPORT_COLUMNS : config.listColumns;
+  const isOtrosContratos = entityKey === 'otros-contratos';
+  const exportColumns = isPartidas
+    ? PARTIDA_LIST_EXPORT_COLUMNS
+    : isVendorTransactions
+      ? VENDOR_TRANSACTIONS_EXPORT_COLUMNS
+      : isOtrosContratos
+        ? OTROS_CONTRATO_EXPORT_COLUMNS
+        : config.listColumns;
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${entityKey}.csv"`);
@@ -156,7 +167,9 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
       ? buildEnrichedPartidaExportQuery(knex, { search, sortBy, sortDir, subsidiary, estatus }, restrictSubsidiaries)
       : isVendorTransactions
         ? buildVendorTransactionsExportQuery(knex, { search, sortBy, sortDir, subsidiary, vendorId }, restrictSubsidiaries)
-        : buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
+        : isOtrosContratos
+          ? buildOtrosContratoExportQuery(knex, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
+          : buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
 
     const batch = (await query.offset(offset).limit(EXPORT_BATCH_SIZE)) as Array<Record<string, unknown>>;
 

@@ -62,19 +62,24 @@
   white-space: nowrap;
 }
 
-.contractsCount {
-  flex-shrink: 0;
-  font-size: 13px;
-  color: var(--color-secondary);
-  white-space: nowrap;
-}
-
 .totals {
   flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.totalGroup {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
+}
+
+.totalGroupLabel {
+  font-size: 11px;
+  color: var(--color-secondary);
+  white-space: nowrap;
 }
 
 .totalAmount {
@@ -88,7 +93,7 @@
 .contracts {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
   padding: 0 22px 22px;
 }
 
@@ -99,4 +104,18 @@
   border-radius: var(--radius-md);
   padding: 10px 14px;
   line-height: 1.5;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-secondary);
 }

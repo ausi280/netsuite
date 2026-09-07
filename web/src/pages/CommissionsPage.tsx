@@ -11,7 +11,7 @@ import { useSubsidiaryOptions } from '../hooks/useSubsidiaryOptions';
 import { subsidiaryLabel } from '../config/subsidiaries';
 import { currencyLabel, KNOWN_CURRENCY_IDS } from '../config/currencies';
 import { formatCurrency } from '../utils/format';
-import { sumCommissionByCurrency } from '../utils/commissions';
+import { sumContractsByCurrency, sumOtrosContratosByCurrency } from '../utils/commissions';
 import styles from './CommissionsPage.module.css';
 
 const MONTH_NAMES = [
@@ -39,11 +39,14 @@ export function CommissionsPage() {
 
   const summary = useMemo(() => {
     if (!data) return null;
-    const allContracts = data.flatMap((group) => group.contracts);
+    const contractsCount = data.reduce((sum, group) => sum + group.contracts_count, 0);
+    const otrosContratosCount = data.reduce((sum, group) => sum + group.otros_contratos_count, 0);
     return {
       vendedoresCount: data.length,
-      contractsCount: allContracts.length,
-      totalsByCurrency: sumCommissionByCurrency(allContracts),
+      contractsCount,
+      otrosContratosCount,
+      contractsTotalsByCurrency: sumContractsByCurrency(data),
+      otrosContratosTotalsByCurrency: sumOtrosContratosByCurrency(data),
     };
   }, [data]);
 
@@ -145,11 +148,23 @@ export function CommissionsPage() {
             <span className={styles.summaryValue}>{summary.contractsCount}</span>
             <span className={styles.summaryLabel}>contratos nuevos</span>
           </div>
+          {summary.otrosContratosCount > 0 ? (
+            <div className={styles.summaryStat}>
+              <span className={styles.summaryValue}>{summary.otrosContratosCount}</span>
+              <span className={styles.summaryLabel}>otros contratos</span>
+            </div>
+          ) : null}
           <div className={styles.summaryDivider} />
-          {summary.totalsByCurrency.map(({ currency: curr, total }) => (
-            <div className={styles.summaryStat} key={curr ?? 'sin-moneda'}>
+          {summary.contractsTotalsByCurrency.map(({ currency: curr, total }) => (
+            <div className={styles.summaryStat} key={`contratos-${curr ?? 'sin-moneda'}`}>
               <span className={styles.summaryValue}>{formatCurrency(total, curr)}</span>
-              <span className={styles.summaryLabel}>comisión total {curr ? `(${currencyLabel(curr)})` : ''}</span>
+              <span className={styles.summaryLabel}>comisión contratos {curr ? `(${currencyLabel(curr)})` : ''}</span>
+            </div>
+          ))}
+          {summary.otrosContratosTotalsByCurrency.map(({ currency: curr, total }) => (
+            <div className={styles.summaryStat} key={`otros-${curr ?? 'sin-moneda'}`}>
+              <span className={styles.summaryValue}>{formatCurrency(total, curr)}</span>
+              <span className={styles.summaryLabel}>comisión otros contratos {curr ? `(${currencyLabel(curr)})` : ''}</span>
             </div>
           ))}
         </div>

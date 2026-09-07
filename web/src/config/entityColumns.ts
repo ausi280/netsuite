@@ -192,6 +192,24 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
     ],
     defaultSort: { sortBy: 'trandate', sortDir: 'desc' },
   },
+  'otros-contratos': {
+    label: 'Otros Contratos',
+    // The list itself renders via the dedicated otrosContratoListRepository join - "Servicio" and
+    // "Monto" come from the linked customrecord_cryo_pe_servicios package (confirmed via the
+    // NetSuite REST record API's expanded link), not from a plain column on this record itself.
+    columns: [
+      { key: 'name', header: 'Nombre' },
+      { key: 'custrecord_cryo_estado_otroscontratos', header: 'Estado' },
+      { key: 'servicio_nombre', header: 'Servicio' },
+      { key: 'monto', header: 'Monto', format: 'currency', currencyColumn: 'moneda' },
+      { key: 'custrecord_cryo_fecha_otroscontratos', header: 'Fecha', format: 'date' },
+      { key: 'custrecord_cryo_fechaprobable_otroscontr', header: 'Fecha Probable', format: 'date' },
+      { key: 'custrecord_cryo_subsidiaria_otroscontrat', header: 'Subsidiaria', format: 'subsidiary' },
+      { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
+      { key: 'lastmodifieddate_dt', header: 'Última Modificación', format: 'datetime', sortable: true },
+    ],
+    defaultSort: { sortBy: 'lastmodifieddate_dt', sortDir: 'desc' },
+  },
 };
 
 /** The column key holding the subsidiary id for this entity, or null if it isn't filterable by subsidiary. */
@@ -214,4 +232,5 @@ export const entityOrder: ReportEntityKey[] = [
   'payments',
   'vendors',
   'vendor-transactions',
+  'otros-contratos',
 ];

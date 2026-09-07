@@ -24,6 +24,8 @@ import { MedicoColombiaRepository } from './repositories/medicoColombiaRepositor
 import { VendorRepository } from './repositories/vendorRepository';
 import { VendorTransactionRepository } from './repositories/vendorTransactionRepository';
 import { VendorBillPaymentRepository } from './repositories/vendorBillPaymentRepository';
+import { OtrosContratoRepository } from './repositories/otrosContratoRepository';
+import { PeServicioRepository } from './repositories/peServicioRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
 import { FamilyMemberSyncService } from './services/familyMemberSyncService';
@@ -42,6 +44,8 @@ import { MedicoColombiaSyncService } from './services/medicoColombiaSyncService'
 import { VendorSyncService } from './services/vendorSyncService';
 import { VendorTransactionSyncService } from './services/vendorTransactionSyncService';
 import { VendorBillPaymentSyncService } from './services/vendorBillPaymentSyncService';
+import { OtrosContratoSyncService } from './services/otrosContratoSyncService';
+import { PeServicioSyncService } from './services/peServicioSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
 import type { EntitySyncService } from './services/types';
 
@@ -83,6 +87,8 @@ export function bootstrap(): Bootstrapped {
     new VendorSyncService(db, http, syncState, rawStore, new VendorRepository(db), overlapMinutes),
     new VendorTransactionSyncService(db, http, syncState, rawStore, new VendorTransactionRepository(db), overlapMinutes),
     new VendorBillPaymentSyncService(db, http, syncState, rawStore, new VendorBillPaymentRepository(db)),
+    new PeServicioSyncService(db, http, syncState, rawStore, new PeServicioRepository(db), overlapMinutes),
+    new OtrosContratoSyncService(db, http, syncState, rawStore, new OtrosContratoRepository(db), overlapMinutes),
   ];
 
   const entityLimiter = new Bottleneck({ maxConcurrent: config.erp.SYNC.MAX_CONCURRENT_ENTITIES });
