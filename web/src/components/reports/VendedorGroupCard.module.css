@@ -51,17 +51,6 @@
   white-space: nowrap;
 }
 
-.nivelBadge {
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
-  border-radius: 999px;
-  padding: 3px 10px;
-  white-space: nowrap;
-}
-
 .totals {
   flex-shrink: 0;
   display: flex;

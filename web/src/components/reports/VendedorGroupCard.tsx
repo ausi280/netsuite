@@ -33,13 +33,10 @@ export function VendedorGroupCard({ group, defaultExpanded = true }: VendedorGro
         </svg>
         <div className={styles.identity}>
           <span className={styles.name}>{group.vendedor_nombre ?? group.vendedor_id}</span>
-          <span className={styles.nivelBadge}>Nivel {group.nivel ?? 'sin asignar'}</span>
         </div>
         <div className={styles.totals}>
           <div className={styles.totalGroup}>
-            <span className={styles.totalGroupLabel}>
-              Contratos ({group.contracts_count})
-            </span>
+            <span className={styles.totalGroupLabel}>Contratos ({group.contracts_count})</span>
             {contractsTotals.length > 0 ? (
               contractsTotals.map(({ currency, total }) => (
                 <span key={currency ?? 'sin-moneda'} className={styles.totalAmount}>
@@ -64,28 +61,51 @@ export function VendedorGroupCard({ group, defaultExpanded = true }: VendedorGro
       </button>
       {isExpanded ? (
         <div className={styles.contracts}>
-          <p className={styles.tierExplainer}>
-            Nivel {group.nivel ?? 'sin asignar'} se calcula sobre el total de ventas de este vendedor en el periodo
-            (contratos + otros contratos), en todas sus subsidiarias: {formatCurrency(group.total_ventas_periodo, null)}{' '}
-            → {group.tier_percentage !== null ? `${group.tier_percentage}% de comisión` : 'sin tier configurado'}. Esa
-            misma tasa se aplica a cada venta de abajo. Contratos y Otros Contratos se pagan como dos transacciones
-            separadas.
-          </p>
-
           {group.contracts.length > 0 ? (
             <section className={styles.section}>
-              <h3 className={styles.sectionTitle}>Contratos</h3>
+              <h3 className={styles.sectionTitle}>
+                Contratos · Nivel {group.nivel_contratos ?? 'sin asignar'}
+                {group.tier_percentage_contratos !== null ? ` (${group.tier_percentage_contratos}%)` : ' (sin tier)'}
+              </h3>
+              <p className={styles.tierExplainer}>
+                Se calcula sobre el total de servicios de contratos de este vendedor en el periodo, en todas sus
+                subsidiarias: {formatCurrency(group.total_ventas_contratos_periodo, null)} →{' '}
+                {group.tier_percentage_contratos !== null ? `${group.tier_percentage_contratos}% de comisión` : 'sin tier configurado'}.
+                Esa misma tasa se aplica a cada contrato de abajo. Las ventas de Otros Contratos no se incluyen en este total.
+              </p>
               {group.contracts.map((contract) => (
-                <ContractCommissionCard key={contract.netsuite_id} contract={contract} nivel={group.nivel} tierPercentage={group.tier_percentage} />
+                <ContractCommissionCard
+                  key={contract.netsuite_id}
+                  contract={contract}
+                  nivel={group.nivel_contratos}
+                  tierPercentage={group.tier_percentage_contratos}
+                />
               ))}
             </section>
           ) : null}
 
           {group.otros_contratos.length > 0 ? (
             <section className={styles.section}>
-              <h3 className={styles.sectionTitle}>Otros Contratos</h3>
+              <h3 className={styles.sectionTitle}>
+                Otros Contratos · Nivel {group.nivel_otros_contratos ?? 'sin asignar'}
+                {group.tier_percentage_otros_contratos !== null ? ` (${group.tier_percentage_otros_contratos}%)` : ' (sin tier)'}
+              </h3>
+              <p className={styles.tierExplainer}>
+                Se calcula sobre el total de ventas de Otros Contratos de este vendedor en el periodo, en todas sus
+                subsidiarias: {formatCurrency(group.total_ventas_otros_contratos_periodo, null)} →{' '}
+                {group.tier_percentage_otros_contratos !== null
+                  ? `${group.tier_percentage_otros_contratos}% de comisión`
+                  : 'sin tier configurado'}
+                . Esa misma tasa se aplica a cada venta de abajo. Las ventas de Contratos no se incluyen en este total -
+                Contratos y Otros Contratos se pagan como dos transacciones separadas.
+              </p>
               {group.otros_contratos.map((otros) => (
-                <OtrosContratoCommissionCard key={otros.netsuite_id} otrosContrato={otros} nivel={group.nivel} tierPercentage={group.tier_percentage} />
+                <OtrosContratoCommissionCard
+                  key={otros.netsuite_id}
+                  otrosContrato={otros}
+                  nivel={group.nivel_otros_contratos}
+                  tierPercentage={group.tier_percentage_otros_contratos}
+                />
               ))}
             </section>
           ) : null}

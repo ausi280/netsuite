@@ -201,13 +201,19 @@ export async function fetchEmployeeLevels(token: string | null): Promise<Employe
   return result.data;
 }
 
-/** Assigns (nivel: a string) or clears (nivel: null) one employee's commission nivel. */
-export async function updateEmployeeLevel(token: string | null, employeeId: string, nivel: string | null): Promise<void> {
+export interface EmployeeLevelsInput {
+  nivel_contratos: string | null;
+  nivel_otros_contratos: string | null;
+}
+
+/** Assigns (or clears, with null) both of one employee's niveles at once - Contratos and Otros
+ * Contratos sales don't sum together for tier resolution, so each has its own nivel. */
+export async function updateEmployeeLevel(token: string | null, employeeId: string, input: EmployeeLevelsInput): Promise<void> {
   await apiFetch('/reports/commission-levels/employees/' + encodeURIComponent(employeeId), {
     token,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nivel }),
+    body: JSON.stringify(input),
   });
 }
 

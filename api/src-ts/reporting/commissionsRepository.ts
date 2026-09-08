@@ -7,23 +7,25 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * New-contract salesperson commissions, broken down per contract/otros-contrato so it's clear WHY
  * a number is what it is (per the "very fluent, easy to understand" ask).
  *
- * Two kinds of sale feed the same vendedor-level commission:
+ * Contracts and Otros Contratos are two ENTIRELY INDEPENDENT tiered commissions - they don't sum
+ * together for tier resolution, and each has its own nivel per employee
+ * (employee_details.nivel_contratos / nivel_otros_contratos):
  *   - A regular contract's services (Sangre/Tejido/ADN/Placenta/etc.) contribute their processing
- *     price to that contract's total.
+ *     price to that contract's total. The Contratos RATE is resolved once per vendedor, from
+ *     their TOTAL contracts-services sum across every contract they sold in the period (every
+ *     subsidiary, not just one), under their nivel_contratos - then that one rate is applied to
+ *     each contract's own total.
  *   - An "Otros Contratos" record (a distinct sample-collection record type, custrecord_cryo_
  *     otroscontratos) contributes its linked Servicio package's price (custrecord_cryo_
- *     precioservicio on customrecord_cryo_pe_servicios).
+ *     precioservicio on customrecord_cryo_pe_servicios). The Otros Contratos RATE is resolved
+ *     separately, from the vendedor's TOTAL otros-contratos sales sum for the period, under their
+ *     nivel_otros_contratos.
  *
- * Both totals feed the SAME tiered commission: the RATE is resolved once per vendedor, from their
- * TOTAL sales sum across every contract AND every otros-contrato they sold in the period (every
- * subsidiary, not just one - a salesperson's rate tier reflects their whole month's volume) - then
- * that one rate is applied to each individual sale's own total.
- *
- * On top of the tiered commission, a contract additionally pays a flat 3% Placenta bonus whenever
- * it includes a Placenta service - computed on the contract's FULL services total (not just
- * Placenta's own price), and paid "no matter what" nivel the vendedor is on - a fixed business
- * rule, not one of the configurable commission_level_tiers. Otros Contratos have no Placenta-
- * equivalent bonus - the user never asked for one and nothing in that record suggests one.
+ * On top of the Contratos tiered commission, a contract additionally pays a flat 3% Placenta bonus
+ * whenever it includes a Placenta service - computed on the contract's FULL services total (not
+ * just Placenta's own price), and paid "no matter what" nivel the vendedor is on - a fixed
+ * business rule, not one of the configurable commission_level_tiers. Otros Contratos have no
+ * Placenta-equivalent bonus.
  *
  * Separately, each distinct año with at least one "Anualidad" partida on a contract (a year of
  * storage the customer prepaid in advance) pays a flat $100 bonus - only ONE per year, regardless
@@ -73,7 +75,7 @@ export interface ContractCommission {
   has_placenta: boolean;
   /** total_servicios * 3%, only when has_placenta - 0 otherwise. */
   placenta_bonus: number;
-  /** total_servicios * the vendedor's resolved tier_percentage / 100. */
+  /** total_servicios * the vendedor's resolved tier_percentage_contratos / 100. */
   tier_commission: number;
   anualidades: AnualidadYearLine[];
   anualidad_bonus_total: number;
@@ -81,8 +83,8 @@ export interface ContractCommission {
 }
 
 /** An "Otros Contratos" sale (sample-collection record, not a regular contract) - its linked
- * Servicio package's price feeds the same tiered commission as a contract's services total, with
- * no Placenta or anualidad bonus equivalent. */
+ * Servicio package's price feeds its own independent tiered commission (nivel_otros_contratos),
+ * with no Placenta or anualidad bonus equivalent. */
 export interface OtrosContratoCommission {
   netsuite_id: string;
   name: string | null;
@@ -90,28 +92,40 @@ export interface OtrosContratoCommission {
   servicio_nombre: string | null;
   monto: number;
   moneda: string | null;
-  /** monto * the vendedor's resolved tier_percentage / 100. */
+  /** monto * the vendedor's resolved tier_percentage_otros_contratos / 100. */
   tier_commission: number;
 }
 
 export interface VendedorCommissionGroup {
   vendedor_id: string;
   vendedor_nombre: string | null;
-  nivel: string | null;
-  /** This vendedor's TOTAL sales sum for the period - every contract's services total PLUS every
-   * Otros Contratos sale's monto, across every subsidiary - NOT limited by any subsidiary/
-   * currency filter on this request, since the commission tier reflects true total volume, not
-   * one filtered slice of it. */
-  total_ventas_periodo: number;
-  /** The single tiered rate resolved from total_ventas_periodo under this vendedor's nivel -
-   * applied uniformly to every one of their contracts and otros-contratos below. Null if the
-   * vendedor has no nivel, or that nivel has no tier covering this amount. */
-  tier_percentage: number | null;
+  /** The vendedor's Contratos nivel - independent from nivel_otros_contratos. */
+  nivel_contratos: string | null;
+  /** This vendedor's TOTAL contracts-services sum for the period, across every one of their
+   * contracts and subsidiaries (Placenta included) - NOT limited by any subsidiary/currency filter
+   * on this request, since the commission tier reflects true total volume, not one filtered slice
+   * of it. Otros Contratos sales are NOT included here - the two don't sum together. */
+  total_ventas_contratos_periodo: number;
+  /** The tiered rate resolved from total_ventas_contratos_periodo under nivel_contratos - applied
+   * uniformly to every one of this vendedor's contracts below. Null if the vendedor has no
+   * nivel_contratos, or that nivel has no tier covering this amount. */
+  tier_percentage_contratos: number | null;
+  /** The vendedor's Otros Contratos nivel - independent from nivel_contratos. */
+  nivel_otros_contratos: string | null;
+  /** This vendedor's TOTAL otros-contratos sales sum for the period, across every subsidiary - NOT
+   * limited by any subsidiary/currency filter on this request, and NOT combined with
+   * total_ventas_contratos_periodo. */
+  total_ventas_otros_contratos_periodo: number;
+  /** The tiered rate resolved from total_ventas_otros_contratos_periodo under
+   * nivel_otros_contratos - applied uniformly to every one of this vendedor's otros-contratos
+   * below. Null if the vendedor has no nivel_otros_contratos, or that nivel has no tier covering
+   * this amount. */
+  tier_percentage_otros_contratos: number | null;
   contracts: ContractCommission[];
   contracts_count: number;
   /** Sum of every contract's total_commission - paid as its own transaction, separate from
    * otros_contratos_commission (per the "pay in two transactions" instruction - contracts and
-   * otros-contratos are two distinct payouts, even though they share one tier_percentage). */
+   * otros-contratos are two distinct payouts, on two independent tiers). */
   contracts_commission: number;
   otros_contratos: OtrosContratoCommission[];
   otros_contratos_count: number;
@@ -278,22 +292,27 @@ function buildOtrosContratoCommission(row: OtrosContratoRow, tierPercentage: num
   };
 }
 
-function getOrCreateGroup(
-  groups: Map<string, VendedorCommissionGroup>,
-  vendedorId: string,
-  vendedorNombre: string | null,
-  nivelByVendor: Map<string, string | null>,
-  totalVentasByVendor: Map<string, number>,
-  tierPercentageByVendor: Map<string, number | null>,
-): VendedorCommissionGroup {
+interface VendorTierContext {
+  nivelContratosByVendor: Map<string, string | null>;
+  totalContratosByVendor: Map<string, number>;
+  tierPercentageContratosByVendor: Map<string, number | null>;
+  nivelOtrosByVendor: Map<string, string | null>;
+  totalOtrosByVendor: Map<string, number>;
+  tierPercentageOtrosByVendor: Map<string, number | null>;
+}
+
+function getOrCreateGroup(groups: Map<string, VendedorCommissionGroup>, vendedorId: string, vendedorNombre: string | null, ctx: VendorTierContext): VendedorCommissionGroup {
   let group = groups.get(vendedorId);
   if (!group) {
     group = {
       vendedor_id: vendedorId,
       vendedor_nombre: vendedorNombre,
-      nivel: nivelByVendor.get(vendedorId) ?? null,
-      total_ventas_periodo: totalVentasByVendor.get(vendedorId) ?? 0,
-      tier_percentage: tierPercentageByVendor.get(vendedorId) ?? null,
+      nivel_contratos: ctx.nivelContratosByVendor.get(vendedorId) ?? null,
+      total_ventas_contratos_periodo: ctx.totalContratosByVendor.get(vendedorId) ?? 0,
+      tier_percentage_contratos: ctx.tierPercentageContratosByVendor.get(vendedorId) ?? null,
+      nivel_otros_contratos: ctx.nivelOtrosByVendor.get(vendedorId) ?? null,
+      total_ventas_otros_contratos_periodo: ctx.totalOtrosByVendor.get(vendedorId) ?? 0,
+      tier_percentage_otros_contratos: ctx.tierPercentageOtrosByVendor.get(vendedorId) ?? null,
       contracts: [],
       contracts_count: 0,
       contracts_commission: 0,
@@ -354,7 +373,8 @@ export async function getCommissionsByVendedor(
   // subsidiary/currency filter (a display narrowing, not a security boundary) - only the
   // permission-based restriction (a real security boundary) still applies here too. Used solely to
   // compute each vendedor's TRUE total sales for tier resolution: a salesperson's rate must
-  // reflect all their sales across every subsidiary, not one filtered slice of them.
+  // reflect all their sales across every subsidiary, not one filtered slice of them. Contracts and
+  // otros-contratos totals are kept entirely separate - they don't sum together.
   const totalsContractsQb = baseContractsQuery(db, month, year).whereIn('C.custrecord_cryo_vendedor', vendedorIds);
   const totalsOtrosQb = baseOtrosContratosQuery(db, month, year).whereIn('O.custrecord_cryo_vendedor_otroscontratos', vendedorIds);
   if (restrictSubsidiaries !== null) {
@@ -398,32 +418,47 @@ export async function getCommissionsByVendedor(
     anualidadesByContract.set(partida.custrecord_cryo_numcontrato, list);
   }
 
-  // Vendedor-level totals, across EVERY contract AND otros-contrato they sold this period (the
-  // "allVendor..." sets), not just the ones passing the requested filters - this combined sum is
-  // what actually determines the tier.
-  const totalVentasByVendor = new Map<string, number>();
+  // Vendedor-level totals, across EVERY contract they sold this period (the "allVendorContracts"
+  // set), not just the ones passing the requested filters - this is what determines the Contratos
+  // tier. Kept entirely separate from the Otros Contratos total below.
+  const totalContratosByVendor = new Map<string, number>();
   for (const contract of allVendorContracts) {
     const total = totalForServices(servicesByContract.get(contract.netsuite_id) ?? []);
-    totalVentasByVendor.set(contract.vendedor_id, (totalVentasByVendor.get(contract.vendedor_id) ?? 0) + total);
+    totalContratosByVendor.set(contract.vendedor_id, (totalContratosByVendor.get(contract.vendedor_id) ?? 0) + total);
   }
+  const totalOtrosByVendor = new Map<string, number>();
   for (const otros of allVendorOtros) {
     const monto = Number(otros.monto ?? 0);
-    totalVentasByVendor.set(otros.vendedor_id, (totalVentasByVendor.get(otros.vendedor_id) ?? 0) + monto);
+    totalOtrosByVendor.set(otros.vendedor_id, (totalOtrosByVendor.get(otros.vendedor_id) ?? 0) + monto);
   }
 
-  const nivelByVendor = new Map<string, string | null>();
-  const tierPercentageByVendor = new Map<string, number | null>();
+  const nivelContratosByVendor = new Map<string, string | null>();
+  const nivelOtrosByVendor = new Map<string, string | null>();
+  const tierPercentageContratosByVendor = new Map<string, number | null>();
+  const tierPercentageOtrosByVendor = new Map<string, number | null>();
   for (const vendedorId of vendedorIds) {
-    const nivel = levels.get(vendedorId) ?? null;
-    const total = totalVentasByVendor.get(vendedorId) ?? 0;
-    nivelByVendor.set(vendedorId, nivel);
-    tierPercentageByVendor.set(vendedorId, resolveCommissionPercentage(tiers, nivel, total));
+    const employeeLevels = levels.get(vendedorId);
+    const nivelContratos = employeeLevels?.nivelContratos ?? null;
+    const nivelOtros = employeeLevels?.nivelOtrosContratos ?? null;
+    nivelContratosByVendor.set(vendedorId, nivelContratos);
+    nivelOtrosByVendor.set(vendedorId, nivelOtros);
+    tierPercentageContratosByVendor.set(vendedorId, resolveCommissionPercentage(tiers, nivelContratos, totalContratosByVendor.get(vendedorId) ?? 0));
+    tierPercentageOtrosByVendor.set(vendedorId, resolveCommissionPercentage(tiers, nivelOtros, totalOtrosByVendor.get(vendedorId) ?? 0));
   }
+
+  const ctx: VendorTierContext = {
+    nivelContratosByVendor,
+    totalContratosByVendor,
+    tierPercentageContratosByVendor,
+    nivelOtrosByVendor,
+    totalOtrosByVendor,
+    tierPercentageOtrosByVendor,
+  };
 
   const groups = new Map<string, VendedorCommissionGroup>();
 
   for (const contract of displayContracts) {
-    const tierPercentage = tierPercentageByVendor.get(contract.vendedor_id) ?? null;
+    const tierPercentage = tierPercentageContratosByVendor.get(contract.vendedor_id) ?? null;
     const contractCommission = buildContractCommission(
       contract,
       servicesByContract.get(contract.netsuite_id) ?? [],
@@ -431,7 +466,7 @@ export async function getCommissionsByVendedor(
       tierPercentage,
     );
 
-    const group = getOrCreateGroup(groups, contract.vendedor_id, contract.vendedor_nombre, nivelByVendor, totalVentasByVendor, tierPercentageByVendor);
+    const group = getOrCreateGroup(groups, contract.vendedor_id, contract.vendedor_nombre, ctx);
     group.contracts.push(contractCommission);
     group.contracts_count += 1;
     group.contracts_commission += contractCommission.total_commission;
@@ -439,10 +474,10 @@ export async function getCommissionsByVendedor(
   }
 
   for (const otros of displayOtros) {
-    const tierPercentage = tierPercentageByVendor.get(otros.vendedor_id) ?? null;
+    const tierPercentage = tierPercentageOtrosByVendor.get(otros.vendedor_id) ?? null;
     const otrosCommission = buildOtrosContratoCommission(otros, tierPercentage);
 
-    const group = getOrCreateGroup(groups, otros.vendedor_id, otros.vendedor_nombre, nivelByVendor, totalVentasByVendor, tierPercentageByVendor);
+    const group = getOrCreateGroup(groups, otros.vendedor_id, otros.vendedor_nombre, ctx);
     group.otros_contratos.push(otrosCommission);
     group.otros_contratos_count += 1;
     group.otros_contratos_commission += otrosCommission.tier_commission;

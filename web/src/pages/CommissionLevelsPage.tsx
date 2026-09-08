@@ -192,12 +192,17 @@ function NewLevelForm() {
 }
 
 function EmployeeLevelRow({ employee }: { employee: EmployeeLevel }) {
-  const [nivel, setNivel] = useState(employee.nivel ?? '');
+  const [nivelContratos, setNivelContratos] = useState(employee.nivel_contratos ?? '');
+  const [nivelOtrosContratos, setNivelOtrosContratos] = useState(employee.nivel_otros_contratos ?? '');
   const mutation = useUpdateEmployeeLevel();
-  const isDirty = nivel.trim() !== (employee.nivel ?? '');
+  const isDirty =
+    nivelContratos.trim() !== (employee.nivel_contratos ?? '') || nivelOtrosContratos.trim() !== (employee.nivel_otros_contratos ?? '');
 
   function handleSave() {
-    mutation.mutate({ employeeId: employee.netsuite_id, nivel: nivel.trim() || null });
+    mutation.mutate({
+      employeeId: employee.netsuite_id,
+      input: { nivel_contratos: nivelContratos.trim() || null, nivel_otros_contratos: nivelOtrosContratos.trim() || null },
+    });
   }
 
   return (
@@ -205,7 +210,22 @@ function EmployeeLevelRow({ employee }: { employee: EmployeeLevel }) {
       <td>{employee.entityid ?? employee.netsuite_id}</td>
       <td>{employee.email ?? '—'}</td>
       <td>
-        <input className={styles.inlineInput} type="text" value={nivel} onChange={(event) => setNivel(event.target.value)} placeholder="—" />
+        <input
+          className={styles.inlineInput}
+          type="text"
+          value={nivelContratos}
+          onChange={(event) => setNivelContratos(event.target.value)}
+          placeholder="—"
+        />
+      </td>
+      <td>
+        <input
+          className={styles.inlineInput}
+          type="text"
+          value={nivelOtrosContratos}
+          onChange={(event) => setNivelOtrosContratos(event.target.value)}
+          placeholder="—"
+        />
       </td>
       <td className={styles.actionsCell}>
         <button type="button" className={styles.linkButton} onClick={handleSave} disabled={!isDirty || mutation.isPending}>
@@ -260,7 +280,8 @@ export function CommissionLevelsPage() {
       <div className={styles.heading}>
         <h1 className={styles.title}>Niveles de comisión</h1>
         <p className={styles.subtitle}>
-          Configura el porcentaje de comisión por nivel y monto de venta, y asigna un nivel a cada vendedor.
+          Configura el porcentaje de comisión por nivel y monto de venta, y asigna a cada vendedor un nivel de
+          Contratos y un nivel de Otros Contratos - son independientes, sus ventas no se suman entre sí.
         </p>
       </div>
 
@@ -329,7 +350,8 @@ export function CommissionLevelsPage() {
                 <tr>
                   <th>Nombre</th>
                   <th>Email</th>
-                  <th>Nivel</th>
+                  <th>Nivel Contratos</th>
+                  <th>Nivel Otros Contratos</th>
                   <th></th>
                 </tr>
               </thead>

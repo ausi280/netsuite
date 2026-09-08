@@ -5,6 +5,7 @@ import {
   fetchEmployeeLevels,
   updateEmployeeLevel,
   upsertCommissionTier,
+  type EmployeeLevelsInput,
   type UpsertCommissionTierInput,
 } from '../api/reportsApi';
 import { useApiToken } from '../auth/useApiToken';
@@ -26,9 +27,9 @@ export function useUpdateEmployeeLevel() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ employeeId, nivel }: { employeeId: string; nivel: string | null }) => {
+    mutationFn: async ({ employeeId, input }: { employeeId: string; input: EmployeeLevelsInput }) => {
       const token = await getAccessToken();
-      await updateEmployeeLevel(token, employeeId, nivel);
+      await updateEmployeeLevel(token, employeeId, input);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employeeLevels'] });

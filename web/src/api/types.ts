@@ -185,21 +185,33 @@ export interface OtrosContratoCommission {
 export interface VendedorCommissionGroup {
   vendedor_id: string;
   vendedor_nombre: string | null;
-  nivel: string | null;
-  /** This vendedor's TOTAL sales sum for the period - every contract's services total PLUS every
-   * Otros Contratos sale's monto, across every subsidiary - NOT limited by any subsidiary/
-   * currency filter on this request, since the commission tier reflects true total volume, not
-   * one filtered slice of it. */
-  total_ventas_periodo: number;
-  /** The single tiered rate resolved from total_ventas_periodo under this vendedor's nivel -
-   * applied uniformly to every one of their contracts and otros-contratos below. Null if the
-   * vendedor has no nivel, or that nivel has no tier covering this amount. */
-  tier_percentage: number | null;
+  /** The vendedor's Contratos nivel - independent from nivel_otros_contratos; Contratos and Otros
+   * Contratos sales don't sum together for tier resolution. */
+  nivel_contratos: string | null;
+  /** This vendedor's TOTAL contracts-services sum for the period, across every subsidiary - NOT
+   * limited by any subsidiary/currency filter on this request, and NOT combined with the Otros
+   * Contratos total below. */
+  total_ventas_contratos_periodo: number;
+  /** The tiered rate resolved from total_ventas_contratos_periodo under nivel_contratos - applied
+   * uniformly to every one of this vendedor's contracts below. Null if the vendedor has no
+   * nivel_contratos, or that nivel has no tier covering this amount. */
+  tier_percentage_contratos: number | null;
+  /** The vendedor's Otros Contratos nivel - independent from nivel_contratos. */
+  nivel_otros_contratos: string | null;
+  /** This vendedor's TOTAL otros-contratos sales sum for the period, across every subsidiary - NOT
+   * limited by any subsidiary/currency filter on this request, and NOT combined with
+   * total_ventas_contratos_periodo. */
+  total_ventas_otros_contratos_periodo: number;
+  /** The tiered rate resolved from total_ventas_otros_contratos_periodo under
+   * nivel_otros_contratos - applied uniformly to every one of this vendedor's otros-contratos
+   * below. Null if the vendedor has no nivel_otros_contratos, or that nivel has no tier covering
+   * this amount. */
+  tier_percentage_otros_contratos: number | null;
   contracts: ContractCommission[];
   contracts_count: number;
   /** Sum of every contract's total_commission - paid as its own transaction, separate from
-   * otros_contratos_commission (contracts and otros-contratos are two distinct payouts, even
-   * though they share one tier_percentage). */
+   * otros_contratos_commission (contracts and otros-contratos are two distinct payouts, on two
+   * independent tiers). */
   contracts_commission: number;
   otros_contratos: OtrosContratoCommission[];
   otros_contratos_count: number;
@@ -214,7 +226,10 @@ export interface EmployeeLevel {
   entityid: string | null;
   email: string | null;
   isinactive: boolean | null;
-  nivel: string | null;
+  /** Independent from nivel_otros_contratos - Contratos and Otros Contratos sales don't sum
+   * together for tier resolution, so each has its own nivel. */
+  nivel_contratos: string | null;
+  nivel_otros_contratos: string | null;
 }
 
 export interface CommissionLevelTier {

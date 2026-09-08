@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import knex from '../db/connection';
 import { paramString } from './controller';
 import { isContractsAllowed } from './contractReportsController';
-import { getEmployeesWithLevels, setEmployeeLevel } from './employeeDetailsRepository';
+import { getEmployeesWithLevels, setEmployeeLevels } from './employeeDetailsRepository';
 import { deleteLevelTier, getAllLevelTiers, upsertLevelTier } from './commissionTiersRepository';
 
 /** GET /api/reports/commission-levels/employees — every employee with their currently assigned nivel. */
@@ -16,7 +16,16 @@ export async function listEmployeeLevelsRoute(req: Request, res: Response): Prom
   res.status(200).json({ success: true, data });
 }
 
-/** PATCH /api/reports/commission-levels/employees/:id — body { nivel: string | null }. */
+function parseNivelField(value: unknown): { ok: true; value: string | null } | { ok: false } {
+  if (value === null || value === undefined) return { ok: true, value: null };
+  if (typeof value !== 'string') return { ok: false };
+  return { ok: true, value: value.trim() || null };
+}
+
+/** PATCH /api/reports/commission-levels/employees/:id — body { nivel_contratos: string | null,
+ * nivel_otros_contratos: string | null }. Both niveles are always sent together and saved
+ * together - Contratos and Otros Contratos sales use independent tiers (they don't sum together
+ * for tier resolution), so each has its own nivel. */
 export async function updateEmployeeLevelRoute(req: Request, res: Response): Promise<void> {
   if (!isContractsAllowed(req.permissions)) {
     res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta configuración.' });
@@ -24,13 +33,15 @@ export async function updateEmployeeLevelRoute(req: Request, res: Response): Pro
   }
 
   const employeeId = paramString(req.params.id);
-  const { nivel } = req.body ?? {};
-  if (nivel !== null && typeof nivel !== 'string') {
-    res.status(400).json({ success: false, message: 'nivel debe ser un string o null.' });
+  const body = req.body ?? {};
+  const nivelContratos = parseNivelField(body.nivel_contratos);
+  const nivelOtrosContratos = parseNivelField(body.nivel_otros_contratos);
+  if (!nivelContratos.ok || !nivelOtrosContratos.ok) {
+    res.status(400).json({ success: false, message: 'nivel_contratos y nivel_otros_contratos deben ser un string o null.' });
     return;
   }
 
-  await setEmployeeLevel(knex, employeeId, nivel === null ? null : nivel.trim() || null);
+  await setEmployeeLevels(knex, employeeId, { nivel_contratos: nivelContratos.value, nivel_otros_contratos: nivelOtrosContratos.value });
   res.status(200).json({ success: true });
 }
 
