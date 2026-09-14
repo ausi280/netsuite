@@ -13,6 +13,7 @@ const SUBSIDIARY_LABELS: Record<string, string> = {
   '8': 'Operadora BSCU',
   '24': 'Instituto de Criopreservación y Terapia Celular',
   '25': 'Lazo de Vida',
+  '12': 'FCells',
 };
 
 export function subsidiaryLabel(id: string): string {

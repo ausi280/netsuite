@@ -9,6 +9,7 @@ import styles from './DashboardPage.module.css';
 export function DashboardPage() {
   const { data, isLoading, isError, error, refetch } = useEntities();
   const entities = data?.entities;
+  const isAdmin = data?.isAdmin;
 
   return (
     <AppShell>
@@ -24,7 +25,11 @@ export function DashboardPage() {
         />
       ) : null}
       {!isLoading && !isError && entities ? (
-        entities.length > 0 ? <TileGrid entities={entities} /> : <EmptyState message="No hay entidades disponibles." />
+        entities.length > 0 || isAdmin ? (
+          <TileGrid entities={entities} isAdmin={isAdmin} />
+        ) : (
+          <EmptyState message="No hay entidades disponibles." />
+        )
       ) : null}
     </AppShell>
   );

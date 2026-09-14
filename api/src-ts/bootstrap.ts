@@ -26,6 +26,7 @@ import { VendorTransactionRepository } from './repositories/vendorTransactionRep
 import { VendorBillPaymentRepository } from './repositories/vendorBillPaymentRepository';
 import { OtrosContratoRepository } from './repositories/otrosContratoRepository';
 import { PeServicioRepository } from './repositories/peServicioRepository';
+import { FcellsContratoRepository } from './repositories/fcellsContratoRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
 import { FamilyMemberSyncService } from './services/familyMemberSyncService';
@@ -46,12 +47,17 @@ import { VendorTransactionSyncService } from './services/vendorTransactionSyncSe
 import { VendorBillPaymentSyncService } from './services/vendorBillPaymentSyncService';
 import { OtrosContratoSyncService } from './services/otrosContratoSyncService';
 import { PeServicioSyncService } from './services/peServicioSyncService';
+import { FcellsContratoSyncService } from './services/fcellsContratoSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
 import type { EntitySyncService } from './services/types';
 
 export interface Bootstrapped {
   orchestrator: SyncOrchestrator;
   config: AppConfig;
+  /** Shared NetSuite HTTP client (OAuth1-signed, rate-limited, retried) - exposed so callers
+   * outside the sync pipeline (e.g. the reporting API's contract-edit endpoint) can also read/write
+   * NetSuite without constructing a second client. */
+  http: NetSuiteHttpClient;
 }
 
 let cached: Bootstrapped | null = null;
@@ -89,11 +95,12 @@ export function bootstrap(): Bootstrapped {
     new VendorBillPaymentSyncService(db, http, syncState, rawStore, new VendorBillPaymentRepository(db)),
     new PeServicioSyncService(db, http, syncState, rawStore, new PeServicioRepository(db), overlapMinutes),
     new OtrosContratoSyncService(db, http, syncState, rawStore, new OtrosContratoRepository(db), overlapMinutes),
+    new FcellsContratoSyncService(db, http, syncState, rawStore, new FcellsContratoRepository(db), overlapMinutes),
   ];
 
   const entityLimiter = new Bottleneck({ maxConcurrent: config.erp.SYNC.MAX_CONCURRENT_ENTITIES });
   const orchestrator = new SyncOrchestrator(services, entityLimiter);
 
-  cached = { orchestrator, config };
+  cached = { orchestrator, config, http };
   return cached;
 }

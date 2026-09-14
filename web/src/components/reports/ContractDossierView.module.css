@@ -35,6 +35,139 @@
   word-break: break-word;
 }
 
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+}
+
+.editButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-md);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  color: var(--color-secondary);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-fluent), color var(--duration-fast) var(--ease-fluent);
+}
+
+.editButton:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.editForm {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--color-neutral-100);
+}
+
+.editField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.editLabel {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-secondary);
+}
+
+.editInput,
+.editSelect {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  background: var(--color-white);
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--color-neutral-900);
+  transition: border-color var(--duration-fast) var(--ease-fluent);
+}
+
+.editInput:focus,
+.editSelect:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.summaryGrid {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--color-neutral-100);
+}
+
+.editActions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.saveButton {
+  background: var(--color-primary);
+  color: var(--color-white);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 8px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-fluent);
+}
+
+.saveButton:hover {
+  background: var(--color-primary-hover);
+}
+
+.saveButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancelButton {
+  background: none;
+  border: none;
+  color: var(--color-secondary);
+  font-size: 14px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+.cancelButton:hover {
+  color: var(--color-neutral-900);
+}
+
+.savedNote {
+  font-size: 13px;
+  color: var(--status-good);
+}
+
+.errorNote {
+  font-size: 13px;
+  color: var(--color-danger);
+}
+
 .section {
   display: flex;
   flex-direction: column;

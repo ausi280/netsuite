@@ -17,19 +17,11 @@
   text-align: center;
 }
 
-.brandMark {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 20px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: var(--color-white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 24px;
+.brandLogo {
+  height: 48px;
+  width: auto;
+  margin: 0 auto 24px;
+  display: block;
 }
 
 .title {

@@ -1,0 +1,11 @@
+/* Halyard Display (Extra Light instance, variable weight axis) - CryoHoldco's brand typeface,
+   self-hosted from public/fonts/ (no external font CDN at runtime). Same file used for both
+   --font-display and --font-body; weight differences are expressed per-element via font-weight,
+   which this variable font interpolates across its full 100-900 range. */
+@font-face {
+  font-family: 'Halyard Display';
+  src: url('/fonts/HalyardDisplay-ExtraLight.otf') format('opentype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

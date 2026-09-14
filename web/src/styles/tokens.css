@@ -2,15 +2,35 @@
   --color-primary: #3f8cff;
   --color-primary-hover: #2e6fd9;
   --color-primary-soft: rgba(63, 140, 255, 0.1);
+  /* Text-safe variant of --color-primary: the base brand blue only reaches ~3.3:1 against white,
+     which is fine for large numbers/borders/backgrounds but too low for small or normal-weight
+     text (WCAG AA needs 4.5:1). Use this instead of --color-primary for links, tags and any other
+     small blue text. */
+  --color-primary-text: #2c6fd6;
   --color-white: #ffffff;
   --color-black: #000000;
   --color-neutral-900: #212529;
   --color-neutral-800: #323232;
-  --color-neutral-200: #cccccc;
-  --color-neutral-100: #f2f2f2;
-  --color-secondary: #6d7387;
+  --color-neutral-200: #e5e5e6;
+  --color-neutral-100: #f1f1f1;
+  /* Darkened from #6d7387 - the original only cleared ~4.2-4.7:1 against white/tinted
+     backgrounds, borderline-to-failing WCAG AA (4.5:1) for the small meta/label text it's used
+     for everywhere. This value clears 5.6:1+ against every surface it's paired with. */
+  --color-secondary: #565c6e;
 
-  --color-danger: #d64545;
+  /* Brand tints (from the CryoHoldco headcount/HHRR dashboard) - available for chart palettes
+     and accent surfaces that need more than one hue without inventing new colors. */
+  --color-primary-10: #e8f1ff;
+  --color-primary-tint1: #7fb0ff;
+  --color-primary-tint2: #a9cbff;
+  --color-primary-tint3: #d3e5ff;
+  --color-secondary-tint1: #8d92a2;
+  --color-secondary-tint2: #adb1bd;
+  --color-neutral-300: #b3b4b6;
+
+  /* Darkened from #d64545 - the original cleared only ~3.8-4.4:1 against white/the soft tint,
+     below WCAG AA (4.5:1) for small badge/error text. This clears 4.9:1+ against both. */
+  --color-danger: #bd3434;
   --color-danger-soft: rgba(214, 69, 69, 0.1);
 
   /* Chart chrome - hairline grid/axis, one step off the chart surface (white) */
@@ -25,8 +45,8 @@
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
 
-  --radius-md: 12px;
-  --radius-lg: 20px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
 
   --shadow-tile: 0 1px 3px rgba(33, 37, 41, 0.08), 0 8px 24px rgba(33, 37, 41, 0.04);
   --shadow-tile-hover: 0 4px 8px rgba(33, 37, 41, 0.1), 0 16px 32px rgba(63, 140, 255, 0.12);
@@ -36,6 +56,6 @@
   --duration-medium: 300ms;
   --duration-entrance: 450ms;
 
-  --font-display: 'Space Grotesk', sans-serif;
-  --font-body: 'Inter', sans-serif;
+  --font-display: 'Halyard Display', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Halyard Display', 'Helvetica Neue', Arial, sans-serif;
 }

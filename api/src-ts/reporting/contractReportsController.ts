@@ -61,7 +61,7 @@ export async function getCommissionsReportRoute(req: Request, res: Response): Pr
   }
 
   const currency = typeof req.query.currency === 'string' ? req.query.currency.trim() : undefined;
-  const data = await getCommissionsByVendedor(knex, month, year, subsidiaryRestrictionFor(permissions!), req.query.subsidiary, currency);
+  const data = await getCommissionsByVendedor(knex, getLegacyDb(), month, year, subsidiaryRestrictionFor(permissions!), req.query.subsidiary, currency);
   res.status(200).json({ success: true, data, month, year });
 }
 

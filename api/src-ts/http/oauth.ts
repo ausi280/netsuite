@@ -15,7 +15,7 @@ export interface OAuthCredentials {
 
 export interface SignedRequest {
   url: string;
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PATCH';
 }
 
 /**

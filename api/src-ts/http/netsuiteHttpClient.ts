@@ -157,4 +157,35 @@ export class NetSuiteHttpClient {
       },
     });
   }
+
+  /**
+   * Partially updates a record via the REST Record API (ports netsuiteService.js:163-179's
+   * updateRecord, adding the same shared rate-limiting/retry as executeSuiteQL - a human-initiated
+   * edit is still worth retrying once on a transient failure rather than just failing the request).
+   * List/record-reference fields (e.g. a "vendedor" field pointing at an employee) must be sent as
+   * `{ id: "<internal id>" }`, not a bare string - same convention NetSuite's REST Record API uses
+   * for every list field, mirrored in contractEditRepository.ts.
+   */
+  async patchRecord(recordType: string, id: string, body: Record<string, unknown>): Promise<void> {
+    const url = `https://${this.signer.accountRealmHost}.suitetalk.api.netsuite.com/services/rest/record/v1/${recordType}/${id}`;
+    try {
+      await this.limiter.schedule(() =>
+        withRetry(() => this.patchSigned(url, body), this.erpConfig.SYNC.RETRY, this.logger),
+      );
+    } catch (error: any) {
+      const detail = error?.response ? JSON.stringify(error.response.data) : error?.message;
+      throw new Error(`Failed to update ${recordType} ${id} in NetSuite: ${detail}`);
+    }
+  }
+
+  private patchSigned(url: string, body: unknown): Promise<AxiosResponse<any>> {
+    const headers = this.signer.sign({ url, method: 'PATCH' });
+    return this.http.patch(url, body, {
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...headers,
+      },
+    });
+  }
 }

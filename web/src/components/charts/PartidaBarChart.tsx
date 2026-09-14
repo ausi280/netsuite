@@ -1,4 +1,4 @@
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { PartidaBreakdownRow } from '../../api/types';
 import type { DimensionConfig } from '../../config/partidaAnalytics';
 import { ChartTooltip } from './ChartTooltip';
@@ -26,7 +26,7 @@ export function PartidaBarChart({ rows, metric, metricLabel, dimension, formatVa
     <>
       <div className={styles.chartWrapper}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+          <BarChart data={rows} margin={{ top: 22, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="none" vertical={false} />
             <XAxis
               dataKey="key"
@@ -52,10 +52,16 @@ export function PartidaBarChart({ rows, metric, metricLabel, dimension, formatVa
                 <ChartTooltip formatLabel={(label) => dimension.keyLabel(String(label))} formatValue={formatValue} metricName={metricLabel} />
               }
             />
-            <Bar dataKey={metric} radius={[4, 4, 0, 0]} maxBarSize={24} animationDuration={450}>
+            <Bar dataKey={metric} radius={[6, 6, 0, 0]} maxBarSize={28} animationDuration={450}>
               {rows.map((row) => (
                 <Cell key={row.key} fill={dimension.keyColor?.(row.key) ?? 'var(--color-primary)'} />
               ))}
+              <LabelList
+                dataKey={metric}
+                position="top"
+                formatter={(value: unknown) => formatValue(Number(value ?? 0))}
+                style={{ fill: 'var(--color-neutral-800)', fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600 }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

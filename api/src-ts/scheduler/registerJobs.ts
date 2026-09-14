@@ -24,6 +24,7 @@ const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   vendorBillPayment: 'VENDOR_BILL_PAYMENT',
   otrosContrato: 'OTROS_CONTRATO',
   peServicio: 'PE_SERVICIO',
+  fcellsContrato: 'FCELLS_CONTRATO',
 };
 
 /**

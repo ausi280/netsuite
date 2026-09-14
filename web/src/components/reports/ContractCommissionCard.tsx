@@ -32,6 +32,11 @@ export function ContractCommissionCard({ contract, nivel, tierPercentage }: Cont
           </p>
         </div>
         <div className={styles.headerRight}>
+          {!contract.docs_completos ? (
+            <span className={styles.docsPendingBadge} title="No cuenta para comisión hasta que el sistema anterior marque los documentos como completos">
+              Docs pendientes
+            </span>
+          ) : null}
           <span className={styles.statusBadge}>{contractStatusLabel(contract.estatus)}</span>
           <span className={styles.contractTotal}>{formatCurrency(contract.total_commission, currency)}</span>
         </div>

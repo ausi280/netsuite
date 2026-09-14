@@ -6,6 +6,7 @@ import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
 import { exportEntityRows, getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
 import { listUsers, updateUserPermissions } from './adminController';
 import { getCommissionsReportRoute, getContractDossierRoute, getContractNotasRoute } from './contractReportsController';
+import { listVendedorOptionsRoute, updateContractRoute } from './contractEditController';
 import {
   deleteCommissionTierRoute,
   listCommissionTiersRoute,
@@ -14,6 +15,7 @@ import {
   upsertCommissionTierRoute,
 } from './commissionLevelsController';
 import { chargeDomiciledRoute } from './paymentsChargeController';
+import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
 
 /**
  * Assembles the read-only reporting API router: Entra ID access-token auth
@@ -41,10 +43,15 @@ export function buildReportingRouter(): Router {
   // and "users" as an id value.
   router.get('/admin/users', listUsers);
   router.patch('/admin/users/:oid', updateUserPermissions);
-  // Must be registered before /:entity/:id, or that route would swallow "commissions" as an id value.
+  // Must be registered before /:entity/:id, or that route would swallow "commissions"/"vendedores" as an id value.
   router.get('/contracts/commissions', getCommissionsReportRoute);
+  router.get('/contracts/vendedores', listVendedorOptionsRoute);
   router.get('/contracts/:id/dossier', getContractDossierRoute);
   router.get('/contracts/:id/notas', getContractNotasRoute);
+  // PATCH on a distinct HTTP method from every GET route above, so no ordering concern here -
+  // edits custrecord_cryo_contratosistemaanterior and/or custrecord_cryo_vendedor and pushes them
+  // to NetSuite (see contractEditController.ts).
+  router.patch('/contracts/:id', updateContractRoute);
   // Must be registered before /:entity/:id, or that route would swallow "charge-domiciled" as an id value.
   router.post('/payments/charge-domiciled', chargeDomiciledRoute);
   // Must be registered before /:entity/:id, or that route would swallow "commission-levels" as an id value.
@@ -53,6 +60,12 @@ export function buildReportingRouter(): Router {
   router.get('/commission-levels/tiers', listCommissionTiersRoute);
   router.post('/commission-levels/tiers', upsertCommissionTierRoute);
   router.delete('/commission-levels/tiers/:id', deleteCommissionTierRoute);
+  // HR Report is a bespoke, admin-only, cross-database feature (Peopleforce/Sesame HR data
+  // warehouse) - not part of the generic entity registry, so these must be registered before
+  // /:entity/analytics, or that route would swallow "hr" as an entity key and 404 (it isn't a
+  // registered ReportEntityKey).
+  router.get('/hr/summary', getHrSummaryRoute);
+  router.get('/hr/analytics', getHrAnalyticsRoute);
   // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics"/"export" as an id value.
   router.get('/:entity/subsidiaries', listSubsidiaryOptions);
   router.get('/:entity/analytics', getPartidaAnalytics);

@@ -1,0 +1,121 @@
+.heading {
+  margin-bottom: 20px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--color-secondary);
+  margin-top: 4px;
+}
+
+.summaryBar {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  background: var(--color-white);
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  padding: 18px 24px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.summaryStat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summaryValue {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-neutral-900);
+}
+
+.summaryLabel {
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.summaryDivider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--color-neutral-100);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--color-neutral-100);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  flex-wrap: wrap;
+}
+
+.tab {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--color-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-fluent), color var(--duration-fast) var(--ease-fluent);
+  white-space: nowrap;
+}
+
+.tab:hover {
+  color: var(--color-neutral-900);
+}
+
+.tabActive {
+  background: var(--color-white);
+  color: var(--color-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-tile);
+}
+
+.metricToggle {
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.metricButton {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  color: var(--color-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-fluent), color var(--duration-fast) var(--ease-fluent);
+}
+
+.metricButtonActive {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+}

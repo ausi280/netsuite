@@ -102,6 +102,8 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'custrecord_cryo_estatuspartida', header: 'Estatus', format: 'partida-status' },
       { key: 'custrecord_cryo_importepartida', header: 'Importe', format: 'currency', currencyColumn: 'custrecord_cryo_monedapartida' },
       { key: 'custrecord_cryo_fechapartida', header: 'Fecha', format: 'date' },
+      { key: 'custrecord_cryo_iniciovigencia', header: 'Inicio Vigencia', format: 'date' },
+      { key: 'custrecord_cryo_finvigencia', header: 'Fin Vigencia', format: 'date' },
       { key: 'custrecord_cryo_numcontrato', header: 'No. Contrato' },
       { key: 'contract_name', header: 'Contrato' },
       { key: 'dueno_nombre', header: 'Dueño' },
@@ -210,6 +212,23 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
     ],
     defaultSort: { sortBy: 'lastmodifieddate_dt', sortDir: 'desc' },
   },
+  'fcells-contratos': {
+    label: 'Contratos FCells',
+    // No "Monto" column yet - this record has no direct amount field of its own; the sale amount
+    // lives on a linked Sales Order the integration role can't currently see via SuiteQL.
+    columns: [
+      { key: 'name', header: 'Nombre' },
+      { key: 'custrecord_cryo_estatusfcells', header: 'Estado' },
+      { key: 'custrecord_cryo_productofcells', header: 'Producto' },
+      { key: 'custrecord_cryo_fechaalta', header: 'Fecha de Alta', format: 'date' },
+      { key: 'custrecord_cryo_pacientefcells', header: 'Paciente' },
+      { key: 'vendedor_nombre', header: 'Vendedor' },
+      { key: 'custrecord_cryo_subsidiariafcells', header: 'Subsidiaria', format: 'subsidiary' },
+      { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
+      { key: 'lastmodifieddate_dt', header: 'Última Modificación', format: 'datetime', sortable: true },
+    ],
+    defaultSort: { sortBy: 'lastmodifieddate_dt', sortDir: 'desc' },
+  },
 };
 
 /** The column key holding the subsidiary id for this entity, or null if it isn't filterable by subsidiary. */
@@ -233,4 +252,5 @@ export const entityOrder: ReportEntityKey[] = [
   'vendors',
   'vendor-transactions',
   'otros-contratos',
+  'fcells-contratos',
 ];

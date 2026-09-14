@@ -1,13 +1,19 @@
 .tile {
   display: block;
   background: var(--color-white);
+  border: 1px solid var(--color-neutral-200);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-tile);
   padding: 28px;
   text-decoration: none;
   color: inherit;
   cursor: pointer;
-  transition: box-shadow var(--duration-medium) var(--ease-fluent);
+  transition: box-shadow var(--duration-medium) var(--ease-fluent), border-color var(--duration-medium) var(--ease-fluent);
+}
+
+.tile:hover,
+.tile:focus-visible {
+  border-color: var(--color-primary-tint2);
 }
 
 .tile:hover,

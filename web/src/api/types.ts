@@ -14,7 +14,8 @@ export type ReportEntityKey =
   | 'payments'
   | 'vendors'
   | 'vendor-transactions'
-  | 'otros-contratos';
+  | 'otros-contratos'
+  | 'fcells-contratos';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -71,6 +72,36 @@ export interface EntitiesResponse {
   isAdmin: boolean;
 }
 
+// HR Report - backed by the Peopleforce/Sesame HR data warehouse (DwhCryoholdcoLatam_Prod), a
+// completely separate database from every other report. Deliberately NOT a ReportEntityKey: it
+// has no generic paginated list/detail/CSV export (the table holds employee PII - names,
+// birthdays - and nothing asked for a raw browsable table of that), just this bespoke
+// admin-only aggregate analytics endpoint. See api/src-ts/reporting/hrController.ts.
+export type HrDimension = 'brand' | 'department' | 'gender' | 'country' | 'status' | 'age' | 'seniority' | 'hiremonth';
+
+export interface HrBreakdownRow {
+  key: string;
+  count: number;
+}
+
+export interface HrSummary {
+  total: number;
+  active: number;
+  inactive: number;
+}
+
+export interface HrSummaryResponse {
+  success: true;
+  data: HrSummary;
+}
+
+export interface HrAnalyticsResponse {
+  success: true;
+  dimension: HrDimension;
+  activeOnly: boolean;
+  data: HrBreakdownRow[];
+}
+
 export interface AdminUserSummary {
   oid: string;
   email: string | null;
@@ -122,6 +153,24 @@ export interface ContractDossier {
   annuities: ReportRow[];
 }
 
+/** One employee, for the "Vendedor" edit field's picker (GET /reports/contracts/vendedores). */
+export interface VendedorOption {
+  netsuite_id: string;
+  entityid: string | null;
+}
+
+/** Body for PATCH /reports/contracts/:id - either key may be omitted to leave that field
+ * untouched; null clears it. Writes to NetSuite first, then mirrors into the local DB. */
+export interface UpdateContractInput {
+  custrecord_cryo_contratosistemaanterior?: string | null;
+  custrecord_cryo_vendedor?: string | null;
+}
+
+export interface UpdateContractResponse {
+  success: true;
+  data: { netsuite_id: string } & UpdateContractInput;
+}
+
 /** One service (Sangre/Tejido/ADN/Placenta/etc.) on a contract, with the processing-sale amount
  * that feeds into the contract's total_servicios. */
 export interface ServiceCommissionLine {
@@ -158,8 +207,12 @@ export interface ContractCommission {
    * base both the tiered commission and the Placenta bonus are computed from. */
   total_servicios: number;
   has_placenta: boolean;
-  /** total_servicios * 3%, only when has_placenta - 0 otherwise. A fixed business rule ("no
-   * matter what" nivel), not one of the configurable commission_level_tiers. */
+  /** Whether this contract's paperwork is complete in the legacy system (Mexico subsidiaries
+   * only - always true elsewhere). When false, every commission figure below is 0 even though
+   * the contract and its services still display normally. */
+  docs_completos: boolean;
+  /** total_servicios * 3%, only when has_placenta and docs_completos - 0 otherwise. A fixed
+   * business rule ("no matter what" nivel), not one of the configurable commission_level_tiers. */
   placenta_bonus: number;
   /** total_servicios * the vendedor's resolved tier_percentage / 100. */
   tier_commission: number;

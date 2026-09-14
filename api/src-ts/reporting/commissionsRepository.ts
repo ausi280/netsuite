@@ -27,13 +27,28 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * business rule, not one of the configurable commission_level_tiers. Otros Contratos have no
  * Placenta-equivalent bonus.
  *
- * Separately, each distinct año with at least one "Anualidad" partida on a contract (a year of
+ * Separately, each distinct año with MORE THAN ONE "Anualidad" partida on a contract (a year of
  * storage the customer prepaid in advance) pays a flat $100 bonus - only ONE per year, regardless
  * of how many service-type Anualidad lines exist for that same year (e.g. SCU/TCU/ADN/Placenta
  * anualidad lines for the same año are still a single $100, not $100 each) - grouped by año for
- * display. "Procesamiento" partidas are a different charge (the one-time processing sale itself,
- * already covered by the services total above) and never count toward this bonus. Otros Contratos
- * have no partidas of their own, so no anualidad bonus applies to them either.
+ * display. A year with only a single Anualidad line doesn't pay at all - it takes more than one
+ * (e.g. SCU + TCU) to count as a real renewal worth a bonus. "Procesamiento" partidas are a
+ * different charge (the one-time processing sale itself, already covered by the services total
+ * above) and never count toward this bonus. Otros Contratos have no partidas of their own, so no
+ * anualidad bonus applies to them either.
+ *
+ * Every contract with a vendedor is always SHOWN, but a Mexico-subsidiary contract only actually
+ * PAYS - contributes to the vendedor's tier total, and earns its own Placenta/tier/anualidad
+ * bonuses - once its paperwork is complete: Cryo.dbo.Contrato (the pre-NetSuite legacy sales
+ * system, still the system of record for this flag; nothing equivalent exists on the NetSuite
+ * contract record) has a DocsCompletos bit, matched to a NetSuite contract by
+ * NetSuite.NetSuite = netsuite_contracts.name (confirmed against real production data - this
+ * "NetSuite" column is a delayed one-way backfill from NetSuite back into the legacy system,
+ * typically populated a few weeks after the sale, which is why very recent contracts have no
+ * match yet). No match is treated the same as incomplete: the contract still shows up with its
+ * real services/data, but every commission figure on it is 0 - it simply doesn't count until the
+ * legacy system catches up. Otros Contratos have no such gate; Argentina/Peru contracts have no
+ * equivalent legacy record at all, so they're never gated either.
  */
 
 // Fixed business rules, deliberately NOT part of the configurable commission_level_tiers table -
@@ -41,6 +56,12 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
 const PLACENTA_SERVICE_TYPE_ID = '15';
 const PLACENTA_BONUS_RATE = 3; // percent, of the contract's full services total
 const ANUALIDAD_BONUS_PER_YEAR = 100; // currency units, per distinct año - not per service line
+
+// The only subsidiaries whose contracts were ever tracked in the legacy Cryo.dbo.Contrato system
+// (confirmed by their netsuite_contracts.name prefix: MX-CC/MX-BC/MX-BS respectively) - the
+// DocsCompletos gate below only applies to these; every other subsidiary (Argentina, Peru, ...)
+// has no equivalent legacy record to check, so their contracts always pay.
+const MEXICO_SUBSIDIARY_IDS = new Set(['5', '7', '8']);
 
 export interface ServiceCommissionLine {
   netsuite_id: string;
@@ -70,14 +91,20 @@ export interface ContractCommission {
   titular_nombre: string | null;
   services: ServiceCommissionLine[];
   /** Sum of every active service's precio_procesamiento on this contract, Placenta included - the
-   * base both the tiered commission and the Placenta bonus are computed from. */
+   * base both the tiered commission and the Placenta bonus are computed from. Always the real
+   * total, even when docs_completos is false - only the commission figures below are zeroed. */
   total_servicios: number;
   has_placenta: boolean;
-  /** total_servicios * 3%, only when has_placenta - 0 otherwise. */
+  /** Whether this contract's paperwork is complete in the legacy system (always true outside the
+   * Mexico subsidiaries, which have no such gate). When false, every commission figure below is
+   * forced to 0 - the contract still shows with its real data, it just doesn't pay yet. */
+  docs_completos: boolean;
+  /** total_servicios * 3%, only when has_placenta and docs_completos - 0 otherwise. */
   placenta_bonus: number;
-  /** total_servicios * the vendedor's resolved tier_percentage_contratos / 100. */
+  /** total_servicios * the vendedor's resolved tier_percentage_contratos / 100, only when docs_completos. */
   tier_commission: number;
   anualidades: AnualidadYearLine[];
+  /** 0 when docs_completos is false, even if anualidades has qualifying years. */
   anualidad_bonus_total: number;
   total_commission: number;
 }
@@ -229,11 +256,37 @@ function totalForServices(services: ServiceRow[]): number {
   return services.reduce((sum, s) => sum + Number(s.custrecord_cryo_precioprocesamiento ?? 0), 0);
 }
 
+// mssql/tedious caps the number of parameters per request (~2100) - chunk whereIn batches well
+// under that so this still works for a vendedor set with hundreds of contracts in a period.
+const LEGACY_LOOKUP_CHUNK_SIZE = 1000;
+
+/**
+ * Which of these contract names (netsuite_contracts.name) have DocsCompletos = 1 in the legacy
+ * Cryo.dbo.Contrato table, matched by its NetSuite column. A name with no row there at all (not
+ * yet backfilled, or genuinely never linked) is simply absent from the returned set - callers
+ * treat "absent" the same as "incomplete".
+ */
+async function getDocsCompletosNames(legacyDb: Knex, names: string[]): Promise<Set<string>> {
+  const uniqueNames = Array.from(new Set(names.filter((n): n is string => Boolean(n))));
+  const complete = new Set<string>();
+
+  for (let i = 0; i < uniqueNames.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
+    const chunk = uniqueNames.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
+    const rows = (await legacyDb('Cryo.dbo.Contrato').whereIn('NetSuite', chunk).andWhere('DocsCompletos', 1).select('NetSuite as name')) as Array<{
+      name: string;
+    }>;
+    for (const row of rows) complete.add(row.name);
+  }
+
+  return complete;
+}
+
 function buildContractCommission(
   contract: ContractRow,
   services: ServiceRow[],
   anualidadPartidas: AnualidadPartidaRow[],
   tierPercentage: number | null,
+  docsComplete: boolean,
 ): ContractCommission {
   const serviceLines: ServiceCommissionLine[] = services.map((s) => ({
     netsuite_id: s.netsuite_id,
@@ -244,18 +297,22 @@ function buildContractCommission(
 
   const totalServicios = totalForServices(services);
   const hasPlacenta = serviceLines.some((s) => s.is_placenta);
-  const placentaBonus = hasPlacenta ? (totalServicios * PLACENTA_BONUS_RATE) / 100 : 0;
-  const tierCommission = tierPercentage !== null ? (totalServicios * tierPercentage) / 100 : 0;
+  const placentaBonus = docsComplete && hasPlacenta ? (totalServicios * PLACENTA_BONUS_RATE) / 100 : 0;
+  const tierCommission = docsComplete && tierPercentage !== null ? (totalServicios * tierPercentage) / 100 : 0;
 
   const anualidadByYear = new Map<string, number>();
   for (const partida of anualidadPartidas) {
     const anio = partida.custrecord_cryo_aniopartida ?? 'N/A';
     anualidadByYear.set(anio, (anualidadByYear.get(anio) ?? 0) + 1);
   }
+  // A year with only 1 service-type Anualidad line doesn't pay - it takes more than one (e.g.
+  // SCU + TCU for the same año) to count as a real anualidad renewal worth a bonus. Shown
+  // regardless of docs_completos (informational); only the bonus total below is gated.
   const anualidades: AnualidadYearLine[] = Array.from(anualidadByYear.entries())
+    .filter(([, count]) => count > 1)
     .map(([anio, count]) => ({ anio, count, monto: ANUALIDAD_BONUS_PER_YEAR }))
     .sort((a, b) => a.anio.localeCompare(b.anio));
-  const anualidadBonusTotal = anualidades.length * ANUALIDAD_BONUS_PER_YEAR;
+  const anualidadBonusTotal = docsComplete ? anualidades.length * ANUALIDAD_BONUS_PER_YEAR : 0;
 
   return {
     netsuite_id: contract.netsuite_id,
@@ -269,6 +326,7 @@ function buildContractCommission(
     services: serviceLines,
     total_servicios: totalServicios,
     has_placenta: hasPlacenta,
+    docs_completos: docsComplete,
     placenta_bonus: placentaBonus,
     tier_commission: tierCommission,
     anualidades,
@@ -335,6 +393,7 @@ function getOrCreateGroup(groups: Map<string, VendedorCommissionGroup>, vendedor
  */
 export async function getCommissionsByVendedor(
   db: Knex,
+  legacyDb: Knex,
   month: number,
   year: number,
   restrictSubsidiaries: Set<string> | null,
@@ -386,6 +445,18 @@ export async function getCommissionsByVendedor(
     totalsOtrosQb as Promise<OtrosContratoRow[]>,
   ]);
 
+  // A Mexico-subsidiary contract only counts toward the vendedor's tier total and earns its own
+  // commission once its paperwork is complete in the legacy system (see the file-level comment
+  // above) - every other subsidiary has no equivalent record, so hasCompleteDocs is always true
+  // for them. This never removes a contract from display - only from the money.
+  const mexicoContractNames = [...displayContracts, ...allVendorContracts]
+    .filter((c) => c.subsidiaria_id !== null && MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id))
+    .map((c) => c.name)
+    .filter((n): n is string => Boolean(n));
+  const docsCompletosNames = await getDocsCompletosNames(legacyDb, mexicoContractNames);
+  const hasCompleteDocs = (c: ContractRow) =>
+    c.subsidiaria_id === null || !MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id) || (Boolean(c.name) && docsCompletosNames.has(c.name as string));
+
   const displayContractIds = displayContracts.map((c) => c.netsuite_id);
   const allContractIds = Array.from(new Set([...allVendorContracts.map((c) => c.netsuite_id), ...displayContractIds]));
 
@@ -419,10 +490,11 @@ export async function getCommissionsByVendedor(
   }
 
   // Vendedor-level totals, across EVERY contract they sold this period (the "allVendorContracts"
-  // set), not just the ones passing the requested filters - this is what determines the Contratos
-  // tier. Kept entirely separate from the Otros Contratos total below.
+  // set) that also has complete docs, not just the ones passing the requested filters - this is
+  // what determines the Contratos tier. Kept entirely separate from the Otros Contratos total below.
   const totalContratosByVendor = new Map<string, number>();
   for (const contract of allVendorContracts) {
+    if (!hasCompleteDocs(contract)) continue;
     const total = totalForServices(servicesByContract.get(contract.netsuite_id) ?? []);
     totalContratosByVendor.set(contract.vendedor_id, (totalContratosByVendor.get(contract.vendedor_id) ?? 0) + total);
   }
@@ -464,6 +536,7 @@ export async function getCommissionsByVendedor(
       servicesByContract.get(contract.netsuite_id) ?? [],
       anualidadesByContract.get(contract.netsuite_id) ?? [],
       tierPercentage,
+      hasCompleteDocs(contract),
     );
 
     const group = getOrCreateGroup(groups, contract.vendedor_id, contract.vendedor_nombre, ctx);

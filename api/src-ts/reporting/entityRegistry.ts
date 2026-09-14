@@ -116,6 +116,8 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
       'custrecord_cryo_importepartida',
       'custrecord_cryo_monedapartida',
       'custrecord_cryo_fechapartida',
+      'custrecord_cryo_iniciovigencia',
+      'custrecord_cryo_finvigencia',
       'custrecord_cryo_numcontrato',
       'custrecord_cryo_subsidiaria_partida',
       'isinactive',
@@ -293,6 +295,34 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
     defaultSort: { column: 'lastmodifieddate_dt', dir: 'desc' },
     subsidiaryColumn: 'custrecord_cryo_subsidiaria_otroscontrat',
   },
+  'fcells-contratos': {
+    key: 'fcells-contratos',
+    table: 'netsuite_fcells_contratos',
+    idColumn: 'netsuite_id',
+    syncEntityName: 'fcellsContrato',
+    // No "Monto" column yet - this record has no direct amount field of its own (see the sync
+    // migration's comment: the sale amount lives on a linked Sales Order transaction the
+    // integration role currently has no SuiteQL visibility into). The list view uses a dedicated
+    // repository (fcellsContratoListRepository.ts) for the joined vendedor name - this plain
+    // config still backs the detail/summary paths, same pattern as partidas/otros-contratos.
+    label: 'Contratos FCells',
+    listColumns: [
+      'netsuite_id',
+      'name',
+      'custrecord_cryo_estatusfcells',
+      'custrecord_cryo_productofcells',
+      'custrecord_cryo_fechaalta',
+      'custrecord_cryo_pacientefcells',
+      'custrecord_cryo_vendedorfcells',
+      'custrecord_cryo_subsidiariafcells',
+      'isinactive',
+      'lastmodifieddate_dt',
+    ],
+    sortableColumns: ['name', 'custrecord_cryo_fechaalta', 'lastmodifieddate_dt'],
+    searchableColumns: ['name', 'custrecord_cryo_muestrafcells', 'custrecord_cryo_idexternocontrato'],
+    defaultSort: { column: 'lastmodifieddate_dt', dir: 'desc' },
+    subsidiaryColumn: 'custrecord_cryo_subsidiariafcells',
+  },
 };
 
 const ENTITY_ORDER: ReportEntityKey[] = [
@@ -311,6 +341,7 @@ const ENTITY_ORDER: ReportEntityKey[] = [
   'vendors',
   'vendor-transactions',
   'otros-contratos',
+  'fcells-contratos',
 ];
 
 export function getEntityConfig(key: string): EntityConfig | undefined {

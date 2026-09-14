@@ -23,7 +23,8 @@ export type SyncEntityName =
   | 'vendorTransaction'
   | 'vendorBillPayment'
   | 'otrosContrato'
-  | 'peServicio';
+  | 'peServicio'
+  | 'fcellsContrato';
 
 export interface RetryConfig {
   MAX_ATTEMPTS: number;
@@ -64,6 +65,7 @@ export interface ErpSyncConfig {
   VENDOR_BILL_PAYMENT: EntitySyncConfig;
   OTROS_CONTRATO: EntitySyncConfig;
   PE_SERVICIO: EntitySyncConfig;
+  FCELLS_CONTRATO: EntitySyncConfig;
 }
 
 export interface ErpConfig {

@@ -1,6 +1,7 @@
 import { Navigate } from 'react-router-dom';
 import { useIsAuthenticated, useMsal } from '@azure/msal-react';
 import { isMsalConfigured, loginRequest } from '../auth/msalConfig';
+import cryoholdcoLogo from '../assets/cryoholdco-logo.png';
 import styles from './LoginPage.module.css';
 
 function MicrosoftLogo() {
@@ -29,9 +30,7 @@ export function LoginPage() {
   return (
     <div className={styles.page}>
       <div className={styles.card}>
-        <div className={styles.brandMark} aria-hidden="true">
-          C
-        </div>
+        <img src={cryoholdcoLogo} alt="Cryoholdco" className={styles.brandLogo} />
         <h1 className={styles.title}>Cryoholdco Reportes</h1>
         <p className={styles.subtitle}>Panel de reportes de datos sincronizados desde NetSuite.</p>
         {/*

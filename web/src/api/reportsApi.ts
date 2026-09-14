@@ -11,6 +11,11 @@ import type {
   EmployeeLevel,
   EntitiesResponse,
   EntitySummary,
+  HrAnalyticsResponse,
+  HrBreakdownRow,
+  HrDimension,
+  HrSummary,
+  HrSummaryResponse,
   NotaCobranza,
   PaginatedRows,
   PartidaAnalyticsResponse,
@@ -20,8 +25,10 @@ import type {
   ReportEntityKey,
   ReportRecord,
   SortDir,
+  UpdateContractInput,
   UserPermissionUpdate,
   VendedorCommissionGroup,
+  VendedorOption,
 } from './types';
 
 export interface EntitiesResult {
@@ -111,6 +118,20 @@ export async function fetchPartidaAnalytics(
   return result.data;
 }
 
+/** Admin-only: total/active/inactive headcount from the Peopleforce/Sesame HR data warehouse. 403s for a non-admin caller. */
+export async function fetchHrSummary(token: string | null): Promise<HrSummary> {
+  const result = await apiFetch<HrSummaryResponse>('/reports/hr/summary', { token });
+  return result.data;
+}
+
+/** Admin-only: headcount grouped by one HR dimension - see HrDimension for the supported set. */
+export async function fetchHrAnalytics(token: string | null, dimension: HrDimension, activeOnly: boolean): Promise<HrBreakdownRow[]> {
+  const result = await apiFetch<HrAnalyticsResponse>(`/reports/hr/analytics?dimension=${dimension}&activeOnly=${activeOnly}`, {
+    token,
+  });
+  return result.data;
+}
+
 /** Admin-only: every registered user (auto-provisioned on first login) and their current access. 403s for a non-admin caller. */
 export async function fetchAdminUsers(token: string | null): Promise<AdminUserSummary[]> {
   const result = await apiFetch<ApiSuccess<AdminUserSummary[]>>('/reports/admin/users', { token });
@@ -131,6 +152,23 @@ export async function updateAdminUserPermissions(token: string | null, oid: stri
 export async function fetchContractDossier(token: string | null, id: string): Promise<ContractDossier> {
   const result = await apiFetch<ApiSuccess<ContractDossier>>(`/reports/contracts/${encodeURIComponent(id)}/dossier`, { token });
   return result.data;
+}
+
+/** Every employee (id + name), for the "Vendedor" edit field's picker. */
+export async function fetchVendedorOptions(token: string | null): Promise<VendedorOption[]> {
+  const result = await apiFetch<ApiSuccess<VendedorOption[]>>('/reports/contracts/vendedores', { token });
+  return result.data;
+}
+
+/** Edits custrecord_cryo_contratosistemaanterior and/or custrecord_cryo_vendedor - writes to
+ * NetSuite first, then mirrors into the local DB (see contractEditController.ts). */
+export async function updateContract(token: string | null, id: string, input: UpdateContractInput): Promise<void> {
+  await apiFetch(`/reports/contracts/${encodeURIComponent(id)}`, {
+    token,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 }
 
 /** New-contract salesperson commissions grid for one calendar month, optionally narrowed to one or

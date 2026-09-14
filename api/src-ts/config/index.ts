@@ -27,6 +27,7 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   vendorBillPayment: '50 8 * * *',
   peServicio: '55 8 * * *',
   otrosContrato: '0 9 * * *',
+  fcellsContrato: '5 9 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -77,6 +78,7 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     VENDOR_BILL_PAYMENT: mergeEntityConfig('vendorBillPayment', raw?.VENDOR_BILL_PAYMENT),
     OTROS_CONTRATO: mergeEntityConfig('otrosContrato', raw?.OTROS_CONTRATO),
     PE_SERVICIO: mergeEntityConfig('peServicio', raw?.PE_SERVICIO),
+    FCELLS_CONTRATO: mergeEntityConfig('fcellsContrato', raw?.FCELLS_CONTRATO),
   };
 }
 
@@ -164,6 +166,38 @@ export function getLegacyDbConfig(): LegacyDbConfig {
   const raw = legacyConfig.env && legacyConfig.env.LEGACY_DB;
   if (!raw || !raw.HOST || !raw.DATABASE || !raw.USER || !raw.PASSWORD) {
     throw new Error('Missing LEGACY_DB configuration (HOST/DATABASE/USER/PASSWORD) in config/env.json.');
+  }
+
+  return {
+    host: raw.HOST,
+    port: raw.PORT || 1433,
+    database: raw.DATABASE,
+    user: raw.USER,
+    password: raw.PASSWORD,
+  };
+}
+
+export interface HrDbConfig {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+}
+
+/**
+ * Reads HR_DB from config/env.json (host/port/database are non-secret defaults from
+ * config.json; user/password are the gitignored secret overlay) - the Peopleforce/Sesame HR
+ * data warehouse (DwhCryoholdcoLatam_Prod), queried read-only for the HR Report page. Confirmed
+ * on the same SQL Server instance as LEGACY_DB, using the same login (which already has SELECT
+ * on this database) - kept as its own config block anyway, matching the one-block-per-database
+ * convention, so a future least-privilege login swap only touches config/env.json.
+ * Lazily read (not part of loadConfig/getConfig) since only the reporting API's HR routes need it.
+ */
+export function getHrDbConfig(): HrDbConfig {
+  const raw = legacyConfig.env && legacyConfig.env.HR_DB;
+  if (!raw || !raw.HOST || !raw.DATABASE || !raw.USER || !raw.PASSWORD) {
+    throw new Error('Missing HR_DB configuration (HOST/DATABASE/USER/PASSWORD) in config/env.json.');
   }
 
   return {

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
+import cryoholdcoLogo from '../../assets/cryoholdco-logo.png';
 import styles from './AppShell.module.css';
 
 export interface Breadcrumb {
@@ -20,10 +21,8 @@ export function AppShell({ breadcrumbs = [], children }: AppShellProps) {
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           <Link to="/" className={styles.brand}>
-            <span className={styles.brandMark} aria-hidden="true">
-              C
-            </span>
-            <span className={styles.brandName}>Cryoholdco Reportes</span>
+            <img src={cryoholdcoLogo} alt="Cryoholdco" className={styles.brandLogo} />
+            <span className={styles.brandName}>Reportes</span>
           </Link>
           {breadcrumbs.length > 0 ? (
             <>

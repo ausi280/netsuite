@@ -14,11 +14,12 @@ import { CommissionLevelsPage } from './pages/CommissionLevelsPage';
 import { PaymentsHistoryPage } from './pages/PaymentsHistoryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
-// recharts is a sizeable dependency only needed on this one page - lazy-loading it keeps the
-// rest of the app's initial bundle lean for everyone who never opens the graphs page.
+// recharts is a sizeable dependency only needed on these chart pages - lazy-loading it keeps the
+// rest of the app's initial bundle lean for everyone who never opens them.
 const PartidaAnalyticsPage = lazy(() =>
   import('./pages/PartidaAnalyticsPage').then((m) => ({ default: m.PartidaAnalyticsPage }))
 );
+const HrReportPage = lazy(() => import('./pages/HrReportPage').then((m) => ({ default: m.HrReportPage })));
 
 export function App() {
   const location = useLocation();
@@ -82,6 +83,18 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CommissionLevelsPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/hr"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <Suspense fallback={<LoadingState label="Cargando HR Report..." />}>
+                  <HrReportPage />
+                </Suspense>
               </PageTransition>
             </RequireAuth>
           }

@@ -27,23 +27,16 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   text-decoration: none;
   flex-shrink: 0;
 }
 
-.brandMark {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  color: var(--color-white);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 15px;
+.brandLogo {
+  height: 34px;
+  width: auto;
+  display: block;
+  flex-shrink: 0;
 }
 
 .brandName {

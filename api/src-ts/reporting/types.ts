@@ -20,7 +20,8 @@ export type ReportEntityKey =
   | 'payments'
   | 'vendors'
   | 'vendor-transactions'
-  | 'otros-contratos';
+  | 'otros-contratos'
+  | 'fcells-contratos';
 
 export interface SortConfig {
   column: string;

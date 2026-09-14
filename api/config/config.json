@@ -32,6 +32,11 @@
         "PORT" : 1433,
         "DATABASE" : "CryoCell"
     },
+    "HR_DB" : {
+        "HOST" : "cryoholdco.homeip.net",
+        "PORT" : 1433,
+        "DATABASE" : "DwhCryoholdcoLatam_Prod"
+    },
     "SERVICES" : {
         "TEST" : {
             "NAME" : "Test",
@@ -71,7 +76,8 @@
                 "VENDOR_TRANSACTION": { "ENABLED": true, "CRON": "40 8 * * *" },
                 "VENDOR_BILL_PAYMENT": { "ENABLED": true, "CRON": "50 8 * * *" },
                 "OTROS_CONTRATO": { "ENABLED": true, "CRON": "0 9 * * *" },
-                "PE_SERVICIO": { "ENABLED": true, "CRON": "55 8 * * *" }
+                "PE_SERVICIO": { "ENABLED": true, "CRON": "55 8 * * *" },
+                "FCELLS_CONTRATO": { "ENABLED": true, "CRON": "5 9 * * *" }
             }
         },
         "META" : {
