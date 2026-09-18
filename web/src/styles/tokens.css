@@ -13,10 +13,9 @@
   --color-neutral-800: #323232;
   --color-neutral-200: #e5e5e6;
   --color-neutral-100: #f1f1f1;
-  /* Darkened from #6d7387 - the original only cleared ~4.2-4.7:1 against white/tinted
-     backgrounds, borderline-to-failing WCAG AA (4.5:1) for the small meta/label text it's used
-     for everywhere. This value clears 5.6:1+ against every surface it's paired with. */
-  --color-secondary: #565c6e;
+  /* Darkened from #6d7387, then again from #565c6e (still felt too light in practice despite
+     clearing WCAG AA) - this value clears 7.7:1+ against every surface it's paired with. */
+  --color-secondary: #454b5c;
 
   /* Brand tints (from the CryoHoldco headcount/HHRR dashboard) - available for chart palettes
      and accent surfaces that need more than one hue without inventing new colors. */

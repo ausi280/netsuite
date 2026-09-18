@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ContractDossier } from '../../api/types';
 import { SimpleTable } from '../table/SimpleTable';
 import type { SimpleColumn } from '../table/SimpleTable';
-import { contractStatusLabel, partidaStatusLabel, serviceTypeLabel } from '../../config/labels';
+import { contractStatusLabel, partidaStatusLabel, serviceStatusLabel, serviceTypeLabel } from '../../config/labels';
 import { subsidiaryLabel } from '../../config/subsidiaries';
 import { currencyLabel } from '../../config/currencies';
 import { formatCurrency, formatDate, formatCellValue } from '../../utils/format';
@@ -45,7 +45,7 @@ interface AnnuityRow {
 const SERVICE_COLUMNS: SimpleColumn<ServiceRow>[] = [
   { key: 'name', header: 'Servicio', render: (r) => formatCellValue(r.name) },
   { key: 'tipo', header: 'Tipo', render: (r) => serviceTypeLabel(r.custrecord_cryo_tipodeserv) },
-  { key: 'estatus', header: 'Estatus', render: (r) => formatCellValue(r.custrecord_cryo_estatusservicio) },
+  { key: 'estatus', header: 'Estatus', render: (r) => serviceStatusLabel(r.custrecord_cryo_estatusservicio) },
   {
     key: 'costo',
     header: 'Costo Anualidad',

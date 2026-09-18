@@ -29,6 +29,7 @@ export function ContractCommissionCard({ contract, nivel, tierPercentage }: Cont
           <p className={styles.meta}>
             {contract.titular_nombre ?? 'Sin titular'} · Inicio {formatDate(contract.fecha_inicio)}
             {contract.subsidiaria_id ? ` · ${subsidiaryLabel(contract.subsidiaria_id)}` : ''}
+            {contract.folio_sistema_anterior ? ` · Sistema anterior: ${contract.folio_sistema_anterior}` : ''}
           </p>
         </div>
         <div className={styles.headerRight}>

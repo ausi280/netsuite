@@ -17,6 +17,13 @@ export type ReportEntityKey =
   | 'otros-contratos'
   | 'fcells-contratos';
 
+/**
+ * Every key grantable via the per-user allowedEntities permission list: every ReportEntityKey
+ * (each with a generic list/detail/CSV table view) plus 'hr', which is gated the same way but has
+ * no generic table of its own (see HrDimension below).
+ */
+export type PermissionKey = ReportEntityKey | 'hr';
+
 export interface EntitySummary {
   key: ReportEntityKey;
   label: string;
@@ -70,13 +77,15 @@ export interface EntitiesResponse {
   success: true;
   data: EntitySummary[];
   isAdmin: boolean;
+  canAccessHr: boolean;
 }
 
 // HR Report - backed by the Peopleforce/Sesame HR data warehouse (DwhCryoholdcoLatam_Prod), a
 // completely separate database from every other report. Deliberately NOT a ReportEntityKey: it
 // has no generic paginated list/detail/CSV export (the table holds employee PII - names,
-// birthdays - and nothing asked for a raw browsable table of that), just this bespoke
-// admin-only aggregate analytics endpoint. See api/src-ts/reporting/hrController.ts.
+// birthdays - and nothing asked for a raw browsable table of that), just this bespoke aggregate
+// analytics endpoint, gated via the 'hr' PermissionKey same as any other report. See
+// api/src-ts/reporting/hrController.ts.
 export type HrDimension = 'brand' | 'department' | 'gender' | 'country' | 'status' | 'age' | 'seniority' | 'hiremonth';
 
 export interface HrBreakdownRow {
@@ -107,7 +116,7 @@ export interface AdminUserSummary {
   email: string | null;
   displayName: string | null;
   isAdmin: boolean;
-  allowedEntities: ReportEntityKey[];
+  allowedEntities: PermissionKey[];
   allowedSubsidiaries: string[];
   createdAt: string;
   updatedAt: string;
@@ -115,7 +124,7 @@ export interface AdminUserSummary {
 
 export interface UserPermissionUpdate {
   isAdmin: boolean;
-  allowedEntities: ReportEntityKey[];
+  allowedEntities: PermissionKey[];
   allowedSubsidiaries: string[];
 }
 
@@ -202,6 +211,8 @@ export interface ContractCommission {
   subsidiaria_id: string | null;
   moneda: string | null;
   titular_nombre: string | null;
+  /** custrecord_cryo_contratosistemaanterior - the legacy CryoCell folio, when this contract has one. */
+  folio_sistema_anterior: string | null;
   services: ServiceCommissionLine[];
   /** Sum of every active service's precio_procesamiento on this contract, Placenta included - the
    * base both the tiered commission and the Placenta bonus are computed from. */
@@ -312,6 +323,23 @@ export interface ContractNotasResponse {
   data: NotaCobranza[];
   /** The legacy folio these notes were looked up by, or null if this contract has none (created directly in NetSuite). */
   folio: string | null;
+}
+
+/** A NetSuite-native Note (the note.nl UI page), via the "Get notes" RESTlet. */
+export interface NetSuiteNote {
+  id: string;
+  title: string | null;
+  note: string | null;
+  author: string | null;
+  date: string | null;
+  direction: string | null;
+  noteType: string | null;
+  urgente: boolean;
+}
+
+export interface ContractNetSuiteNotesResponse {
+  success: true;
+  data: NetSuiteNote[];
 }
 
 /** A MercadoPago payment log row (app_payments, owned by the separate `payment` project - shared DB, read-only here). */

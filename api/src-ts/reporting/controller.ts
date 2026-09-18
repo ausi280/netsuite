@@ -12,6 +12,7 @@ import { buildFcellsContratoExportQuery, getEnrichedFcellsContratoRows, FCELLS_C
 import type { UserPermissions } from './permissionsRepository';
 import type { EntityConfig } from './types';
 import { csvRow, formatExportValue, humanizeColumnName } from './csvExport';
+import { isHrAllowed } from './hrController';
 
 /** Express 5's ParamsDictionary types named params as `string | string[]` to account for wildcard segments; our routes only ever use simple `:name` segments, which are always plain strings at runtime. */
 export function paramString(value: string | string[]): string {
@@ -35,7 +36,7 @@ export async function listEntitySummaries(req: Request, res: Response): Promise<
   const configs = listEntityConfigs().filter((c) => isEntityAllowed(permissions, c));
 
   const data = await getEntitySummaries(knex, configs, subsidiaryRestrictionFor(permissions));
-  res.status(200).json({ success: true, data, isAdmin: permissions.isAdmin });
+  res.status(200).json({ success: true, data, isAdmin: permissions.isAdmin, canAccessHr: isHrAllowed(permissions) });
 }
 
 /** GET /api/reports/:entity?page=&pageSize=&search=&sortBy=&sortDir=&subsidiary= */

@@ -23,6 +23,14 @@ export type ReportEntityKey =
   | 'otros-contratos'
   | 'fcells-contratos';
 
+/**
+ * Every key grantable via the per-user allowedEntities permission list: every ReportEntityKey
+ * (each backed by ENTITY_REGISTRY, with generic list/detail/CSV routes) plus 'hr', which is gated
+ * the same way but isn't a generic paginated table (see hrAnalyticsRepository.ts) so it has no
+ * ENTITY_REGISTRY entry of its own.
+ */
+export type PermissionKey = ReportEntityKey | 'hr';
+
 export interface SortConfig {
   column: string;
   dir: 'asc' | 'desc';

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { AdminUserSummary } from '../../api/types';
-import type { ReportEntityKey } from '../../api/types';
+import type { PermissionKey } from '../../api/types';
 import { entityColumns, entityOrder } from '../../config/entityColumns';
 import { KNOWN_SUBSIDIARY_IDS, subsidiaryLabel } from '../../config/subsidiaries';
 import { useUpdateUserPermissions } from '../../hooks/useAdminUsers';
@@ -19,7 +19,7 @@ const dateFormatter = new Intl.DateTimeFormat('es-MX', { year: 'numeric', month:
 /** One user's editable permission card: admin toggle + entity/subsidiary checklists, saved on demand. */
 export function UserPermissionCard({ user }: UserPermissionCardProps) {
   const [isAdmin, setIsAdmin] = useState(user.isAdmin);
-  const [entities, setEntities] = useState<ReportEntityKey[]>(user.allowedEntities);
+  const [entities, setEntities] = useState<PermissionKey[]>(user.allowedEntities);
   const [subsidiaries, setSubsidiaries] = useState<string[]>(user.allowedSubsidiaries);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -71,6 +71,10 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
                 {entityColumns[key].label}
               </label>
             ))}
+            <label className={styles.checkItem}>
+              <input type="checkbox" checked={entities.includes('hr')} onChange={() => setEntities((prev) => toggle(prev, 'hr'))} />
+              HR Report
+            </label>
           </div>
         </div>
         <div>

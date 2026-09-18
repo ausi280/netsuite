@@ -1,5 +1,5 @@
 import type { Knex } from 'knex';
-import type { ReportEntityKey } from './types';
+import type { PermissionKey } from './types';
 
 export interface ReportUserPermissionsRow {
   id: number;
@@ -34,7 +34,7 @@ export interface UserPermissionUpdate {
 /** Resolved, ready-to-use permission set for one request - never exposes the raw JSON columns. */
 export interface UserPermissions {
   isAdmin: boolean;
-  allowedEntities: Set<ReportEntityKey>;
+  allowedEntities: Set<PermissionKey>;
   allowedSubsidiaries: Set<string>;
 }
 
@@ -62,7 +62,7 @@ function parseStringArray(json: string): string[] {
 function toPermissions(row: ReportUserPermissionsRow): UserPermissions {
   return {
     isAdmin: Boolean(row.is_admin),
-    allowedEntities: new Set(parseStringArray(row.allowed_entities) as ReportEntityKey[]),
+    allowedEntities: new Set(parseStringArray(row.allowed_entities) as PermissionKey[]),
     allowedSubsidiaries: new Set(parseStringArray(row.allowed_subsidiaries)),
   };
 }

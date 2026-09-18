@@ -3,10 +3,12 @@ import knex from '../db/connection';
 import { paramString } from './controller';
 import { listEntityConfigs } from './entityRegistry';
 import { PermissionsRepository } from './permissionsRepository';
-import type { ReportEntityKey } from './types';
+import type { PermissionKey } from './types';
 
 const permissionsRepository = new PermissionsRepository(knex);
-const VALID_ENTITY_KEYS = new Set<string>(listEntityConfigs().map((c) => c.key));
+// 'hr' is grantable like any other entity but has no ENTITY_REGISTRY entry of its own (see
+// hrController.ts / PermissionKey) - added on top of the generic table-backed keys.
+const VALID_ENTITY_KEYS = new Set<string>([...listEntityConfigs().map((c) => c.key), 'hr']);
 
 /** Every admin route here requires isAdmin; a 403 is the correct response for everyone else - these endpoints manage OTHER people's access. */
 function requireAdmin(req: Request, res: Response): boolean {
@@ -39,7 +41,7 @@ export async function updateUserPermissions(req: Request, res: Response): Promis
   const isAdmin = Boolean(body.isAdmin);
 
   const allowedEntities = (Array.isArray(body.allowedEntities) ? body.allowedEntities : []).filter(
-    (value): value is ReportEntityKey => typeof value === 'string' && VALID_ENTITY_KEYS.has(value),
+    (value): value is PermissionKey => typeof value === 'string' && VALID_ENTITY_KEYS.has(value),
   );
 
   const allowedSubsidiaries = (Array.isArray(body.allowedSubsidiaries) ? body.allowedSubsidiaries : []).filter(

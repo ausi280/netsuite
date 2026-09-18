@@ -146,6 +146,33 @@ export class NetSuiteHttpClient {
     return buffered;
   }
 
+  /**
+   * Invokes a deployed SuiteScript RESTlet (script.nl-style query params: script + deploy ids),
+   * for functionality that only exists inside NetSuite's own N/search or N/record modules (e.g.
+   * Notes - see netsuiteNotesRepository.ts for why SuiteQL alone can't reach those). RESTlets are
+   * only reachable at the dedicated restlets.api.netsuite.com host, distinct from the
+   * suitetalk.api.netsuite.com host executeSuiteQL/patchRecord use above. A RESTlet must return a
+   * JSON string (its own JSON.stringify(...) of a plain object) - that string is parsed here.
+   */
+  async callRestlet<T = any>(scriptId: string, deployId: string, params: Record<string, string> = {}): Promise<T> {
+    const query = new URLSearchParams({ script: scriptId, deploy: deployId, ...params }).toString();
+    const url = `https://${this.signer.accountRealmHost}.restlets.api.netsuite.com/app/site/hosting/restlet.nl?${query}`;
+    const response = await this.limiter.schedule(() =>
+      withRetry(() => this.getSigned(url), this.erpConfig.SYNC.RETRY, this.logger),
+    );
+    return typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+  }
+
+  private getSigned(url: string): Promise<AxiosResponse<any>> {
+    const headers = this.signer.sign({ url, method: 'GET' });
+    return this.http.get(url, {
+      headers: {
+        Accept: 'application/json',
+        ...headers,
+      },
+    });
+  }
+
   private postSigned(url: string, body: unknown): Promise<AxiosResponse<any>> {
     const headers = this.signer.sign({ url, method: 'POST' });
     return this.http.post(url, body, {

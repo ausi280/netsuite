@@ -5,7 +5,7 @@ import { buildEntraAuthMiddleware } from './auth/entraAuth';
 import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
 import { exportEntityRows, getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
 import { listUsers, updateUserPermissions } from './adminController';
-import { getCommissionsReportRoute, getContractDossierRoute, getContractNotasRoute } from './contractReportsController';
+import { getCommissionsReportRoute, getContractDossierRoute, getContractNetSuiteNotesRoute, getContractNotasRoute } from './contractReportsController';
 import { listVendedorOptionsRoute, updateContractRoute } from './contractEditController';
 import {
   deleteCommissionTierRoute,
@@ -48,6 +48,7 @@ export function buildReportingRouter(): Router {
   router.get('/contracts/vendedores', listVendedorOptionsRoute);
   router.get('/contracts/:id/dossier', getContractDossierRoute);
   router.get('/contracts/:id/notas', getContractNotasRoute);
+  router.get('/contracts/:id/netsuite-notes', getContractNetSuiteNotesRoute);
   // PATCH on a distinct HTTP method from every GET route above, so no ordering concern here -
   // edits custrecord_cryo_contratosistemaanterior and/or custrecord_cryo_vendedor and pushes them
   // to NetSuite (see contractEditController.ts).

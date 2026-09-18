@@ -10,6 +10,7 @@ import type { ReportEntityKey } from '../api/types';
 import { formatCellValue, humanizeKey } from '../utils/format';
 import { ContractDossierView } from '../components/reports/ContractDossierView';
 import { NotasCobranzaSection } from '../components/reports/NotasCobranzaSection';
+import { NetSuiteNotesSection } from '../components/reports/NetSuiteNotesSection';
 import { NotFoundPage } from './NotFoundPage';
 import styles from './ReportDetailPage.module.css';
 
@@ -90,6 +91,9 @@ export function ReportDetailPage() {
       {isContract && dossierData ? (
         <>
           <ContractDossierView dossier={dossierData} />
+          <div className={styles.notasSection}>
+            <NetSuiteNotesSection contractId={id} />
+          </div>
           <div className={styles.notasSection}>
             <NotasCobranzaSection contractId={id} />
           </div>

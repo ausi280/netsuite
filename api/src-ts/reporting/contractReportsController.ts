@@ -1,11 +1,13 @@
 import type { Request, Response } from 'express';
 import knex from '../db/connection';
 import { getLegacyDb } from '../db/legacyDbConnection';
+import { bootstrap } from '../bootstrap';
 import { paramString } from './controller';
 import { getEntityConfig } from './entityRegistry';
 import { getContractDossier } from './contractDossierRepository';
 import { getCommissionsByVendedor } from './commissionsRepository';
 import { getNotasCobranza } from './notasCobranzaRepository';
+import { getNetSuiteNotesForContract } from './netsuiteNotesRepository';
 import { applySubsidiaryRestriction } from './reportingRepository';
 import type { UserPermissions } from './permissionsRepository';
 
@@ -105,5 +107,41 @@ export async function getContractNotasRoute(req: Request, res: Response): Promis
   } catch (error) {
     console.error(`Error fetching legacy notas for contract ${id} (folio ${contract.folio}):`, error);
     res.status(502).json({ success: false, message: 'No se pudieron cargar las notas del sistema anterior.' });
+  }
+}
+
+/**
+ * GET /api/reports/contracts/:id/netsuite-notes — NetSuite-native Notes (the note.nl UI page),
+ * via the "Get notes" RESTlet (see netsuiteNotesRepository.ts). Enforces the same subsidiary
+ * restriction as the dossier route so this can't be used to probe a contract the caller isn't
+ * allowed to see.
+ */
+export async function getContractNetSuiteNotesRoute(req: Request, res: Response): Promise<void> {
+  const permissions = req.permissions;
+  if (!isContractsAllowed(permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const id = paramString(req.params.id);
+  const contractQuery = knex('netsuite_contracts').where('netsuite_id', id).select('netsuite_id');
+
+  const restrictSubsidiaries = subsidiaryRestrictionFor(permissions!);
+  if (restrictSubsidiaries !== null) {
+    applySubsidiaryRestriction(contractQuery, 'custrecord_cryo_subsidiariacontrato', restrictSubsidiaries);
+  }
+
+  const contract = await contractQuery.first();
+  if (!contract) {
+    res.status(404).json({ success: false, message: `Contract record not found for id ${id}` });
+    return;
+  }
+
+  try {
+    const data = await getNetSuiteNotesForContract(bootstrap().http, id);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    console.error(`Error fetching NetSuite notes for contract ${id}:`, error);
+    res.status(502).json({ success: false, message: 'No se pudieron cargar las notas de NetSuite.' });
   }
 }

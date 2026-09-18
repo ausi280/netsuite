@@ -89,6 +89,8 @@ export interface ContractCommission {
   subsidiaria_id: string | null;
   moneda: string | null;
   titular_nombre: string | null;
+  /** custrecord_cryo_contratosistemaanterior - the legacy CryoCell folio, when this contract has one. */
+  folio_sistema_anterior: string | null;
   services: ServiceCommissionLine[];
   /** Sum of every active service's precio_procesamiento on this contract, Placenta included - the
    * base both the tiered commission and the Placenta bonus are computed from. Always the real
@@ -182,6 +184,7 @@ interface ContractRow {
   subsidiaria_id: string | null;
   moneda: string | null;
   titular_nombre: string | null;
+  folio_sistema_anterior: string | null;
   vendedor_id: string;
   vendedor_nombre: string | null;
 }
@@ -226,6 +229,7 @@ function baseContractsQuery(db: Knex, month: number, year: number): Knex.QueryBu
       'C.custrecord_cryo_subsidiariacontrato as subsidiaria_id',
       'C.custrecord_cryo_moneda as moneda',
       'CUST.companyname as titular_nombre',
+      'C.custrecord_cryo_contratosistemaanterior as folio_sistema_anterior',
       'C.custrecord_cryo_vendedor as vendedor_id',
       'VEND.entityid as vendedor_nombre',
     );
@@ -323,6 +327,7 @@ function buildContractCommission(
     subsidiaria_id: contract.subsidiaria_id,
     moneda: contract.moneda,
     titular_nombre: contract.titular_nombre,
+    folio_sistema_anterior: contract.folio_sistema_anterior,
     services: serviceLines,
     total_servicios: totalServicios,
     has_placenta: hasPlacenta,

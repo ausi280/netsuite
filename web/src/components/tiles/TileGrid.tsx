@@ -34,16 +34,16 @@ function usePrefersReducedMotion(): boolean {
 
 interface TileGridProps {
   entities: EntitySummary[];
-  /** Shows the admin-only HR Report tile alongside the regular entity tiles - HR Report has no
-   * ReportEntityKey/ENTITY_REGISTRY entry (see HrReportPage.tsx), so it can't come back from the
-   * entities API like every other tile does. */
-  isAdmin?: boolean;
+  /** Shows the HR Report tile alongside the regular entity tiles for anyone granted 'hr' (or an
+   * admin) - HR Report has no ReportEntityKey/ENTITY_REGISTRY entry (see HrReportPage.tsx), so it
+   * can't come back from the entities API like every other tile does. */
+  canAccessHr?: boolean;
 }
 
-export function TileGrid({ entities, isAdmin }: TileGridProps) {
+export function TileGrid({ entities, canAccessHr }: TileGridProps) {
   const reduceMotion = usePrefersReducedMotion();
-  // enabled: isAdmin so this admin-only request never fires (and never 403s) for anyone else.
-  const hrSummaryQuery = useHrSummary(Boolean(isAdmin));
+  // enabled: canAccessHr so this gated request never fires (and never 403s) for anyone without it.
+  const hrSummaryQuery = useHrSummary(Boolean(canAccessHr));
 
   return (
     <motion.div
@@ -55,7 +55,7 @@ export function TileGrid({ entities, isAdmin }: TileGridProps) {
       {entities.map((entity) => (
         <Tile key={entity.key} entity={entity} reduceMotion={reduceMotion} />
       ))}
-      {isAdmin ? <HrTile activeCount={hrSummaryQuery.data?.active} reduceMotion={reduceMotion} /> : null}
+      {canAccessHr ? <HrTile activeCount={hrSummaryQuery.data?.active} reduceMotion={reduceMotion} /> : null}
     </motion.div>
   );
 }

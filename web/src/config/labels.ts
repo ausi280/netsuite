@@ -44,6 +44,22 @@ export function serviceTypeLabel(code: string | null | undefined): string {
   return SERVICE_TYPE_LABELS[code] ?? `Tipo ${code}`;
 }
 
+// custrecord_cryo_estatusservicio (services) reuses the same underlying NetSuite list as
+// custrecord_cryo_estatuscontrato - confirmed live: codes 1/7/8/11 resolve to the identical
+// text as CONTRACT_STATUS_LABELS above. '12' is service-specific and also confirmed live.
+export const SERVICE_STATUS_LABELS: Record<string, string> = {
+  '1': 'Activo',
+  '7': 'Cancelado',
+  '8': 'Suspendido',
+  '11': 'Disposición',
+  '12': 'Seguridad total',
+};
+
+export function serviceStatusLabel(code: string | null | undefined): string {
+  if (!code) return '—';
+  return SERVICE_STATUS_LABELS[code] ?? `Estatus ${code}`;
+}
+
 // The two vendor-side transaction types synced into netsuite_vendor_transactions - confirmed
 // live, this account has no other vendor-side type (no VendCred, etc.) as of this writing.
 export const VENDOR_TRANSACTION_TYPE_LABELS: Record<string, string> = {

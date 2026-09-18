@@ -16,6 +16,8 @@ import type {
   HrDimension,
   HrSummary,
   HrSummaryResponse,
+  ContractNetSuiteNotesResponse,
+  NetSuiteNote,
   NotaCobranza,
   PaginatedRows,
   PartidaAnalyticsResponse,
@@ -34,6 +36,7 @@ import type {
 export interface EntitiesResult {
   entities: EntitySummary[];
   isAdmin: boolean;
+  canAccessHr: boolean;
 }
 
 export interface EntityRowsParams {
@@ -52,7 +55,7 @@ export interface EntityRowsParams {
 
 export async function fetchEntities(token: string | null): Promise<EntitiesResult> {
   const result = await apiFetch<EntitiesResponse>('/reports/entities', { token });
-  return { entities: result.data, isAdmin: result.isAdmin };
+  return { entities: result.data, isAdmin: result.isAdmin, canAccessHr: result.canAccessHr };
 }
 
 export async function fetchEntityRows(
@@ -193,6 +196,12 @@ export async function fetchCommissions(
 export async function fetchContractNotas(token: string | null, id: string): Promise<{ notas: NotaCobranza[]; folio: string | null }> {
   const result = await apiFetch<ContractNotasResponse>(`/reports/contracts/${encodeURIComponent(id)}/notas`, { token });
   return { notas: result.data, folio: result.folio };
+}
+
+/** NetSuite-native notes (the note.nl UI page) for a contract, via the "Get notes" RESTlet. */
+export async function fetchContractNetSuiteNotes(token: string | null, id: string): Promise<NetSuiteNote[]> {
+  const result = await apiFetch<ContractNetSuiteNotesResponse>(`/reports/contracts/${encodeURIComponent(id)}/netsuite-notes`, { token });
+  return result.data;
 }
 
 export interface PaymentsListParams {

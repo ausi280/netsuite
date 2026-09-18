@@ -5,15 +5,14 @@ import type { HrDimension } from './hrAnalyticsRepository';
 import type { UserPermissions } from './permissionsRepository';
 
 /**
- * HR Report is gated by isAdmin only, not the usual per-entity allowedEntities allow-list -
- * unlike every other report, this one is backed by a table containing employee PII (full names,
- * birthdays), and it isn't part of the generic entity registry (no per-row list/detail/CSV export
- * exists for it, on purpose - see hrAnalyticsRepository.ts). Defaulting a brand-new PII-touching
- * feature to "admins only" is the safe choice; if specific non-admin staff need it, extending
- * UserPermissions with a dedicated flag is the place to revisit this.
+ * HR Report is gated like every other report - isAdmin, or 'hr' in allowedEntities - granted
+ * per-user from the admin "manage users" screen same as contracts/customers/etc. It has no
+ * ENTITY_REGISTRY entry of its own (no generic per-row list/detail/CSV export - see
+ * hrAnalyticsRepository.ts) since it's aggregate-only, but the permission key exists purely for
+ * this gate (see PermissionKey in types.ts).
  */
 export function isHrAllowed(permissions?: UserPermissions): boolean {
-  return Boolean(permissions?.isAdmin);
+  return Boolean(permissions?.isAdmin || permissions?.allowedEntities.has('hr'));
 }
 
 function isHrDimension(value: unknown): value is HrDimension {

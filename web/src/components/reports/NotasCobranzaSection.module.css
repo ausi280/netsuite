@@ -44,6 +44,22 @@
   color: var(--color-secondary);
 }
 
+.typeTag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-primary-text);
+  background: var(--color-primary-soft);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+.cardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  margin-bottom: 4px;
+}
+
 .urgentBadge {
   font-size: 11px;
   font-weight: 600;
