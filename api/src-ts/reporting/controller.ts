@@ -13,6 +13,8 @@ import type { UserPermissions } from './permissionsRepository';
 import type { EntityConfig } from './types';
 import { csvRow, formatExportValue, humanizeColumnName } from './csvExport';
 import { isHrAllowed } from './hrController';
+import { isProspectosAllowed } from './prospectosController';
+import { resolveSelfVendedorId } from './commissionsRepository';
 
 /** Express 5's ParamsDictionary types named params as `string | string[]` to account for wildcard segments; our routes only ever use simple `:name` segments, which are always plain strings at runtime. */
 export function paramString(value: string | string[]): string {
@@ -28,6 +30,18 @@ function isEntityAllowed(permissions: UserPermissions, config: EntityConfig): bo
   return permissions.isAdmin || permissions.allowedEntities.has(config.key);
 }
 
+/** Same "can this caller reach commissions" check as isCommissionsFullAccessAllowed + the
+ * self-vendedor fallback in contractReportsController.ts's loadCommissionsData - duplicated in
+ * miniature here (rather than imported, to avoid a circular import with
+ * contractReportsController.ts, which already imports from this file) purely to decide whether to
+ * show the caller a link into that report, from the dashboard or from within the Contracts entity
+ * page. Having 'contracts' alone is NOT enough on its own - 'commissions' is a second, additional
+ * gate on top of it (see PermissionKey in types.ts). */
+async function resolveCanAccessCommissions(permissions: UserPermissions, email: string | null): Promise<boolean> {
+  if (permissions.isAdmin || (permissions.allowedEntities.has('contracts') && permissions.allowedEntities.has('commissions'))) return true;
+  return Boolean(await resolveSelfVendedorId(knex, email));
+}
+
 /** GET /api/reports/entities — one summary row per entity the caller may see, in registry order. */
 export async function listEntitySummaries(req: Request, res: Response): Promise<void> {
   // req.permissions is always set by buildPermissionsMiddleware for any request reaching this
@@ -35,8 +49,18 @@ export async function listEntitySummaries(req: Request, res: Response): Promise<
   const permissions: UserPermissions = req.permissions ?? { isAdmin: false, allowedEntities: new Set(), allowedSubsidiaries: new Set() };
   const configs = listEntityConfigs().filter((c) => isEntityAllowed(permissions, c));
 
-  const data = await getEntitySummaries(knex, configs, subsidiaryRestrictionFor(permissions));
-  res.status(200).json({ success: true, data, isAdmin: permissions.isAdmin, canAccessHr: isHrAllowed(permissions) });
+  const [data, canAccessCommissions] = await Promise.all([
+    getEntitySummaries(knex, configs, subsidiaryRestrictionFor(permissions)),
+    resolveCanAccessCommissions(permissions, req.auditUser?.username ?? null),
+  ]);
+  res.status(200).json({
+    success: true,
+    data,
+    isAdmin: permissions.isAdmin,
+    canAccessHr: isHrAllowed(permissions),
+    canAccessCommissions,
+    canAccessProspectos: isProspectosAllowed(permissions),
+  });
 }
 
 /** GET /api/reports/:entity?page=&pageSize=&search=&sortBy=&sortDir=&subsidiary= */

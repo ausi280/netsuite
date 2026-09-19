@@ -41,14 +41,19 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * PAYS - contributes to the vendedor's tier total, and earns its own Placenta/tier/anualidad
  * bonuses - once its paperwork is complete: Cryo.dbo.Contrato (the pre-NetSuite legacy sales
  * system, still the system of record for this flag; nothing equivalent exists on the NetSuite
- * contract record) has a DocsCompletos bit, matched to a NetSuite contract by
- * NetSuite.NetSuite = netsuite_contracts.name (confirmed against real production data - this
- * "NetSuite" column is a delayed one-way backfill from NetSuite back into the legacy system,
- * typically populated a few weeks after the sale, which is why very recent contracts have no
- * match yet). No match is treated the same as incomplete: the contract still shows up with its
- * real services/data, but every commission figure on it is 0 - it simply doesn't count until the
- * legacy system catches up. Otros Contratos have no such gate; Argentina/Peru contracts have no
- * equivalent legacy record at all, so they're never gated either.
+ * contract record) has a DocsCompletos bit. Primary match: Cryo.dbo.Contrato.NetSuite =
+ * netsuite_contracts.name (confirmed against real production data - this "NetSuite" column is a
+ * delayed one-way backfill from NetSuite back into the legacy system, typically populated a few
+ * weeks after the sale). Fallback, ONLY when that primary match finds no legacy row at all (never
+ * overriding a real match that says incomplete): Cryo.dbo.Contrato.Folio =
+ * netsuite_contracts.custrecord_cryo_contratosistemaanterior - confirmed live this is safe (of
+ * ~188k legacy rows, only 46 folios have more than one row, and zero of those 46 have conflicting
+ * DocsCompletos values across their rows), and it closes a real gap: ~12% of legacy rows have a
+ * null NetSuite column at any given time (disproportionately the most recent sales, i.e. exactly
+ * the contracts a given month's commission run cares about), which the primary match alone would
+ * always treat as incomplete even when DocsCompletos is genuinely already 1. Otros Contratos have
+ * no such gate; Argentina/Peru contracts have no equivalent legacy record at all, so they're never
+ * gated either.
  */
 
 // Fixed business rules, deliberately NOT part of the configurable commission_level_tiers table -
@@ -256,6 +261,32 @@ function baseOtrosContratosQuery(db: Knex, month: number, year: number): Knex.Qu
     );
 }
 
+/**
+ * Resolves a signed-in user (by their Entra email) to a NetSuite employee - and only returns
+ * that employee's netsuite_id if they've actually sold at least one contract/otros-contrato as
+ * vendedor (an employee row with a matching email but no sales isn't a "salesperson" for this
+ * purpose). Used to let a non-admin, non-'contracts'-granted user still reach their OWN
+ * commissions - see isCommissionsSelfAllowed in contractReportsController.ts. Case-insensitive
+ * since Entra's preferred_username casing isn't guaranteed to match how email was synced from
+ * NetSuite.
+ */
+export async function resolveSelfVendedorId(db: Knex, email: string | null): Promise<string | null> {
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const employee = (await db('netsuite_employees').whereRaw('LOWER(email) = ?', [normalized]).select('netsuite_id').first()) as
+    | { netsuite_id: string }
+    | undefined;
+  if (!employee) return null;
+
+  const [hasContract, hasOtrosContrato] = await Promise.all([
+    db('netsuite_contracts').where('custrecord_cryo_vendedor', employee.netsuite_id).select(1).first(),
+    db('netsuite_otros_contratos').where('custrecord_cryo_vendedor_otroscontratos', employee.netsuite_id).select(1).first(),
+  ]);
+
+  return hasContract || hasOtrosContrato ? employee.netsuite_id : null;
+}
+
 function totalForServices(services: ServiceRow[]): number {
   return services.reduce((sum, s) => sum + Number(s.custrecord_cryo_precioprocesamiento ?? 0), 0);
 }
@@ -265,23 +296,58 @@ function totalForServices(services: ServiceRow[]): number {
 const LEGACY_LOOKUP_CHUNK_SIZE = 1000;
 
 /**
- * Which of these contract names (netsuite_contracts.name) have DocsCompletos = 1 in the legacy
- * Cryo.dbo.Contrato table, matched by its NetSuite column. A name with no row there at all (not
- * yet backfilled, or genuinely never linked) is simply absent from the returned set - callers
- * treat "absent" the same as "incomplete".
+ * Which of these Mexico contracts have DocsCompletos = 1 in the legacy Cryo.dbo.Contrato table.
+ * Primary match: legacy.NetSuite = contract.name. Fallback, ONLY for a contract with no legacy
+ * row at all under that name (the backfill hasn't reached it yet - confirmed live this affects
+ * ~12% of legacy rows at any given time, skewed toward the most recent sales): legacy.Folio =
+ * contract.folio_sistema_anterior. Never used to override a real name-based match, even one that
+ * says incomplete - see the file-level comment above for why the folio fallback is safe. Returns
+ * the set of contracts' own netsuite_id considered complete.
  */
-async function getDocsCompletosNames(legacyDb: Knex, names: string[]): Promise<Set<string>> {
-  const uniqueNames = Array.from(new Set(names.filter((n): n is string => Boolean(n))));
-  const complete = new Set<string>();
+async function getCompleteDocsContractIds(
+  legacyDb: Knex,
+  contracts: Array<{ netsuite_id: string; name: string | null; folio_sistema_anterior: string | null }>,
+): Promise<Set<string>> {
+  const uniqueNames = Array.from(new Set(contracts.map((c) => c.name).filter((n): n is string => Boolean(n))));
+  // Every legacy NetSuite value with a row at all (regardless of DocsCompletos) - used to tell
+  // "no row yet" (falls back to folio) apart from "row exists, DocsCompletos is 0" (does not).
+  const namesWithLegacyRow = new Set<string>();
+  const namesComplete = new Set<string>();
 
   for (let i = 0; i < uniqueNames.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
     const chunk = uniqueNames.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
-    const rows = (await legacyDb('Cryo.dbo.Contrato').whereIn('NetSuite', chunk).andWhere('DocsCompletos', 1).select('NetSuite as name')) as Array<{
-      name: string;
-    }>;
-    for (const row of rows) complete.add(row.name);
+    const rows = (await legacyDb('Cryo.dbo.Contrato')
+      .whereIn('NetSuite', chunk)
+      .select('NetSuite as name', 'DocsCompletos as docsCompletos')) as Array<{ name: string; docsCompletos: boolean | number }>;
+    for (const row of rows) {
+      namesWithLegacyRow.add(row.name);
+      if (row.docsCompletos) namesComplete.add(row.name);
+    }
   }
 
+  const needsFolioFallback = (c: { name: string | null }) => !c.name || !namesWithLegacyRow.has(c.name);
+  const folios = Array.from(
+    new Set(
+      contracts
+        .filter((c) => needsFolioFallback(c) && c.folio_sistema_anterior)
+        .map((c) => c.folio_sistema_anterior as string),
+    ),
+  );
+  const foliosComplete = new Set<string>();
+  for (let i = 0; i < folios.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
+    const chunk = folios.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
+    const rows = (await legacyDb('Cryo.dbo.Contrato').whereIn('Folio', chunk).andWhere('DocsCompletos', 1).select('Folio as folio')) as Array<{
+      folio: string;
+    }>;
+    for (const row of rows) foliosComplete.add(row.folio);
+  }
+
+  const complete = new Set<string>();
+  for (const c of contracts) {
+    const viaName = Boolean(c.name && namesComplete.has(c.name));
+    const viaFolio = needsFolioFallback(c) && Boolean(c.folio_sistema_anterior && foliosComplete.has(c.folio_sistema_anterior));
+    if (viaName || viaFolio) complete.add(c.netsuite_id);
+  }
   return complete;
 }
 
@@ -404,9 +470,19 @@ export async function getCommissionsByVendedor(
   restrictSubsidiaries: Set<string> | null,
   subsidiary?: unknown,
   currency?: string,
+  /** Set only for a "self-vendedor" caller (see resolveSelfVendedorId) - narrows both display
+   * queries down to that one vendedor's own sales before anything else runs, so every downstream
+   * total/tier/group calculation naturally covers only them. null/undefined for every other
+   * caller (admins and anyone with the 'contracts' grant see every vendedor, as before). */
+  restrictVendedorId?: string | null,
 ): Promise<VendedorCommissionGroup[]> {
   const displayContractsQb = baseContractsQuery(db, month, year).orderBy('VEND.entityid').orderBy('C.custrecord_cryo_finicio');
   const displayOtrosQb = baseOtrosContratosQuery(db, month, year).orderBy('VEND.entityid').orderBy('O.custrecord_cryo_fecha_otroscontratos');
+
+  if (restrictVendedorId) {
+    displayContractsQb.andWhere('C.custrecord_cryo_vendedor', restrictVendedorId);
+    displayOtrosQb.andWhere('O.custrecord_cryo_vendedor_otroscontratos', restrictVendedorId);
+  }
 
   // Permission-based restriction (null = unrestricted/admin) and the caller's requested
   // subsidiary filter are independent, AND'd conditions - same convention as getPagedRows: the
@@ -454,13 +530,12 @@ export async function getCommissionsByVendedor(
   // commission once its paperwork is complete in the legacy system (see the file-level comment
   // above) - every other subsidiary has no equivalent record, so hasCompleteDocs is always true
   // for them. This never removes a contract from display - only from the money.
-  const mexicoContractNames = [...displayContracts, ...allVendorContracts]
-    .filter((c) => c.subsidiaria_id !== null && MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id))
-    .map((c) => c.name)
-    .filter((n): n is string => Boolean(n));
-  const docsCompletosNames = await getDocsCompletosNames(legacyDb, mexicoContractNames);
+  const mexicoContracts = [...displayContracts, ...allVendorContracts].filter(
+    (c) => c.subsidiaria_id !== null && MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id),
+  );
+  const completeDocsContractIds = await getCompleteDocsContractIds(legacyDb, mexicoContracts);
   const hasCompleteDocs = (c: ContractRow) =>
-    c.subsidiaria_id === null || !MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id) || (Boolean(c.name) && docsCompletosNames.has(c.name as string));
+    c.subsidiaria_id === null || !MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id) || completeDocsContractIds.has(c.netsuite_id);
 
   const displayContractIds = displayContracts.map((c) => c.netsuite_id);
   const allContractIds = Array.from(new Set([...allVendorContracts.map((c) => c.netsuite_id), ...displayContractIds]));

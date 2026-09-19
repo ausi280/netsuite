@@ -10,6 +10,8 @@ export function DashboardPage() {
   const { data, isLoading, isError, error, refetch } = useEntities();
   const entities = data?.entities;
   const canAccessHr = data?.canAccessHr;
+  const canAccessCommissions = data?.canAccessCommissions;
+  const canAccessProspectos = data?.canAccessProspectos;
 
   return (
     <AppShell>
@@ -25,8 +27,13 @@ export function DashboardPage() {
         />
       ) : null}
       {!isLoading && !isError && entities ? (
-        entities.length > 0 || canAccessHr ? (
-          <TileGrid entities={entities} canAccessHr={canAccessHr} />
+        entities.length > 0 || canAccessHr || canAccessCommissions || canAccessProspectos ? (
+          <TileGrid
+            entities={entities}
+            canAccessHr={canAccessHr}
+            canAccessCommissions={canAccessCommissions}
+            canAccessProspectos={canAccessProspectos}
+          />
         ) : (
           <EmptyState message="No hay entidades disponibles." />
         )

@@ -5,7 +5,14 @@ import { buildEntraAuthMiddleware } from './auth/entraAuth';
 import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
 import { exportEntityRows, getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
 import { listUsers, updateUserPermissions } from './adminController';
-import { getCommissionsReportRoute, getContractDossierRoute, getContractNetSuiteNotesRoute, getContractNotasRoute } from './contractReportsController';
+import {
+  getCommissionsExportRoute,
+  getCommissionsPdfRoute,
+  getCommissionsReportRoute,
+  getContractDossierRoute,
+  getContractNetSuiteNotesRoute,
+  getContractNotasRoute,
+} from './contractReportsController';
 import { listVendedorOptionsRoute, updateContractRoute } from './contractEditController';
 import {
   deleteCommissionTierRoute,
@@ -16,6 +23,8 @@ import {
 } from './commissionLevelsController';
 import { chargeDomiciledRoute } from './paymentsChargeController';
 import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
+import { exportProspectosRoute, listProspectosRoute } from './prospectosController';
+import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
 
 /**
  * Assembles the read-only reporting API router: Entra ID access-token auth
@@ -45,6 +54,8 @@ export function buildReportingRouter(): Router {
   router.patch('/admin/users/:oid', updateUserPermissions);
   // Must be registered before /:entity/:id, or that route would swallow "commissions"/"vendedores" as an id value.
   router.get('/contracts/commissions', getCommissionsReportRoute);
+  router.get('/contracts/commissions/export', getCommissionsExportRoute);
+  router.get('/contracts/commissions/pdf', getCommissionsPdfRoute);
   router.get('/contracts/vendedores', listVendedorOptionsRoute);
   router.get('/contracts/:id/dossier', getContractDossierRoute);
   router.get('/contracts/:id/notas', getContractNotasRoute);
@@ -67,6 +78,16 @@ export function buildReportingRouter(): Router {
   // registered ReportEntityKey).
   router.get('/hr/summary', getHrSummaryRoute);
   router.get('/hr/analytics', getHrAnalyticsRoute);
+  // Prospectos (legacy Cryo.dbo CRM lead funnel) is likewise bespoke, not a generic ENTITY_REGISTRY
+  // entity - must be registered before /:entity/export, or that route would swallow "prospectos" as
+  // an entity key and 404 (it isn't a registered ReportEntityKey).
+  router.get('/prospectos', listProspectosRoute);
+  router.get('/prospectos/export', exportProspectosRoute);
+  // Cuentas (per-contract account/collections detail, reached from the Partidas report) is
+  // likewise bespoke, not a generic ENTITY_REGISTRY entity - must be registered before
+  // /:entity/export, or that route would swallow "cuentas" as an entity key and 404.
+  router.get('/cuentas', listCuentasRoute);
+  router.get('/cuentas/export', exportCuentasRoute);
   // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics"/"export" as an id value.
   router.get('/:entity/subsidiaries', listSubsidiaryOptions);
   router.get('/:entity/analytics', getPartidaAnalytics);

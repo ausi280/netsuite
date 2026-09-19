@@ -3,7 +3,9 @@
 // rather than shared, since api/ and web/ are separate packages with no shared-code path today.
 // Only the columns actually exported need a label; anything else is passed through as-is.
 
-const SUBSIDIARY_LABELS: Record<string, string> = {
+// Exported for commissionsExport.ts - the commissions CSV resolves subsidiaria_id/moneda to the
+// same labels, but isn't a LOOKUP_COLUMNS entity export so it needs the maps directly.
+export const SUBSIDIARY_LABELS: Record<string, string> = {
   '20': 'Biocordcell Argentina',
   '7': 'Células de Cordón Umbilical',
   '5': 'Cryo-Cell de México',
@@ -12,7 +14,7 @@ const SUBSIDIARY_LABELS: Record<string, string> = {
   '25': 'Lazo de Vida',
 };
 
-const CURRENCY_LABELS: Record<string, string> = {
+export const CURRENCY_LABELS: Record<string, string> = {
   '1': 'MXN',
   '2': 'USD',
   '4': 'EUR',

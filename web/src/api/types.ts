@@ -19,10 +19,13 @@ export type ReportEntityKey =
 
 /**
  * Every key grantable via the per-user allowedEntities permission list: every ReportEntityKey
- * (each with a generic list/detail/CSV table view) plus 'hr', which is gated the same way but has
- * no generic table of its own (see HrDimension below).
+ * (each with a generic list/detail/CSV table view) plus 'hr' and 'prospectos', which are gated the
+ * same way but have no generic table of their own (see HrDimension / ProspectoRow below).
+ * 'commissions' is different again: not a standalone grant, but an ADDITIONAL gate on top of
+ * 'contracts' - 'contracts' alone no longer shows every vendedor's commissions, only once
+ * 'commissions' is granted too (see EntitiesResponse.canAccessCommissions below).
  */
-export type PermissionKey = ReportEntityKey | 'hr';
+export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -78,6 +81,12 @@ export interface EntitiesResponse {
   data: EntitySummary[];
   isAdmin: boolean;
   canAccessHr: boolean;
+  /** True for isAdmin/'contracts'-granted callers, but ALSO for a "self-vendedor" - someone with
+   * neither grant whose Entra email matches a netsuite_employees row that has sold at least one
+   * contract/otros-contrato as vendedor. That second group only ever sees their own commissions
+   * (enforced server-side), never the full contracts entity. */
+  canAccessCommissions: boolean;
+  canAccessProspectos: boolean;
 }
 
 // HR Report - backed by the Peopleforce/Sesame HR data warehouse (DwhCryoholdcoLatam_Prod), a
@@ -308,6 +317,9 @@ export interface CommissionsResponse {
   data: VendedorCommissionGroup[];
   month: number;
   year: number;
+  /** True when this response is scoped to one "self-vendedor" caller's own sales (see
+   * EntitiesResponse.canAccessCommissions) rather than every vendedor. */
+  isSelfVendedor: boolean;
 }
 
 /** A collection-call note from the pre-NetSuite CryoCell system (table NotasCobranza). */
@@ -360,6 +372,119 @@ export interface PaymentRow {
   contract_name: string | null;
   /** The linked contract's own subsidiary id (custrecord_cryo_subsidiariacontrato) - null if the contract couldn't be resolved. */
   subsidiary_id: string | null;
+}
+
+/**
+ * One row of the "Prospectos" CRM lead-funnel report - reproduces the sales team's own
+ * hand-written SSMS query against the legacy Cryo.dbo database (Prospecto joined to its
+ * Lead/Etapa/Ciudad/TipoCanal/Canal/Vendedor/Contrato), filtered by a FechaCaptura date range.
+ * See api/src-ts/reporting/prospectosRepository.ts.
+ */
+export interface ProspectoRow {
+  madre_completo: string | null;
+  padre_completo: string | null;
+  fecha_probable: string | null;
+  telefonos: string | null;
+  ciudad: string | null;
+  tipo_canal: string | null;
+  canal: string | null;
+  estatus: string | null;
+  id_prospecto: number;
+  fecha_captura: string | null;
+  mes: number | null;
+  etapa: string | null;
+  motivo: string | null;
+  activo: boolean | null;
+  vendedor: string | null;
+  id_empresa: number | null;
+  tareas: number;
+  /** ':D' when this prospecto converted to a contract, ':(' otherwise. */
+  contrato: string;
+  fecha_cierre_tarea: string | null;
+  nota_tarea: string | null;
+  fecha_venta: string | null;
+  folio_contrato: string | null;
+  mes_cancelacion: number | null;
+}
+
+export interface ProspectosResponse {
+  success: true;
+  data: ProspectoRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+/**
+ * One row of the "Cuentas" per-contract account/collections detail sheet, reached from the
+ * Partidas report. Built from NetSuite (contract/titular/second-titular/child/dueño/services) and,
+ * for contracts with a legacy folio match, the pre-NetSuite Cryo.dbo system (adeudo, estatus,
+ * zona, metal, teléfonos, etc. - null when no legacy record exists, e.g. Argentina/Peru contracts
+ * or ones not yet backfilled). See api/src-ts/reporting/cuentasRepository.ts.
+ *
+ * Fields typed as always-null here (titular2_telefono, interes, referencia_cie, referencia_sap,
+ * fp_scu/tcu/dx/adn, super_promo, link_pago, pagado_hasta_scu/tcu/dx/adn) have NO confirmed data
+ * source anywhere in NetSuite or Cryo.dbo after checking both schemas - see
+ * CuentasResponse.unavailableColumns, which the page surfaces as a note instead of silently
+ * rendering blank cells that look like real (missing) data.
+ */
+export interface CuentaRow {
+  netsuite_id: string;
+  contrato: string | null;
+  folio_sistema_anterior: string | null;
+  subsidiaria_id: string | null;
+  titular_nombre: string | null;
+  titular_email: string | null;
+  titular_telefono: string | null;
+  fecha_nacimiento_confirmada: string | null;
+  mes_nacimiento: number | null;
+  titular2_nombre: string | null;
+  titular2_email: string | null;
+  titular2_telefono: null;
+  numero_anos: number | null;
+  adeudo_total: number | null;
+  interes: null;
+  costo_anualidad: number | null;
+  nombre_hijo: string | null;
+  referencia_cie: null;
+  referencia_sap: null;
+  zona: string | null;
+  fp_scu: null;
+  fp_tcu: null;
+  fp_dx: null;
+  fp_adn: null;
+  pago_automatico: boolean | null;
+  estatus_cliente: string | null;
+  estatus_cobranza: string | null;
+  metal: string | null;
+  tel_casa1: string | null;
+  tel_casa2: string | null;
+  cel_mama: string | null;
+  cel_papa: string | null;
+  tel_oficina_madre: string | null;
+  tel_oficina_padre: string | null;
+  tel_pariente1: string | null;
+  tel_pariente2: string | null;
+  super_promo: null;
+  link_pago: null;
+  token_sat: string | null;
+  pagado_hasta_scu: null;
+  pagado_hasta_tcu: null;
+  pagado_hasta_dx: null;
+  pagado_hasta_adn: null;
+  dueno: string | null;
+  no_molestar: boolean | null;
+}
+
+export interface CuentasResponse {
+  success: true;
+  data: CuentaRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  unavailableColumns: Array<{ key: keyof CuentaRow; label: string }>;
 }
 
 export interface ChargeDomiciledRequest {

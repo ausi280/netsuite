@@ -5,7 +5,10 @@ import { bootstrap } from '../bootstrap';
 import { paramString } from './controller';
 import { getEntityConfig } from './entityRegistry';
 import { getContractDossier } from './contractDossierRepository';
-import { getCommissionsByVendedor } from './commissionsRepository';
+import { getCommissionsByVendedor, resolveSelfVendedorId } from './commissionsRepository';
+import type { VendedorCommissionGroup } from './commissionsRepository';
+import { buildCommissionsCsv } from './commissionsExport';
+import { generateCommissionsPdf } from './commissionsPdf';
 import { getNotasCobranza } from './notasCobranzaRepository';
 import { getNetSuiteNotesForContract } from './netsuiteNotesRepository';
 import { applySubsidiaryRestriction } from './reportingRepository';
@@ -22,6 +25,18 @@ export function isContractsAllowed(permissions?: UserPermissions): boolean {
 
 export function subsidiaryRestrictionFor(permissions: UserPermissions): Set<string> | null {
   return permissions.isAdmin ? null : permissions.allowedSubsidiaries;
+}
+
+/**
+ * Whether this caller sees EVERY vendedor's commissions (as opposed to only their own, via the
+ * separate self-vendedor path below). Having 'contracts' used to be sufficient on its own; now
+ * 'commissions' is a second, additional gate on top of it - a user with 'contracts' but not
+ * 'commissions' no longer sees the full grid (they fall through to the self-vendedor check
+ * instead, same as anyone else without full access). A 'commissions' grant with no 'contracts'
+ * does nothing - see PermissionKey in types.ts.
+ */
+function isCommissionsFullAccessAllowed(permissions?: UserPermissions): boolean {
+  return Boolean(permissions?.isAdmin || (permissions?.allowedEntities.has('contracts') && permissions?.allowedEntities.has('commissions')));
 }
 
 /** GET /api/reports/contracts/:id/dossier — rich single-contract view (resolved names, services, annuities). */
@@ -47,24 +62,100 @@ function parsePositiveInt(value: unknown): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-/** GET /api/reports/contracts/commissions?month=1-12&year=YYYY — new-contract salesperson commissions grid. */
-export async function getCommissionsReportRoute(req: Request, res: Response): Promise<void> {
+interface CommissionsDataResult {
+  ok: true;
+  data: VendedorCommissionGroup[];
+  month: number;
+  year: number;
+  isSelfVendedor: boolean;
+}
+
+interface CommissionsDataError {
+  ok: false;
+  status: number;
+  message: string;
+}
+
+/**
+ * Shared auth + query-parsing + fetch behind getCommissionsReportRoute, getCommissionsExportRoute
+ * and getCommissionsPdfRoute - every one of them must see exactly the same rows, gated the same
+ * two ways: full access (isCommissionsFullAccessAllowed - 'contracts' AND 'commissions', or admin
+ * - sees every vendedor, subsidiary-restricted as usual), or a "self-vendedor" - a caller without
+ * full access whose Entra email matches a netsuite_employees row that has actually sold something
+ * (resolveSelfVendedorId) - who sees ONLY their own commissions, unrestricted by subsidiary (a
+ * self-vendedor may hold no subsidiary grants at all, so applying that restriction here would
+ * zero out their own results instead of actually narrowing anything).
+ */
+async function loadCommissionsData(req: Request): Promise<CommissionsDataResult | CommissionsDataError> {
   const permissions = req.permissions;
-  if (!isContractsAllowed(permissions)) {
-    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
-    return;
+  const fullAccess = isCommissionsFullAccessAllowed(permissions);
+  const selfVendedorId = fullAccess ? null : await resolveSelfVendedorId(knex, req.auditUser?.username ?? null);
+
+  if (!fullAccess && !selfVendedorId) {
+    return { ok: false, status: 403, message: 'No tienes permiso para ver este reporte.' };
   }
 
   const month = parsePositiveInt(req.query.month);
   const year = parsePositiveInt(req.query.year);
   if (!month || month > 12 || !year || year < 2000 || year > 2100) {
-    res.status(400).json({ success: false, message: 'Provide a valid ?month=1-12 and ?year=YYYY.' });
-    return;
+    return { ok: false, status: 400, message: 'Provide a valid ?month=1-12 and ?year=YYYY.' };
   }
 
   const currency = typeof req.query.currency === 'string' ? req.query.currency.trim() : undefined;
-  const data = await getCommissionsByVendedor(knex, getLegacyDb(), month, year, subsidiaryRestrictionFor(permissions!), req.query.subsidiary, currency);
-  res.status(200).json({ success: true, data, month, year });
+  const restrictSubsidiaries = fullAccess ? subsidiaryRestrictionFor(permissions!) : null;
+  const data = await getCommissionsByVendedor(knex, getLegacyDb(), month, year, restrictSubsidiaries, req.query.subsidiary, currency, selfVendedorId);
+  return { ok: true, data, month, year, isSelfVendedor: Boolean(selfVendedorId) };
+}
+
+/** GET /api/reports/contracts/commissions?month=1-12&year=YYYY — new-contract salesperson commissions grid. */
+export async function getCommissionsReportRoute(req: Request, res: Response): Promise<void> {
+  const result = await loadCommissionsData(req);
+  if (!result.ok) {
+    res.status(result.status).json({ success: false, message: result.message });
+    return;
+  }
+
+  res.status(200).json({ success: true, data: result.data, month: result.month, year: result.year, isSelfVendedor: result.isSelfVendedor });
+}
+
+/** GET /api/reports/contracts/commissions/export?month=1-12&year=YYYY — the same commissions grid
+ * as getCommissionsReportRoute, flattened to one CSV row per contract/otros-contrato instead of
+ * nested JSON (see commissionsExport.ts). Same auth/scoping - a self-vendedor exports only their
+ * own rows. */
+export async function getCommissionsExportRoute(req: Request, res: Response): Promise<void> {
+  const result = await loadCommissionsData(req);
+  if (!result.ok) {
+    res.status(result.status).json({ success: false, message: result.message });
+    return;
+  }
+
+  const filename = `comisiones-${result.year}-${String(result.month).padStart(2, '0')}.csv`;
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.status(200).send(buildCommissionsCsv(result.data));
+}
+
+/** GET /api/reports/contracts/commissions/pdf?month=1-12&year=YYYY — "Estado de cuenta de
+ * Comisiones" PDF, one page per vendedor (see commissionsPdf.ts). Same auth/scoping as
+ * getCommissionsReportRoute - a self-vendedor's PDF has exactly their own single page, since
+ * loadCommissionsData already narrowed `result.data` down to just them. */
+export async function getCommissionsPdfRoute(req: Request, res: Response): Promise<void> {
+  const result = await loadCommissionsData(req);
+  if (!result.ok) {
+    res.status(result.status).json({ success: false, message: result.message });
+    return;
+  }
+
+  if (result.data.length === 0) {
+    res.status(404).json({ success: false, message: 'No hay comisiones para este periodo.' });
+    return;
+  }
+
+  const filename = `estado-cuenta-comisiones-${result.year}-${String(result.month).padStart(2, '0')}.pdf`;
+  const pdf = await generateCommissionsPdf(result.data, result.month, result.year);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.status(200).send(pdf);
 }
 
 /**

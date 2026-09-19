@@ -75,6 +75,22 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
               <input type="checkbox" checked={entities.includes('hr')} onChange={() => setEntities((prev) => toggle(prev, 'hr'))} />
               HR Report
             </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
+                checked={entities.includes('prospectos')}
+                onChange={() => setEntities((prev) => toggle(prev, 'prospectos'))}
+              />
+              Prospectos
+            </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
+                checked={entities.includes('commissions')}
+                onChange={() => setEntities((prev) => toggle(prev, 'commissions'))}
+              />
+              Comisiones (todos los vendedores - requiere Contratos)
+            </label>
           </div>
         </div>
         <div>

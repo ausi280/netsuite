@@ -7,26 +7,14 @@
   flex-wrap: wrap;
 }
 
-.levelsLink {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--color-primary);
+.title {
+  font-size: 24px;
+}
+
+.subtitle {
   font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.levelsLink:hover {
-  text-decoration: underline;
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  color: var(--color-secondary);
+  margin-top: 4px;
 }
 
 .actionButton {
@@ -54,44 +42,40 @@
   cursor: default;
 }
 
-.exportError {
-  color: var(--color-danger);
-  font-size: 13px;
-  margin-bottom: 16px;
-}
-
-.title {
-  font-size: 24px;
-}
-
-.subtitle {
-  font-size: 14px;
-  color: var(--color-secondary);
-  margin-top: 4px;
-}
-
-.filters {
+.dateFilters {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 16px;
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
-.select {
-  padding: 10px 14px;
+.dateLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.dateInput {
+  padding: 9px 12px;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-neutral-200);
   background: var(--color-white);
   font-size: 14px;
   color: var(--color-neutral-900);
-  min-width: 140px;
-  transition: border-color var(--duration-fast) var(--ease-fluent);
 }
 
-.select:focus {
+.dateInput:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+
+.exportError {
+  color: var(--color-danger);
+  font-size: 13px;
+  margin-bottom: 16px;
 }
 
 .summaryBar {
@@ -124,14 +108,18 @@
   color: var(--color-secondary);
 }
 
-.summaryDivider {
-  width: 1px;
-  align-self: stretch;
-  background: var(--color-neutral-100);
+.note {
+  max-width: 260px;
+  white-space: normal;
+  font-size: 13px;
+  color: var(--color-secondary);
 }
 
-.groups {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.converted {
+  color: var(--status-good);
+  font-weight: 700;
+}
+
+.notConverted {
+  color: var(--color-secondary);
 }

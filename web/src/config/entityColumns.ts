@@ -1,6 +1,15 @@
 import type { ReportEntityKey } from '../api/types';
 
-export type ColumnFormat = 'currency' | 'date' | 'datetime' | 'boolean' | 'boolean-inverted' | 'subsidiary' | 'partida-status' | 'vendor-transaction-type';
+export type ColumnFormat =
+  | 'currency'
+  | 'date'
+  | 'datetime'
+  | 'boolean'
+  | 'boolean-inverted'
+  | 'subsidiary'
+  | 'partida-status'
+  | 'contract-status'
+  | 'vendor-transaction-type';
 
 export interface EntityColumn {
   /** Raw column key as returned by the API. */
@@ -38,7 +47,7 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'name', header: 'Nombre' },
       { key: 'custrecord_cryo_numerocontrato', header: 'No. Contrato' },
       { key: 'custrecord_cryo_titularcontrato', header: 'Titular' },
-      { key: 'custrecord_cryo_estatus', header: 'Estatus' },
+      { key: 'custrecord_cryo_estatus', header: 'Estatus', format: 'contract-status' },
       { key: 'custrecord_cryo_saldo_inicial', header: 'Saldo Inicial', format: 'currency', currencyColumn: 'custrecord_cryo_moneda' },
       { key: 'custrecord_cryo_finicio', header: 'Fecha Inicio', format: 'date' },
       { key: 'custrecord_cryo_subsidiariacontrato', header: 'Subsidiaria', format: 'subsidiary' },

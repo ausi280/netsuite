@@ -6,9 +6,11 @@ import { PermissionsRepository } from './permissionsRepository';
 import type { PermissionKey } from './types';
 
 const permissionsRepository = new PermissionsRepository(knex);
-// 'hr' is grantable like any other entity but has no ENTITY_REGISTRY entry of its own (see
-// hrController.ts / PermissionKey) - added on top of the generic table-backed keys.
-const VALID_ENTITY_KEYS = new Set<string>([...listEntityConfigs().map((c) => c.key), 'hr']);
+// 'hr' and 'prospectos' are grantable like any other entity but have no ENTITY_REGISTRY entry of
+// their own (see hrController.ts/prospectosController.ts / PermissionKey) - added on top of the
+// generic table-backed keys. 'commissions' is likewise not an ENTITY_REGISTRY entity - it's an
+// additional gate on top of 'contracts' (see PermissionKey in types.ts).
+const VALID_ENTITY_KEYS = new Set<string>([...listEntityConfigs().map((c) => c.key), 'hr', 'prospectos', 'commissions']);
 
 /** Every admin route here requires isAdmin; a 403 is the correct response for everyone else - these endpoints manage OTHER people's access. */
 function requireAdmin(req: Request, res: Response): boolean {

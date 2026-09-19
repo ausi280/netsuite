@@ -9,6 +9,7 @@ import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
 import { entityColumns, getIdColumnKey, getSubsidiaryColumnKey } from '../config/entityColumns';
 import { PARTIDA_STATUS_LABELS } from '../config/labels';
+import { useEntities } from '../hooks/useEntities';
 import { useEntityRows } from '../hooks/useEntityRows';
 import { useSubsidiaryOptions } from '../hooks/useSubsidiaryOptions';
 import { fetchEntityExportCsv } from '../api/reportsApi';
@@ -61,6 +62,11 @@ export function ReportPage() {
   } = useEntityRows(entityKey, { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId }, { enabled: isValid });
 
   const { data: subsidiaryOptions } = useSubsidiaryOptions(entityKey, { enabled: isValid && hasSubsidiaryFilter });
+  // 'contracts' access alone no longer implies commissions access - canAccessCommissions is the
+  // authoritative "contracts AND commissions (or self-vendedor)" check (see resolveCanAccessCommissions
+  // in controller.ts), so the "Ver comisiones" link below only shows when it's actually reachable.
+  const { data: entitiesResult } = useEntities();
+  const canAccessCommissions = Boolean(entitiesResult?.canAccessCommissions);
   const { getAccessToken } = useApiToken();
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -167,7 +173,17 @@ export function ReportPage() {
             Ver gráficos
           </Link>
         ) : null}
-        {entityKey === 'contracts' ? (
+        {entityKey === 'partidas' ? (
+          <Link to="/reports/cuentas" className={styles.graphsLink}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+              <line x1="8" y1="15" x2="12" y2="15" />
+            </svg>
+            Ver cuentas
+          </Link>
+        ) : null}
+        {entityKey === 'contracts' && canAccessCommissions ? (
           <Link to="/reports/contracts/commissions" className={styles.graphsLink}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <line x1="12" y1="1" x2="12" y2="23" />

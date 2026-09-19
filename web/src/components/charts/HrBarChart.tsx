@@ -19,7 +19,7 @@ interface HrBarChartProps {
  * concept to thread through a shared generic.
  */
 export function HrBarChart({ rows, metricLabel, dimension, formatValue }: HrBarChartProps) {
-  const hasStatusColors = Boolean(dimension.keyColor);
+  const showLegend = Boolean(dimension.showLegend);
 
   return (
     <>
@@ -52,8 +52,8 @@ export function HrBarChart({ rows, metricLabel, dimension, formatValue }: HrBarC
               }
             />
             <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={28} animationDuration={450}>
-              {rows.map((row) => (
-                <Cell key={row.key} fill={dimension.keyColor?.(row.key) ?? 'var(--color-primary)'} />
+              {rows.map((row, index) => (
+                <Cell key={row.key} fill={dimension.keyColor?.(row.key, index) ?? 'var(--color-primary)'} />
               ))}
               <LabelList
                 dataKey="count"
@@ -65,11 +65,11 @@ export function HrBarChart({ rows, metricLabel, dimension, formatValue }: HrBarC
           </BarChart>
         </ResponsiveContainer>
       </div>
-      {hasStatusColors ? (
+      {showLegend ? (
         <div className={styles.legendRow}>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <span className={styles.legendItem} key={row.key}>
-              <span className={styles.legendSwatch} style={{ backgroundColor: dimension.keyColor?.(row.key) }} aria-hidden="true" />
+              <span className={styles.legendSwatch} style={{ backgroundColor: dimension.keyColor?.(row.key, index) }} aria-hidden="true" />
               {dimension.keyLabel(row.key)}
             </span>
           ))}

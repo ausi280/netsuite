@@ -24,6 +24,10 @@ import type {
   PartidaBreakdownRow,
   PartidaDimension,
   PaymentRow,
+  ProspectoRow,
+  ProspectosResponse,
+  CuentaRow,
+  CuentasResponse,
   ReportEntityKey,
   ReportRecord,
   SortDir,
@@ -37,6 +41,8 @@ export interface EntitiesResult {
   entities: EntitySummary[];
   isAdmin: boolean;
   canAccessHr: boolean;
+  canAccessCommissions: boolean;
+  canAccessProspectos: boolean;
 }
 
 export interface EntityRowsParams {
@@ -55,7 +61,13 @@ export interface EntityRowsParams {
 
 export async function fetchEntities(token: string | null): Promise<EntitiesResult> {
   const result = await apiFetch<EntitiesResponse>('/reports/entities', { token });
-  return { entities: result.data, isAdmin: result.isAdmin, canAccessHr: result.canAccessHr };
+  return {
+    entities: result.data,
+    isAdmin: result.isAdmin,
+    canAccessHr: result.canAccessHr,
+    canAccessCommissions: result.canAccessCommissions,
+    canAccessProspectos: result.canAccessProspectos,
+  };
 }
 
 export async function fetchEntityRows(
@@ -174,6 +186,45 @@ export async function updateContract(token: string | null, id: string, input: Up
   });
 }
 
+export interface CommissionsResult {
+  groups: VendedorCommissionGroup[];
+  /** True when the caller is a "self-vendedor" (see EntitiesResult.canAccessCommissions) - the
+   * response is scoped to their own sales only, never every vendedor's. */
+  isSelfVendedor: boolean;
+}
+
+/** CSV of the same commissions grid fetchCommissions returns, flattened to one row per
+ * contract/otros-contrato (see api/src-ts/reporting/commissionsExport.ts) - same auth/scoping, so
+ * a self-vendedor's export contains only their own rows too. */
+export async function fetchCommissionsExportCsv(
+  token: string | null,
+  month: number,
+  year: number,
+  subsidiary?: string[],
+  currency?: string
+): Promise<Blob> {
+  const query = new URLSearchParams({ month: String(month), year: String(year) });
+  if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
+  if (currency) query.set('currency', currency);
+  return apiFetchBlob(`/reports/contracts/commissions/export?${query.toString()}`, { token });
+}
+
+/** "Estado de cuenta de Comisiones" PDF for the same commissions grid, one page per vendedor (see
+ * api/src-ts/reporting/commissionsPdf.ts) - same auth/scoping, so a self-vendedor's PDF has
+ * exactly their own single page. */
+export async function fetchCommissionsPdf(
+  token: string | null,
+  month: number,
+  year: number,
+  subsidiary?: string[],
+  currency?: string
+): Promise<Blob> {
+  const query = new URLSearchParams({ month: String(month), year: String(year) });
+  if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
+  if (currency) query.set('currency', currency);
+  return apiFetchBlob(`/reports/contracts/commissions/pdf?${query.toString()}`, { token });
+}
+
 /** New-contract salesperson commissions grid for one calendar month, optionally narrowed to one or
  * more subsidiaries and/or a currency. */
 export async function fetchCommissions(
@@ -182,12 +233,12 @@ export async function fetchCommissions(
   year: number,
   subsidiary?: string[],
   currency?: string
-): Promise<VendedorCommissionGroup[]> {
+): Promise<CommissionsResult> {
   const query = new URLSearchParams({ month: String(month), year: String(year) });
   if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
   if (currency) query.set('currency', currency);
   const result = await apiFetch<CommissionsResponse>(`/reports/contracts/commissions?${query.toString()}`, { token });
-  return result.data;
+  return { groups: result.data, isSelfVendedor: result.isSelfVendedor };
 }
 
 /** Collection-call notes from the pre-NetSuite CryoCell system (NotasCobranza), keyed off the
@@ -301,4 +352,83 @@ export async function fetchEntityRecord(
     { token }
   );
   return result.data;
+}
+
+export interface ProspectosParams {
+  dateFrom: string;
+  dateTo: string;
+  page: number;
+  pageSize: number;
+}
+
+export interface ProspectosResult {
+  data: ProspectoRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+/** "Prospectos" CRM lead-funnel report - see api/src-ts/reporting/prospectosRepository.ts. */
+export async function fetchProspectos(token: string | null, params: ProspectosParams): Promise<ProspectosResult> {
+  const query = new URLSearchParams({
+    dateFrom: params.dateFrom,
+    dateTo: params.dateTo,
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+  });
+  const result = await apiFetch<ProspectosResponse>(`/reports/prospectos?${query.toString()}`, { token });
+  return { data: result.data, page: result.page, pageSize: result.pageSize, total: result.total, totalPages: result.totalPages };
+}
+
+/** CSV of every prospecto captured in the date range (unpaginated - the whole filtered set), same convention as fetchEntityExportCsv. */
+export async function fetchProspectosExportCsv(token: string | null, dateFrom: string, dateTo: string): Promise<Blob> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  return apiFetchBlob(`/reports/prospectos/export?${query.toString()}`, { token });
+}
+
+export interface CuentasParams {
+  page: number;
+  pageSize: number;
+  search: string;
+  subsidiary: string[];
+}
+
+export interface CuentasResult {
+  data: CuentaRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  unavailableColumns: Array<{ key: keyof CuentaRow; label: string }>;
+}
+
+function buildCuentasQuery(params: Pick<CuentasParams, 'search' | 'subsidiary'> & Partial<Pick<CuentasParams, 'page' | 'pageSize'>>): URLSearchParams {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.pageSize) query.set('pageSize', String(params.pageSize));
+  if (params.search) query.set('search', params.search);
+  if (params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
+  return query;
+}
+
+/** "Cuentas" per-contract account/collections detail sheet, reached from the Partidas report -
+ * see api/src-ts/reporting/cuentasRepository.ts. */
+export async function fetchCuentas(token: string | null, params: CuentasParams): Promise<CuentasResult> {
+  const query = buildCuentasQuery(params);
+  const result = await apiFetch<CuentasResponse>(`/reports/cuentas?${query.toString()}`, { token });
+  return {
+    data: result.data,
+    page: result.page,
+    pageSize: result.pageSize,
+    total: result.total,
+    totalPages: result.totalPages,
+    unavailableColumns: result.unavailableColumns,
+  };
+}
+
+/** CSV of every cuenta matching the current search/subsidiary filters (unpaginated - the whole filtered set). */
+export async function fetchCuentasExportCsv(token: string | null, params: Pick<CuentasParams, 'search' | 'subsidiary'>): Promise<Blob> {
+  const query = buildCuentasQuery(params);
+  return apiFetchBlob(`/reports/cuentas/export?${query.toString()}`, { token });
 }

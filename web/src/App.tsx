@@ -10,6 +10,8 @@ import { ReportPage } from './pages/ReportPage';
 import { ReportDetailPage } from './pages/ReportDetailPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
 import { CommissionsPage } from './pages/CommissionsPage';
+import { ProspectosPage } from './pages/ProspectosPage';
+import { CuentasPage } from './pages/CuentasPage';
 import { CommissionLevelsPage } from './pages/CommissionLevelsPage';
 import { PaymentsHistoryPage } from './pages/PaymentsHistoryPage';
 import { NotFoundPage } from './pages/NotFoundPage';
@@ -73,6 +75,26 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CommissionsPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/cuentas"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <CuentasPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/prospectos"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <ProspectosPage />
               </PageTransition>
             </RequireAuth>
           }
