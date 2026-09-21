@@ -81,12 +81,12 @@ export function CuentasPage() {
     { key: 'titular2_nombre', header: 'Titular 2', render: (r) => r.titular2_nombre || '—' },
     { key: 'titular2_email', header: 'Correo Electrónico (Titular 2)', render: (r) => r.titular2_email || '—' },
     { key: 'titular2_telefono', header: 'Teléfono celular (Titular 2)', render: () => 'N/D' },
-    { key: 'numero_anos', header: 'Numero de años', render: (r) => (r.numero_anos !== null ? String(r.numero_anos) : '—') },
+    { key: 'numero_anos', header: 'Numero de años', render: () => 'N/D' },
     { key: 'adeudo_total', header: 'Adeudo total', render: (r) => (r.adeudo_total !== null ? formatCurrency(r.adeudo_total, null) : '—') },
     { key: 'interes', header: 'Interés', render: () => 'N/D' },
     { key: 'costo_anualidad', header: 'Costo de anualidad', render: (r) => (r.costo_anualidad !== null ? formatCurrency(r.costo_anualidad, null) : '—') },
     { key: 'nombre_hijo', header: 'Nombre Hijo', render: (r) => r.nombre_hijo || '—' },
-    { key: 'referencia_cie', header: 'Referencia CIE NUEVA', render: () => 'N/D' },
+    { key: 'referencia_cie', header: 'Referencia CIE NUEVA', render: (r) => r.referencia_cie || '—' },
     { key: 'referencia_sap', header: 'Referencia SAP', render: () => 'N/D' },
     { key: 'zona', header: 'Zona (Franquicia/Asociado)', render: (r) => r.zona || '—' },
     { key: 'mes_nacimiento', header: 'Mes Nacimiento', render: (r) => (r.mes_nacimiento !== null ? String(r.mes_nacimiento) : '—') },
@@ -98,21 +98,21 @@ export function CuentasPage() {
     { key: 'estatus_cliente', header: 'Estatus Cliente', render: (r) => r.estatus_cliente || '—' },
     { key: 'estatus_cobranza', header: 'Estatus Cobranza', render: (r) => r.estatus_cobranza || '—' },
     { key: 'metal', header: 'Metal', render: (r) => r.metal || '—' },
-    { key: 'tel_casa1', header: 'Tel Casa 1', render: (r) => r.tel_casa1 || '—' },
-    { key: 'tel_casa2', header: 'Tel Casa 2', render: (r) => r.tel_casa2 || '—' },
-    { key: 'cel_mama', header: 'Cel Mamá', render: (r) => r.cel_mama || '—' },
-    { key: 'cel_papa', header: 'Cel Papá', render: (r) => r.cel_papa || '—' },
-    { key: 'tel_oficina_madre', header: 'Tel Oficina Madre', render: (r) => r.tel_oficina_madre || '—' },
-    { key: 'tel_oficina_padre', header: 'Tel Oficina Padre', render: (r) => r.tel_oficina_padre || '—' },
-    { key: 'tel_pariente1', header: 'Tel Pariente 1', render: (r) => r.tel_pariente1 || '—' },
-    { key: 'tel_pariente2', header: 'Tel Pariente 2', render: (r) => r.tel_pariente2 || '—' },
+    { key: 'tel_casa1', header: 'Tel Casa 1', render: () => 'N/D' },
+    { key: 'tel_casa2', header: 'Tel Casa 2', render: () => 'N/D' },
+    { key: 'cel_mama', header: 'Cel Mamá', render: () => 'N/D' },
+    { key: 'cel_papa', header: 'Cel Papá', render: () => 'N/D' },
+    { key: 'tel_oficina_madre', header: 'Tel Oficina Madre', render: () => 'N/D' },
+    { key: 'tel_oficina_padre', header: 'Tel Oficina Padre', render: () => 'N/D' },
+    { key: 'tel_pariente1', header: 'Tel Pariente 1', render: () => 'N/D' },
+    { key: 'tel_pariente2', header: 'Tel Pariente 2', render: () => 'N/D' },
     { key: 'super_promo', header: 'SuperPromo', render: () => 'N/D' },
     { key: 'link_pago', header: 'Link Pago', render: () => 'N/D' },
-    { key: 'token_sat', header: 'TokenSAT', render: (r) => <span className={styles.note}>{r.token_sat || '—'}</span> },
-    { key: 'pagado_hasta_scu', header: 'Pagado Hasta SCU', render: () => 'N/D' },
-    { key: 'pagado_hasta_tcu', header: 'Pagado Hasta TCU', render: () => 'N/D' },
+    { key: 'token_sat', header: 'TokenSAT', render: () => 'N/D' },
+    { key: 'pagado_hasta_scu', header: 'Pagado Hasta SCU', render: (r) => formatDate(r.pagado_hasta_scu) },
+    { key: 'pagado_hasta_tcu', header: 'Pagado Hasta TCU', render: (r) => formatDate(r.pagado_hasta_tcu) },
     { key: 'pagado_hasta_dx', header: 'Pagado Hasta DX', render: () => 'N/D' },
-    { key: 'pagado_hasta_adn', header: 'Pagado Hasta ADN', render: () => 'N/D' },
+    { key: 'pagado_hasta_adn', header: 'Pagado Hasta ADN', render: (r) => formatDate(r.pagado_hasta_adn) },
     { key: 'dueno', header: 'Dueño', render: (r) => r.dueno || '—' },
     { key: 'no_molestar', header: 'No Molestar', render: (r) => yesNo(r.no_molestar) },
   ];
@@ -129,7 +129,6 @@ export function CuentasPage() {
       {data && data.unavailableColumns.length > 0 ? (
         <div className={styles.unavailableBanner}>
           <strong>Columnas sin fuente de datos confirmada (se muestran como "N/D"):</strong> {data.unavailableColumns.map((c) => c.label).join(', ')}.
-          Avísame si sabes de dónde extraerlas y las agrego.
         </div>
       ) : null}
       {exportError ? <p className={styles.subtitle}>{exportError}</p> : null}

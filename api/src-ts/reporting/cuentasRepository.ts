@@ -4,20 +4,92 @@ import type { Paginated } from './types';
 
 /**
  * "Cuentas" - a per-contract account/collections detail sheet the sales/collections team already
- * keeps by hand, reproduced here from two sources: NetSuite (netsuite_contracts joined to the
- * titular, the second titular/"padre" and the child - all family_members - plus the assigned
- * "dueño" employee and a services-costoanualidad rollup) and, ONLY for contracts with a legacy
- * folio match, the pre-NetSuite Cryo.dbo system (TotalAdeudo, EstatusCliente/Cobranza, Zona,
- * Metal, PagoAutomatico, TokenSAT, NoMolestar and a phone-number breakdown by type - none of
- * which have a NetSuite equivalent). Argentina/Peru contracts and any contract not yet backfilled
- * into Cryo.dbo simply have those columns come back null - that's a real "no legacy record"
- * condition, not a bug (same caveat as the DocsCompletos gate in commissionsRepository.ts).
+ * keeps by hand, sourced ENTIRELY from NetSuite - no legacy Cryo.dbo/CryoCell database dependency
+ * at all, by design. This deliberately trades some coverage (a handful of fields Cryo.dbo did
+ * have, but NetSuite doesn't yet - see UNAVAILABLE_COLUMNS) for a report whose data provenance is
+ * 100% verifiable against the live NetSuite account, with nothing silently blended in from a
+ * second, harder-to-audit system:
  *
- * A handful of columns from the reference export have NO confirmed source anywhere in NetSuite or
- * Cryo.dbo after a real search of both schemas - see UNAVAILABLE_COLUMNS below. They're always
- * null here; the frontend surfaces them as a clearly-labeled "not available yet" note rather than
- * silently rendering blank cells that look like real (missing) data.
+ * 1. netsuite_contracts' plain fields (titular/second-titular/child/dueño via joins, a
+ *    services-costoanualidad rollup, netsuite_partidas for Adeudo/Pagado Hasta - see below).
+ * 2. netsuite_contracts' "Clasificadores" fields (Zona Franquicia/Asociado, Estatus Cliente,
+ *    Estatus Cobranza, Metal, No Molestar, Pago Automático, Referencia CIE) - these live on the
+ *    SAME customrecord1184 record as everything else here, just under a different UI tab, not a
+ *    different custom type (confirmed live via SuiteQL/BUILTIN.DF - see the *_LABELS maps below,
+ *    each the full confirmed id->label set for its list). Only populated for contracts that have
+ *    gone through Mexico-specific collections workflow (~76% of production contracts as of this
+ *    writing) - null otherwise, a real "not classified in NetSuite yet" gap, not a bug.
+ *
+ * Adeudo total = the sum of every "Vencido" (custrecord_cryo_estatuspartida = '4') partida on the
+ * contract whose own date has already passed - confirmed by the user over an earlier guess of
+ * pulling this from Cryo.dbo.Contrato.TotalAdeudo, which was wrong (partidas are the real source
+ * for both this app and the legacy system - Cryo.dbo's own TotalAdeudo was a stale/derived copy).
+ * Pagado Hasta SCU/TCU/ADN = the date of that service's most recently PAID
+ * (custrecord_cryo_estatuspartida = '1') partida, via custrecord_cryo_servtipo (confirmed in
+ * labels.ts to reference the same NetSuite list as netsuite_services.custrecord_cryo_tipodeserv -
+ * '1' Sangre/SCU, '2' Tejido/TCU, '3' ADN). "DX" has no confirmed servtipo id yet, so
+ * pagado_hasta_dx (and fp_dx) stay unavailable - see UNAVAILABLE_COLUMNS.
+ *
+ * Everything Cryo.dbo used to fill in here (Numero de años, TokenSAT, and the phone-number
+ * breakdown by type - Cryo.dbo.Contrato.Anos/Titular.TokenSAT/TitularTelefono, none confirmed to
+ * have a NetSuite equivalent: custrecord_cryo_aniosanticipados is a different, always-'0' field,
+ * and custrecord_nso_token isn't a SAT token - it's populated even on Argentina contracts, where
+ * SAT/CFDI doesn't apply) is now in UNAVAILABLE_COLUMNS instead, same as every other column with
+ * no confirmed NetSuite source. Confirm the real NetSuite field for any of these (there may be
+ * one this session's schema search simply didn't find) and they can move out of that list.
  */
+
+// Every one of these is the FULL confirmed set of values actually in use, resolved via
+// `SELECT DISTINCT <field>, BUILTIN.DF(<field>) FROM customrecord1184` against the live
+// production account (same convention as web/src/config/labels.ts) - not guessed.
+const FRANQUICIA_ASOCIADO_LABELS: Record<string, string> = {
+  '1': 'JALISCO', '2': 'BCN-SONORA', '3': 'METROPOLI', '4': 'PUEBLA-TLAXCALA', '5': 'CENTRO',
+  '6': 'BAJIO', '7': 'BAJA CALIFORNIA SUR-SINALOA', '8': 'NORTE', '9': 'NAYARIT', '10': 'TABASCO',
+  '11': 'MICHOACAN', '12': 'COLIMA', '13': 'CAMPECHE', '15': 'CRYOCELL MATRIZ', '16': 'PUEBLA',
+  '17': 'HERMOSILLO', '18': 'CDMX', '19': 'CUERNAVACA', '20': 'VERACRUZ', '21': 'LEON',
+  '22': 'TIJUANA', '23': 'CANCUN', '24': 'QUERETARO', '25': 'MORELIA', '26': 'LA PAZ',
+  '27': 'MONTERREY', '28': 'VILLAHERMOSA', '29': 'MERIDA', '30': 'PACHUCA', '31': 'CHIHUAHUA',
+  '32': 'TOLUCA', '33': 'LOS MOCHIS', '34': 'TAMPICO', '35': 'CHIAPAS', '36': 'SAN LUIS POTOSI',
+  '37': 'SALTILLO', '38': 'REYNOSA', '39': 'IRAPUATO', '40': 'GUADALAJARA', '41': 'MONCLOVA',
+  '42': 'LOS CABOS', '43': 'LEON NUEVA', '44': 'ACAPULCO', '45': 'AGUASCALIENTES', '46': 'PUEBLA NUEVA',
+  '47': 'FIBRO DF', '48': 'DURANGO', '116': 'CIUDAD DE MEXICO',
+};
+
+const MX_ESTATUS_CLIENTE_LABELS: Record<string, string> = {
+  '1': 'CANCELADO', '2': 'FALTA DE INTERES', '3': 'GARANTIA', '4': 'ILOCALIZABLE',
+  '5': 'NEGATIVA DE PAGO', '6': 'NO CONTESTA', '7': 'PROMESA', '8': 'RECUPERADO',
+  '9': 'RECUPERADO / RETENCION', '10': 'RECUPERADO / RIESGO', '11': 'RETENCION', '12': 'SIN ESTATUS',
+  '13': 'DATOS ACTUALIZADOS', '14': 'SIN CONTACTO',
+};
+
+const MX_ESTATUS_COBRANZA_LABELS: Record<string, string> = {
+  '1': 'BLANCO', '2': 'CANCELADO I', '3': 'CANCELADO II', '4': 'ILOCALIZABLE I', '5': 'ILOCALIZABLE II',
+  '6': 'GARANTIA BAJO VOLUMEN', '7': 'GARANTIA BAJO CONTEO', '8': 'GARANTIA X FALLECIMIENTO',
+  '9': 'RECUPERADO', '10': 'RECUPERADO-BONIF MEDICO VENTAS', '11': 'RECUPERADO -BONIF COLABORADOR',
+  '12': 'RECUPERADO- BONIF REFERIDOS', '13': 'RECUPERADO- DEPURADO', '14': 'RECUPERADO- PAGADO EN FRANQUICIA',
+  '15': 'RECUPERADO-BONIF REEMBOLSO VENTAS', '16': 'RECUPERADO - BONIF DIR MEDICO',
+  '17': 'RECUPERADO PARCIAL – FACTURA POR COBRAR', '18': 'RECUPERADO - PAQUETE', '19': 'PAGADO - RETENCION',
+  '20': 'REACTIVACION S', '21': 'REACTIVACION C', '22': 'RECUPERADO-RIESGO CON TC BAJO',
+  '23': 'RECUPERADO- RIESGO MONTO MINIMO', '24': 'PROMESA', '25': 'PROMESA PAGO PARCIALIDADES',
+  '26': 'PROMESA - ESPERA DE EVIDENCIA DE PAGO', '27': 'NEGOCIACION', '28': 'FALTA DE LIQUIDEZ',
+  '29': 'PROMESA CONDICIONADA', '30': 'MENSAJE CON TERCERO O FAMILIAR', '31': 'DESEMPLEO',
+  '32': 'NO CONTESTA- VIA TELFONICA', '33': 'NO CONTESTA- VIA EMAIL', '34': 'NO CONTESTA- VIA TELEFONICA Y EMAIL',
+  '35': 'NO CONTESTA - MAS DE 6 MESES', '36': 'NEGATIVA DE PAGO - VIA TELFONICA', '37': 'PROCESO DE RETENCION',
+  '38': 'FALTA DE INTERES', '39': 'PROMESA CONDICIONADA', '40': 'RIESGO CON TC BAJO', '41': 'ACTUALIZADO',
+  '42': 'NO ACTUALIZADO', '43': 'RECUPERADO - BONIF COLABORADOR',
+};
+
+const CLASIFICADOR_METAL_LABELS: Record<string, string> = {
+  '1': 'ORO', '2': 'PLATA', '3': 'BRONCE', '4': 'SIN PROMOCION', '5': 'COBRE', '6': 'RIESGO',
+  '7': 'BONIFICACION VITALICIA',
+};
+
+function ynFromNetSuiteFlag(value: string | null): boolean | null {
+  if (value === 'T') return true;
+  if (value === 'F') return false;
+  return null;
+}
+
 export interface CuentaRow {
   netsuite_id: string;
   contrato: string | null;
@@ -32,37 +104,37 @@ export interface CuentaRow {
   titular2_nombre: string | null;
   titular2_email: string | null;
   titular2_telefono: null;
-  numero_anos: number | null;
+  numero_anos: null;
   adeudo_total: number | null;
   interes: null;
   costo_anualidad: number | null;
   nombre_hijo: string | null;
-  referencia_cie: null;
+  referencia_cie: string | null;
   referencia_sap: null;
   zona: string | null;
   fp_scu: null;
   fp_tcu: null;
   fp_dx: null;
   fp_adn: null;
+  pagado_hasta_scu: string | null;
+  pagado_hasta_tcu: string | null;
+  pagado_hasta_dx: null;
+  pagado_hasta_adn: string | null;
   pago_automatico: boolean | null;
   estatus_cliente: string | null;
   estatus_cobranza: string | null;
   metal: string | null;
-  tel_casa1: string | null;
-  tel_casa2: string | null;
-  cel_mama: string | null;
-  cel_papa: string | null;
-  tel_oficina_madre: string | null;
-  tel_oficina_padre: string | null;
-  tel_pariente1: string | null;
-  tel_pariente2: string | null;
+  tel_casa1: null;
+  tel_casa2: null;
+  cel_mama: null;
+  cel_papa: null;
+  tel_oficina_madre: null;
+  tel_oficina_padre: null;
+  tel_pariente1: null;
+  tel_pariente2: null;
   super_promo: null;
   link_pago: null;
-  token_sat: string | null;
-  pagado_hasta_scu: null;
-  pagado_hasta_tcu: null;
-  pagado_hasta_dx: null;
-  pagado_hasta_adn: null;
+  token_sat: null;
   dueno: string | null;
   no_molestar: boolean | null;
 }
@@ -74,19 +146,25 @@ export interface CuentaRow {
  * contract. */
 export const UNAVAILABLE_COLUMNS: Array<{ key: keyof CuentaRow; label: string }> = [
   { key: 'titular2_telefono', label: 'Teléfono celular (Titular 2)' },
+  { key: 'numero_anos', label: 'Numero de años' },
   { key: 'interes', label: 'Interés' },
-  { key: 'referencia_cie', label: 'Referencia CIE NUEVA' },
   { key: 'referencia_sap', label: 'Referencia SAP' },
   { key: 'fp_scu', label: 'FP SCU' },
   { key: 'fp_tcu', label: 'FP TCU' },
   { key: 'fp_dx', label: 'FP DX' },
   { key: 'fp_adn', label: 'FP ADN' },
+  { key: 'tel_casa1', label: 'Tel Casa 1' },
+  { key: 'tel_casa2', label: 'Tel Casa 2' },
+  { key: 'cel_mama', label: 'Cel Mamá' },
+  { key: 'cel_papa', label: 'Cel Papá' },
+  { key: 'tel_oficina_madre', label: 'Tel Oficina Madre' },
+  { key: 'tel_oficina_padre', label: 'Tel Oficina Padre' },
+  { key: 'tel_pariente1', label: 'Tel Pariente 1' },
+  { key: 'tel_pariente2', label: 'Tel Pariente 2' },
   { key: 'super_promo', label: 'SuperPromo' },
   { key: 'link_pago', label: 'Link Pago' },
-  { key: 'pagado_hasta_scu', label: 'Pagado Hasta SCU' },
-  { key: 'pagado_hasta_tcu', label: 'Pagado Hasta TCU' },
+  { key: 'token_sat', label: 'TokenSAT' },
   { key: 'pagado_hasta_dx', label: 'Pagado Hasta DX' },
-  { key: 'pagado_hasta_adn', label: 'Pagado Hasta ADN' },
 ];
 
 const TABLE = 'netsuite_contracts as C';
@@ -107,15 +185,57 @@ interface RawCuentaRow {
   dueno: string | null;
   nombre_hijo: string | null;
   costo_anualidad: number | string | null;
+  adeudo_total: number | string | null;
+  ns_franquicia_asociado: string | null;
+  ns_estatus_cliente: string | null;
+  ns_estatus_cobranza: string | null;
+  ns_metal: string | null;
+  ns_no_molestar: string | null;
+  ns_pago_automatico: string | null;
+  ns_cie: string | null;
+  pagado_hasta_scu: string | null;
+  pagado_hasta_tcu: string | null;
+  pagado_hasta_adn: string | null;
 }
 
+// Same NetSuite list netsuite_services.custrecord_cryo_tipodeserv uses (confirmed in labels.ts) -
+// '1' Sangre/SCU, '2' Tejido/TCU, '3' ADN. No confirmed id represents "DX" yet.
+const SERVTIPO_SCU = '1';
+const SERVTIPO_TCU = '2';
+const SERVTIPO_ADN = '3';
+// custrecord_cryo_estatuspartida (see labels.ts's PARTIDA_STATUS_LABELS).
+const PARTIDA_ESTATUS_PAGADO = '1';
+const PARTIDA_ESTATUS_VENCIDO = '4';
+
+/** Most recent PAID partida's own date, for one service type on this contract - "Pagado Hasta". */
+function pagadoHastaSubquery(db: Knex, servtipo: string, alias: string): Knex.Raw {
+  return db.raw(
+    `(
+      SELECT TOP 1 P.custrecord_cryo_fechapartida
+      FROM netsuite_partidas P
+      WHERE P.custrecord_cryo_numcontrato = C.netsuite_id
+        AND P.custrecord_cryo_servtipo = ?
+        AND P.custrecord_cryo_estatuspartida = ?
+        AND P.isinactive = 'F'
+      ORDER BY TRY_CONVERT(date, P.custrecord_cryo_fechapartida, 103) DESC
+    ) as ??`,
+    [servtipo, PARTIDA_ESTATUS_PAGADO, alias],
+  );
+}
+
+/**
+ * Only the join(s) actually needed to filter/count rows - TITULAR only when `search` will
+ * reference it, nothing else. Used as-is for the COUNT query: joining netsuite_family_members/
+ * netsuite_employees there too (as an earlier version of this file did) cost well over a second
+ * on production's ~219k contracts for zero benefit, since neither is ever referenced by a WHERE
+ * clause - only addOutputJoins' extra joins (needed for the actual SELECT list) pay that cost,
+ * and only for the current page's 25-100 rows.
+ */
 function baseCuentasQuery(db: Knex, search: string): Knex.QueryBuilder {
-  const qb = db(TABLE)
-    .leftJoin('netsuite_customers as TITULAR', 'TITULAR.netsuite_id', 'C.custrecord_cryo_titularcontrato')
-    .leftJoin('netsuite_family_members as TITULAR2', 'TITULAR2.netsuite_id', 'C.custrecord_cryo_padres')
-    .leftJoin('netsuite_employees as DUENO', 'DUENO.netsuite_id', 'C.custrecord_cryo_duenio');
+  const qb = db(TABLE);
 
   if (search) {
+    qb.leftJoin('netsuite_customers as TITULAR', 'TITULAR.netsuite_id', 'C.custrecord_cryo_titularcontrato');
     qb.where((builder) => {
       builder
         .orWhere('C.name', 'like', `%${search}%`)
@@ -124,6 +244,17 @@ function baseCuentasQuery(db: Knex, search: string): Knex.QueryBuilder {
     });
   }
 
+  return qb;
+}
+
+/** Adds the joins the SELECT list (not the WHERE clause) needs - called only on the branch that
+ * actually fetches rows, after the COUNT query has already been cloned off without them. */
+function addOutputJoins(qb: Knex.QueryBuilder, search: string): Knex.QueryBuilder {
+  if (!search) {
+    qb.leftJoin('netsuite_customers as TITULAR', 'TITULAR.netsuite_id', 'C.custrecord_cryo_titularcontrato');
+  }
+  qb.leftJoin('netsuite_family_members as TITULAR2', 'TITULAR2.netsuite_id', 'C.custrecord_cryo_padres');
+  qb.leftJoin('netsuite_employees as DUENO', 'DUENO.netsuite_id', 'C.custrecord_cryo_duenio');
   return qb;
 }
 
@@ -141,6 +272,13 @@ function selectCuentaColumns(qb: Knex.QueryBuilder, db: Knex): Knex.QueryBuilder
     'TITULAR2.custrecord_cryo_nombremiembro as titular2_nombre',
     'TITULAR2.custrecord_cryo_main_email as titular2_email',
     'DUENO.entityid as dueno',
+    'C.custrecord_cryo_mx_franquiciaasociado as ns_franquicia_asociado',
+    'C.custrecord_cryo_mx_estatus_cliente as ns_estatus_cliente',
+    'C.custrecord_cryo_mx_estatus_cobranza as ns_estatus_cobranza',
+    'C.custrecord_cryo_mx_clasificadormetal as ns_metal',
+    'C.custrecord_cryo_mx_nomolestar as ns_no_molestar',
+    'C.custrecord_cryo_mx_pagoautomatico as ns_pago_automatico',
+    'C.custrecord_cryo_mx_cie as ns_cie',
     db.raw(`(
       SELECT TOP 1 FM.custrecord_cryo_nombremiembro
       FROM netsuite_family_members FM
@@ -153,167 +291,24 @@ function selectCuentaColumns(qb: Knex.QueryBuilder, db: Knex): Knex.QueryBuilder
       FROM netsuite_services S
       WHERE S.custrecord_cryo_idcontrato = C.netsuite_id AND S.isinactive = 'F'
     ) as costo_anualidad`),
+    db.raw(
+      `(
+        SELECT SUM(TRY_CONVERT(decimal(18,2), P.custrecord_cryo_importepartida))
+        FROM netsuite_partidas P
+        WHERE P.custrecord_cryo_numcontrato = C.netsuite_id
+          AND P.custrecord_cryo_estatuspartida = ?
+          AND P.isinactive = 'F'
+          AND TRY_CONVERT(date, P.custrecord_cryo_fechapartida, 103) < CAST(GETDATE() AS date)
+      ) as adeudo_total`,
+      [PARTIDA_ESTATUS_VENCIDO],
+    ),
+    pagadoHastaSubquery(db, SERVTIPO_SCU, 'pagado_hasta_scu'),
+    pagadoHastaSubquery(db, SERVTIPO_TCU, 'pagado_hasta_tcu'),
+    pagadoHastaSubquery(db, SERVTIPO_ADN, 'pagado_hasta_adn'),
   );
 }
 
-// mssql/tedious caps the number of parameters per request (~2100) - same chunking convention as
-// commissionsRepository.ts's getCompleteDocsContractIds.
-const LEGACY_LOOKUP_CHUNK_SIZE = 1000;
-
-interface LegacyCuentaInfo {
-  numero_anos: number | null;
-  adeudo_total: number | null;
-  zona: string | null;
-  estatus_cliente: string | null;
-  estatus_cobranza: string | null;
-  metal: string | null;
-  pago_automatico: boolean | null;
-  no_molestar: boolean | null;
-  token_sat: string | null;
-  tel_casa1: string | null;
-  tel_casa2: string | null;
-  cel_mama: string | null;
-  cel_papa: string | null;
-  tel_oficina_madre: string | null;
-  tel_oficina_padre: string | null;
-  tel_pariente1: string | null;
-  tel_pariente2: string | null;
-}
-
-interface PhoneBreakdown {
-  tel_casa1?: string;
-  tel_casa2?: string;
-  cel_mama?: string;
-  cel_papa?: string;
-  tel_oficina_madre?: string;
-  tel_oficina_padre?: string;
-  tel_pariente1?: string;
-  tel_pariente2?: string;
-}
-
-/** Cryo.dbo.TipoTelefono has many duplicate-named rows across different ID_Empresa scopes (e.g.
- * "Casa" exists under ids 2/19/20/23/33) - match by name, not id, same reasoning as the label maps
- * in csvExport.ts. Returns null for phone types this report has no dedicated slot for (Nextel,
- * plain "Celular", "Comercial", "Paciente", ...). */
-function phoneCategory(tipoNombre: string): keyof PhoneBreakdown | 'casa' | null {
-  const normalized = tipoNombre.trim().toLowerCase();
-  if (normalized === 'casa' || normalized === 'fijo' || normalized === 'residencia') return 'casa';
-  if (normalized === 'cel madre' || normalized === 'celular madre') return 'cel_mama';
-  if (normalized === 'cel padre' || normalized === 'celular padre') return 'cel_papa';
-  if (normalized === 'oficina madre') return 'tel_oficina_madre';
-  if (normalized === 'oficina padre') return 'tel_oficina_padre';
-  if (normalized === 'familiar 1') return 'tel_pariente1';
-  if (normalized === 'familiar 2') return 'tel_pariente2';
-  return null;
-}
-
-async function getPhonesByTitular(legacyDb: Knex, titularIds: number[]): Promise<Map<number, PhoneBreakdown>> {
-  const map = new Map<number, PhoneBreakdown>();
-  if (titularIds.length === 0) return map;
-
-  for (let i = 0; i < titularIds.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
-    const chunk = titularIds.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
-    const rows = (await legacyDb('Cryo.dbo.TitularTelefono as TT')
-      .innerJoin('Cryo.dbo.TipoTelefono as TTT', 'TTT.ID_TipoTelefono', 'TT.ID_TipoTelefono')
-      .whereIn('TT.ID_Titular', chunk)
-      .orderBy('TT.ID_TitularTelefono')
-      .select('TT.ID_Titular as id_titular', 'TT.Telefono as telefono', 'TTT.Nombre as tipo_nombre')) as Array<{
-      id_titular: number;
-      telefono: string;
-      tipo_nombre: string;
-    }>;
-
-    for (const row of rows) {
-      const category = phoneCategory(row.tipo_nombre);
-      if (!category) continue;
-
-      const entry = map.get(row.id_titular) ?? {};
-      if (category === 'casa') {
-        if (!entry.tel_casa1) entry.tel_casa1 = row.telefono;
-        else if (!entry.tel_casa2) entry.tel_casa2 = row.telefono;
-      } else if (!entry[category]) {
-        entry[category] = row.telefono;
-      }
-      map.set(row.id_titular, entry);
-    }
-  }
-
-  return map;
-}
-
-async function getLegacyCuentaInfoByFolio(legacyDb: Knex, folios: string[]): Promise<Map<string, LegacyCuentaInfo>> {
-  const result = new Map<string, LegacyCuentaInfo>();
-  if (folios.length === 0) return result;
-
-  const contratoRows: Array<{
-    folio: string;
-    id_titular: number | null;
-    numero_anos: number | null;
-    adeudo_total: number | string | null;
-    no_molestar: boolean | null;
-    pago_automatico: boolean | null;
-    token_sat: string | null;
-    estatus_cliente: string | null;
-    estatus_cobranza: string | null;
-    zona: string | null;
-    metal: string | null;
-  }> = [];
-
-  for (let i = 0; i < folios.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
-    const chunk = folios.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
-    const rows = await legacyDb('Cryo.dbo.Contrato as Ctr')
-      .leftJoin('Cryo.dbo.Titular as T', 'T.ID_Titular', 'Ctr.ID_Titular')
-      .leftJoin('Cryo.dbo.EstatusCliente as EC', 'EC.ID_EstatusCliente', 'Ctr.ID_EstatusCliente')
-      .leftJoin('Cryo.dbo.EstatusCobranza as ECob', 'ECob.ID_EstatusCobranza', 'Ctr.ID_EstatusCobranza')
-      .leftJoin('Cryo.dbo.Zona as Z', 'Z.ID_Zona', 'Ctr.ID_Zona')
-      .leftJoin('Cryo.dbo.Metales as M', 'M.ID_Metal', 'Ctr.ID_Metal')
-      .whereIn('Ctr.Folio', chunk)
-      .select(
-        'Ctr.Folio as folio',
-        'Ctr.ID_Titular as id_titular',
-        'Ctr.Anos as numero_anos',
-        'Ctr.TotalAdeudo as adeudo_total',
-        'Ctr.NoMolestar as no_molestar',
-        'T.PagoAutomatico as pago_automatico',
-        'T.TokenSAT as token_sat',
-        'EC.Nombre as estatus_cliente',
-        'ECob.Nombre as estatus_cobranza',
-        'Z.Nombre as zona',
-        'M.Nombre as metal',
-      );
-    contratoRows.push(...(rows as typeof contratoRows));
-  }
-
-  const titularIds = Array.from(new Set(contratoRows.map((r) => r.id_titular).filter((id): id is number => id !== null)));
-  const phonesByTitular = await getPhonesByTitular(legacyDb, titularIds);
-
-  for (const row of contratoRows) {
-    const phones = row.id_titular !== null ? phonesByTitular.get(row.id_titular) ?? {} : {};
-    result.set(row.folio, {
-      numero_anos: row.numero_anos,
-      adeudo_total: row.adeudo_total !== null ? Number(row.adeudo_total) : null,
-      zona: row.zona,
-      estatus_cliente: row.estatus_cliente,
-      estatus_cobranza: row.estatus_cobranza,
-      metal: row.metal,
-      pago_automatico: row.pago_automatico,
-      no_molestar: row.no_molestar,
-      token_sat: row.token_sat,
-      tel_casa1: phones.tel_casa1 ?? null,
-      tel_casa2: phones.tel_casa2 ?? null,
-      cel_mama: phones.cel_mama ?? null,
-      cel_papa: phones.cel_papa ?? null,
-      tel_oficina_madre: phones.tel_oficina_madre ?? null,
-      tel_oficina_padre: phones.tel_oficina_padre ?? null,
-      tel_pariente1: phones.tel_pariente1 ?? null,
-      tel_pariente2: phones.tel_pariente2 ?? null,
-    });
-  }
-
-  return result;
-}
-
-function buildCuentaRow(raw: RawCuentaRow, legacy: LegacyCuentaInfo | undefined): CuentaRow {
+function buildCuentaRow(raw: RawCuentaRow): CuentaRow {
   return {
     netsuite_id: raw.netsuite_id,
     contrato: raw.contrato,
@@ -327,46 +322,40 @@ function buildCuentaRow(raw: RawCuentaRow, legacy: LegacyCuentaInfo | undefined)
     titular2_nombre: raw.titular2_nombre,
     titular2_email: raw.titular2_email,
     titular2_telefono: null,
-    numero_anos: legacy?.numero_anos ?? null,
-    adeudo_total: legacy?.adeudo_total ?? null,
+    numero_anos: null,
+    adeudo_total: raw.adeudo_total !== null ? Number(raw.adeudo_total) : null,
     interes: null,
     costo_anualidad: raw.costo_anualidad !== null ? Number(raw.costo_anualidad) : null,
     nombre_hijo: raw.nombre_hijo,
-    referencia_cie: null,
+    referencia_cie: raw.ns_cie,
     referencia_sap: null,
-    zona: legacy?.zona ?? null,
+    zona: (raw.ns_franquicia_asociado && FRANQUICIA_ASOCIADO_LABELS[raw.ns_franquicia_asociado]) || null,
     fp_scu: null,
     fp_tcu: null,
     fp_dx: null,
     fp_adn: null,
-    pago_automatico: legacy?.pago_automatico ?? null,
-    estatus_cliente: legacy?.estatus_cliente ?? null,
-    estatus_cobranza: legacy?.estatus_cobranza ?? null,
-    metal: legacy?.metal ?? null,
-    tel_casa1: legacy?.tel_casa1 ?? null,
-    tel_casa2: legacy?.tel_casa2 ?? null,
-    cel_mama: legacy?.cel_mama ?? null,
-    cel_papa: legacy?.cel_papa ?? null,
-    tel_oficina_madre: legacy?.tel_oficina_madre ?? null,
-    tel_oficina_padre: legacy?.tel_oficina_padre ?? null,
-    tel_pariente1: legacy?.tel_pariente1 ?? null,
-    tel_pariente2: legacy?.tel_pariente2 ?? null,
+    pago_automatico: ynFromNetSuiteFlag(raw.ns_pago_automatico),
+    estatus_cliente: (raw.ns_estatus_cliente && MX_ESTATUS_CLIENTE_LABELS[raw.ns_estatus_cliente]) || null,
+    estatus_cobranza: (raw.ns_estatus_cobranza && MX_ESTATUS_COBRANZA_LABELS[raw.ns_estatus_cobranza]) || null,
+    metal: (raw.ns_metal && CLASIFICADOR_METAL_LABELS[raw.ns_metal]) || null,
+    tel_casa1: null,
+    tel_casa2: null,
+    cel_mama: null,
+    cel_papa: null,
+    tel_oficina_madre: null,
+    tel_oficina_padre: null,
+    tel_pariente1: null,
+    tel_pariente2: null,
     super_promo: null,
     link_pago: null,
-    token_sat: legacy?.token_sat ?? null,
-    pagado_hasta_scu: null,
-    pagado_hasta_tcu: null,
+    token_sat: null,
+    pagado_hasta_scu: raw.pagado_hasta_scu,
+    pagado_hasta_tcu: raw.pagado_hasta_tcu,
     pagado_hasta_dx: null,
-    pagado_hasta_adn: null,
+    pagado_hasta_adn: raw.pagado_hasta_adn,
     dueno: raw.dueno,
-    no_molestar: legacy?.no_molestar ?? null,
+    no_molestar: ynFromNetSuiteFlag(raw.ns_no_molestar),
   };
-}
-
-async function enrichWithLegacyData(legacyDb: Knex, rows: RawCuentaRow[]): Promise<CuentaRow[]> {
-  const folios = Array.from(new Set(rows.map((r) => r.folio_sistema_anterior).filter((f): f is string => Boolean(f))));
-  const legacyByFolio = await getLegacyCuentaInfoByFolio(legacyDb, folios);
-  return rows.map((row) => buildCuentaRow(row, row.folio_sistema_anterior ? legacyByFolio.get(row.folio_sistema_anterior) : undefined));
 }
 
 export interface CuentasParams {
@@ -378,7 +367,6 @@ export interface CuentasParams {
 
 export async function getCuentasPaged(
   db: Knex,
-  legacyDb: Knex,
   params: CuentasParams,
   restrictSubsidiaries: Set<string> | null,
 ): Promise<Paginated<CuentaRow>> {
@@ -392,22 +380,20 @@ export async function getCuentasPaged(
   if (requestedSubsidiaries.size > 0) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, requestedSubsidiaries);
 
   const countQb = qb.clone().clearSelect().count('* as count').first();
-  const rowsQb = selectCuentaColumns(qb, db)
+  const rowsQb = selectCuentaColumns(addOutputJoins(qb, search), db)
     .orderBy('C.lastmodifieddate_dt', 'desc')
     .offset((page - 1) * pageSize)
     .limit(pageSize);
 
   const [rawRows, countRow] = await Promise.all([rowsQb as Promise<RawCuentaRow[]>, countQb as Promise<{ count: number } | undefined>]);
-  const data = await enrichWithLegacyData(legacyDb, rawRows);
   const total = Number(countRow?.count ?? 0);
 
-  return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  return { data: rawRows.map(buildCuentaRow), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
 /** Unpaginated - the whole filtered set, for CSV export (same convention as every other entity's exportEntityRows). */
 export async function getCuentasForExport(
   db: Knex,
-  legacyDb: Knex,
   params: Pick<CuentasParams, 'search' | 'subsidiary'>,
   restrictSubsidiaries: Set<string> | null,
 ): Promise<CuentaRow[]> {
@@ -418,6 +404,6 @@ export async function getCuentasForExport(
   if (restrictSubsidiaries !== null) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
   if (requestedSubsidiaries.size > 0) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, requestedSubsidiaries);
 
-  const rawRows = (await selectCuentaColumns(qb, db).orderBy('C.lastmodifieddate_dt', 'desc')) as RawCuentaRow[];
-  return enrichWithLegacyData(legacyDb, rawRows);
+  const rawRows = (await selectCuentaColumns(addOutputJoins(qb, search), db).orderBy('C.lastmodifieddate_dt', 'desc')) as RawCuentaRow[];
+  return rawRows.map(buildCuentaRow);
 }

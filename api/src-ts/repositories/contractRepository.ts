@@ -54,6 +54,16 @@ export interface ContractRow {
   custrecord_cryo_vendedor: string | null;
   custrecord_nso_cc_marca_contrato_mx: string | null;
   custrecordcryo_tipocambiocontrato: string | null;
+  // The Contract record's "Clasificadores" UI section - same customrecord1184, just fields under
+  // a different tab (confirmed live: not a separate custom record type).
+  custrecord_cryo_mx_zonacobranza: string | null;
+  custrecord_cryo_mx_estatus_cobranza: string | null;
+  custrecord_cryo_mx_clasificadormetal: string | null;
+  custrecord_cryo_mx_estatus_cliente: string | null;
+  custrecord_cryo_mx_franquiciaasociado: string | null;
+  custrecord_cryo_mx_nomolestar: string | null;
+  custrecord_cryo_mx_pagoautomatico: string | null;
+  custrecord_cryo_mx_cie: string | null;
   isinactive: string | null;
   lastmodifiedby: string | null;
   owner: string | null;

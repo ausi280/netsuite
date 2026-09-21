@@ -1,6 +1,5 @@
 import type { Request, Response } from 'express';
 import knex from '../db/connection';
-import { getLegacyDb } from '../db/legacyDbConnection';
 import { getEntityConfig } from './entityRegistry';
 import { getCuentasForExport, getCuentasPaged, UNAVAILABLE_COLUMNS } from './cuentasRepository';
 import type { CuentaRow } from './cuentasRepository';
@@ -29,7 +28,7 @@ export async function listCuentasRoute(req: Request, res: Response): Promise<voi
   }
 
   const { page, pageSize, search, subsidiary } = req.query;
-  const result = await getCuentasPaged(knex, getLegacyDb(), { page, pageSize, search, subsidiary }, subsidiaryRestrictionFor(permissions!));
+  const result = await getCuentasPaged(knex, { page, pageSize, search, subsidiary }, subsidiaryRestrictionFor(permissions!));
   res.status(200).json({ success: true, ...result, unavailableColumns: UNAVAILABLE_COLUMNS });
 }
 
@@ -96,7 +95,7 @@ export async function exportCuentasRoute(req: Request, res: Response): Promise<v
   }
 
   const { search, subsidiary } = req.query;
-  const rows = await getCuentasForExport(knex, getLegacyDb(), { search, subsidiary }, subsidiaryRestrictionFor(permissions!));
+  const rows = await getCuentasForExport(knex, { search, subsidiary }, subsidiaryRestrictionFor(permissions!));
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="cuentas.csv"');

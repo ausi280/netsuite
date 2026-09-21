@@ -418,16 +418,22 @@ export interface ProspectosResponse {
 
 /**
  * One row of the "Cuentas" per-contract account/collections detail sheet, reached from the
- * Partidas report. Built from NetSuite (contract/titular/second-titular/child/dueño/services) and,
- * for contracts with a legacy folio match, the pre-NetSuite Cryo.dbo system (adeudo, estatus,
- * zona, metal, teléfonos, etc. - null when no legacy record exists, e.g. Argentina/Peru contracts
- * or ones not yet backfilled). See api/src-ts/reporting/cuentasRepository.ts.
+ * Partidas report. Sourced ENTIRELY from NetSuite, by design - no legacy Cryo.dbo/CryoCell
+ * database dependency at all, so every non-null field here is directly verifiable against the
+ * live NetSuite account. See the file-level comment in
+ * api/src-ts/reporting/cuentasRepository.ts for exactly which column comes from where
+ * (zona/estatus_cliente/estatus_cobranza/metal/pago_automatico/no_molestar/referencia_cie all
+ * live on the same NetSuite contract record, under its "Clasificadores" tab, confirmed live via
+ * SuiteQL - NOT a different custom type).
  *
- * Fields typed as always-null here (titular2_telefono, interes, referencia_cie, referencia_sap,
- * fp_scu/tcu/dx/adn, super_promo, link_pago, pagado_hasta_scu/tcu/dx/adn) have NO confirmed data
- * source anywhere in NetSuite or Cryo.dbo after checking both schemas - see
- * CuentasResponse.unavailableColumns, which the page surfaces as a note instead of silently
- * rendering blank cells that look like real (missing) data.
+ * Adeudo total and Pagado Hasta SCU/TCU/ADN come from netsuite_partidas (Adeudo = sum of overdue
+ * "Vencido" partidas whose own date has passed; Pagado Hasta = the most recently PAID partida's
+ * own date, per service type via custrecord_cryo_servtipo). Fields typed as always-null here
+ * (titular2_telefono, numero_anos, interes, referencia_sap, fp_scu/tcu/dx/adn, tel_casa1/2,
+ * cel_mama/papa, tel_oficina_madre/padre, tel_pariente1/2, super_promo, link_pago, token_sat,
+ * pagado_hasta_dx) have NO confirmed NetSuite source - see CuentasResponse.unavailableColumns,
+ * which the page surfaces as a note instead of silently rendering blank cells that look like real
+ * (missing) data.
  */
 export interface CuentaRow {
   netsuite_id: string;
@@ -442,12 +448,12 @@ export interface CuentaRow {
   titular2_nombre: string | null;
   titular2_email: string | null;
   titular2_telefono: null;
-  numero_anos: number | null;
+  numero_anos: null;
   adeudo_total: number | null;
   interes: null;
   costo_anualidad: number | null;
   nombre_hijo: string | null;
-  referencia_cie: null;
+  referencia_cie: string | null;
   referencia_sap: null;
   zona: string | null;
   fp_scu: null;
@@ -458,21 +464,21 @@ export interface CuentaRow {
   estatus_cliente: string | null;
   estatus_cobranza: string | null;
   metal: string | null;
-  tel_casa1: string | null;
-  tel_casa2: string | null;
-  cel_mama: string | null;
-  cel_papa: string | null;
-  tel_oficina_madre: string | null;
-  tel_oficina_padre: string | null;
-  tel_pariente1: string | null;
-  tel_pariente2: string | null;
+  tel_casa1: null;
+  tel_casa2: null;
+  cel_mama: null;
+  cel_papa: null;
+  tel_oficina_madre: null;
+  tel_oficina_padre: null;
+  tel_pariente1: null;
+  tel_pariente2: null;
   super_promo: null;
   link_pago: null;
-  token_sat: string | null;
-  pagado_hasta_scu: null;
-  pagado_hasta_tcu: null;
+  token_sat: null;
+  pagado_hasta_scu: string | null;
+  pagado_hasta_tcu: string | null;
   pagado_hasta_dx: null;
-  pagado_hasta_adn: null;
+  pagado_hasta_adn: string | null;
   dueno: string | null;
   no_molestar: boolean | null;
 }
