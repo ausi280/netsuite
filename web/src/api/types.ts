@@ -428,12 +428,19 @@ export interface ProspectosResponse {
  *
  * Adeudo total and Pagado Hasta SCU/TCU/ADN come from netsuite_partidas (Adeudo = sum of overdue
  * "Vencido" partidas whose own date has passed; Pagado Hasta = the most recently PAID partida's
- * own date, per service type via custrecord_cryo_servtipo). Fields typed as always-null here
- * (titular2_telefono, numero_anos, interes, referencia_sap, fp_scu/tcu/dx/adn, tel_casa1/2,
- * cel_mama/papa, tel_oficina_madre/padre, tel_pariente1/2, super_promo, link_pago, token_sat,
- * pagado_hasta_dx) have NO confirmed NetSuite source - see CuentasResponse.unavailableColumns,
- * which the page surfaces as a note instead of silently rendering blank cells that look like real
- * (missing) data.
+ * own date, per service type via custrecord_cryo_servtipo). Interés = sum of
+ * custrecord_cryo_interes across every active partida on the contract, no status/date filter
+ * (unlike Adeudo, this field is populated across every partida status, not just Vencido). Link
+ * Pago = `https://renovaciones.cryo-cell.com.mx/dashboard/{token}`, token =
+ * custrecord_nso_token. Teléfono celular (Titular 2) = the same family_members row's
+ * custrecord_cryo_telefonocelular - the only phone field that table has (one per family member,
+ * not the legacy system's Casa/Cel Madre/Cel Padre/Oficina Madre/Oficina Padre/Familiar 1/2
+ * breakdown by type), so tel_casa1/2, cel_mama/papa, tel_oficina_madre/padre and tel_pariente1/2
+ * still have no real NetSuite home. Fields typed as always-null here (referencia_sap,
+ * fp_dx, tel_casa1/2, cel_mama/papa, tel_oficina_madre/padre, tel_pariente1/2,
+ * super_promo, token_sat, pagado_hasta_dx) have NO confirmed NetSuite source -
+ * see CuentasResponse.unavailableColumns, which the page surfaces as a note instead of silently
+ * rendering blank cells that look like real (missing) data.
  */
 export interface CuentaRow {
   netsuite_id: string;
@@ -447,19 +454,20 @@ export interface CuentaRow {
   mes_nacimiento: number | null;
   titular2_nombre: string | null;
   titular2_email: string | null;
-  titular2_telefono: null;
-  numero_anos: null;
+  titular2_telefono: string | null;
+  numero_anos: number | null;
   adeudo_total: number | null;
-  interes: null;
+  interes: number | null;
   costo_anualidad: number | null;
+  tipo_servicio: string | null;
   nombre_hijo: string | null;
   referencia_cie: string | null;
   referencia_sap: null;
   zona: string | null;
-  fp_scu: null;
-  fp_tcu: null;
+  fp_scu: string | null;
+  fp_tcu: string | null;
   fp_dx: null;
-  fp_adn: null;
+  fp_adn: string | null;
   pago_automatico: boolean | null;
   estatus_cliente: string | null;
   estatus_cobranza: string | null;
@@ -473,7 +481,7 @@ export interface CuentaRow {
   tel_pariente1: null;
   tel_pariente2: null;
   super_promo: null;
-  link_pago: null;
+  link_pago: string | null;
   token_sat: null;
   pagado_hasta_scu: string | null;
   pagado_hasta_tcu: string | null;

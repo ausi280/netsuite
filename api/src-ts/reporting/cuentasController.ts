@@ -46,6 +46,7 @@ const EXPORT_COLUMNS: Array<{ key: keyof CuentaRow; header: string }> = [
   { key: 'adeudo_total', header: 'Adeudo total' },
   { key: 'interes', header: 'Interés' },
   { key: 'costo_anualidad', header: 'Costo de anualidad' },
+  { key: 'tipo_servicio', header: 'Tipo de Servicio' },
   { key: 'nombre_hijo', header: 'Nombre Hijo' },
   { key: 'referencia_cie', header: 'Referencia CIE NUEVA' },
   { key: 'referencia_sap', header: 'Referencia SAP' },

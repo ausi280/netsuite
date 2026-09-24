@@ -19,6 +19,7 @@ export function mapFamilyMember(raw: Record<string, any>): FamilyMemberRow {
     custrecord_cryo_nombremiembro: toStringOrNull(raw.custrecord_cryo_nombremiembro),
     custrecord_cryo_parentesco: toStringOrNull(raw.custrecord_cryo_parentesco),
     custrecord_cryo_titular: toStringOrNull(raw.custrecord_cryo_titular),
+    custrecord_cryo_telefonocelular: toStringOrNull(raw.custrecord_cryo_telefonocelular),
     isinactive: toStringOrNull(raw.isinactive),
     lastmodifiedby: toStringOrNull(raw.lastmodifiedby),
     owner: toStringOrNull(raw.owner),

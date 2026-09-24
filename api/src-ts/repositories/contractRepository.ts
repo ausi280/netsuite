@@ -64,6 +64,7 @@ export interface ContractRow {
   custrecord_cryo_mx_nomolestar: string | null;
   custrecord_cryo_mx_pagoautomatico: string | null;
   custrecord_cryo_mx_cie: string | null;
+  custrecord_nso_nrp_num_ferencia_unico: string | null;
   isinactive: string | null;
   lastmodifiedby: string | null;
   owner: string | null;

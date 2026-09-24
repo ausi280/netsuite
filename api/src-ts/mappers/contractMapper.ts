@@ -60,6 +60,7 @@ export function mapContract(raw: Record<string, any>): ContractRow {
     custrecord_cryo_mx_nomolestar: toStringOrNull(raw.custrecord_cryo_mx_nomolestar),
     custrecord_cryo_mx_pagoautomatico: toStringOrNull(raw.custrecord_cryo_mx_pagoautomatico),
     custrecord_cryo_mx_cie: toStringOrNull(raw.custrecord_cryo_mx_cie),
+    custrecord_nso_nrp_num_ferencia_unico: toStringOrNull(raw.custrecord_nso_nrp_num_ferencia_unico),
     isinactive: toStringOrNull(raw.isinactive),
     lastmodifiedby: toStringOrNull(raw.lastmodifiedby),
     owner: toStringOrNull(raw.owner),

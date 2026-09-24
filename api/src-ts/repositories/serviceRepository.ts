@@ -20,6 +20,8 @@ export interface ServiceRow {
   custrecord_cryo_fecha_procesoserv: string | null;
   custrecord_cryo_idcontrato: string | null;
   custrecord_cryo_monedaserv: string | null;
+  custrecord_cryo_pagadohasta: string | null;
+  custrecord_cryo_precioanualtotal: string | null;
   custrecord_cryo_precioprocesamiento: string | null;
   custrecord_cryo_serviciocontratado: string | null;
   custrecord_cryo_statuspagoserv: string | null;

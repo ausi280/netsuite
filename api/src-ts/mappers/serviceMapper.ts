@@ -16,6 +16,8 @@ export function mapService(raw: Record<string, any>): ServiceRow {
     custrecord_cryo_fecha_procesoserv: toStringOrNull(raw.custrecord_cryo_fecha_procesoserv),
     custrecord_cryo_idcontrato: toStringOrNull(raw.custrecord_cryo_idcontrato),
     custrecord_cryo_monedaserv: toStringOrNull(raw.custrecord_cryo_monedaserv),
+    custrecord_cryo_pagadohasta: toStringOrNull(raw.custrecord_cryo_pagadohasta),
+    custrecord_cryo_precioanualtotal: toStringOrNull(raw.custrecord_cryo_precioanualtotal),
     custrecord_cryo_precioprocesamiento: toStringOrNull(raw.custrecord_cryo_precioprocesamiento),
     custrecord_cryo_serviciocontratado: toStringOrNull(raw.custrecord_cryo_serviciocontratado),
     custrecord_cryo_statuspagoserv: toStringOrNull(raw.custrecord_cryo_statuspagoserv),

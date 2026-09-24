@@ -80,20 +80,21 @@ export function CuentasPage() {
     { key: 'titular_telefono', header: 'Teléfono', render: (r) => r.titular_telefono || '—' },
     { key: 'titular2_nombre', header: 'Titular 2', render: (r) => r.titular2_nombre || '—' },
     { key: 'titular2_email', header: 'Correo Electrónico (Titular 2)', render: (r) => r.titular2_email || '—' },
-    { key: 'titular2_telefono', header: 'Teléfono celular (Titular 2)', render: () => 'N/D' },
-    { key: 'numero_anos', header: 'Numero de años', render: () => 'N/D' },
+    { key: 'titular2_telefono', header: 'Teléfono celular (Titular 2)', render: (r) => r.titular2_telefono || '—' },
+    { key: 'numero_anos', header: 'Numero de años', render: (r) => (r.numero_anos !== null ? String(r.numero_anos) : '—') },
     { key: 'adeudo_total', header: 'Adeudo total', render: (r) => (r.adeudo_total !== null ? formatCurrency(r.adeudo_total, null) : '—') },
-    { key: 'interes', header: 'Interés', render: () => 'N/D' },
+    { key: 'interes', header: 'Interés', render: (r) => (r.interes !== null ? formatCurrency(r.interes, null) : '—') },
     { key: 'costo_anualidad', header: 'Costo de anualidad', render: (r) => (r.costo_anualidad !== null ? formatCurrency(r.costo_anualidad, null) : '—') },
+    { key: 'tipo_servicio', header: 'Tipo de Servicio', render: (r) => r.tipo_servicio || '—' },
     { key: 'nombre_hijo', header: 'Nombre Hijo', render: (r) => r.nombre_hijo || '—' },
     { key: 'referencia_cie', header: 'Referencia CIE NUEVA', render: (r) => r.referencia_cie || '—' },
     { key: 'referencia_sap', header: 'Referencia SAP', render: () => 'N/D' },
     { key: 'zona', header: 'Zona (Franquicia/Asociado)', render: (r) => r.zona || '—' },
     { key: 'mes_nacimiento', header: 'Mes Nacimiento', render: (r) => (r.mes_nacimiento !== null ? String(r.mes_nacimiento) : '—') },
-    { key: 'fp_scu', header: 'FP SCU', render: () => 'N/D' },
-    { key: 'fp_tcu', header: 'FP TCU', render: () => 'N/D' },
+    { key: 'fp_scu', header: 'FP SCU', render: (r) => formatDate(r.fp_scu) },
+    { key: 'fp_tcu', header: 'FP TCU', render: (r) => formatDate(r.fp_tcu) },
     { key: 'fp_dx', header: 'FP DX', render: () => 'N/D' },
-    { key: 'fp_adn', header: 'FP ADN', render: () => 'N/D' },
+    { key: 'fp_adn', header: 'FP ADN', render: (r) => formatDate(r.fp_adn) },
     { key: 'pago_automatico', header: 'Pago Automático', render: (r) => yesNo(r.pago_automatico) },
     { key: 'estatus_cliente', header: 'Estatus Cliente', render: (r) => r.estatus_cliente || '—' },
     { key: 'estatus_cobranza', header: 'Estatus Cobranza', render: (r) => r.estatus_cobranza || '—' },
@@ -107,12 +108,23 @@ export function CuentasPage() {
     { key: 'tel_pariente1', header: 'Tel Pariente 1', render: () => 'N/D' },
     { key: 'tel_pariente2', header: 'Tel Pariente 2', render: () => 'N/D' },
     { key: 'super_promo', header: 'SuperPromo', render: () => 'N/D' },
-    { key: 'link_pago', header: 'Link Pago', render: () => 'N/D' },
+    {
+      key: 'link_pago',
+      header: 'Link Pago',
+      render: (r) =>
+        r.link_pago ? (
+          <a href={r.link_pago} target="_blank" rel="noreferrer">
+            Abrir
+          </a>
+        ) : (
+          '—'
+        ),
+    },
     { key: 'token_sat', header: 'TokenSAT', render: () => 'N/D' },
-    { key: 'pagado_hasta_scu', header: 'Pagado Hasta SCU', render: (r) => formatDate(r.pagado_hasta_scu) },
-    { key: 'pagado_hasta_tcu', header: 'Pagado Hasta TCU', render: (r) => formatDate(r.pagado_hasta_tcu) },
+    { key: 'pagado_hasta_scu', header: 'Pagado Hasta SCU', render: (r) => r.pagado_hasta_scu || '—' },
+    { key: 'pagado_hasta_tcu', header: 'Pagado Hasta TCU', render: (r) => r.pagado_hasta_tcu || '—' },
     { key: 'pagado_hasta_dx', header: 'Pagado Hasta DX', render: () => 'N/D' },
-    { key: 'pagado_hasta_adn', header: 'Pagado Hasta ADN', render: (r) => formatDate(r.pagado_hasta_adn) },
+    { key: 'pagado_hasta_adn', header: 'Pagado Hasta ADN', render: (r) => r.pagado_hasta_adn || '—' },
     { key: 'dueno', header: 'Dueño', render: (r) => r.dueno || '—' },
     { key: 'no_molestar', header: 'No Molestar', render: (r) => yesNo(r.no_molestar) },
   ];

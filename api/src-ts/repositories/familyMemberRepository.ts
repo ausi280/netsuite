@@ -24,6 +24,7 @@ export interface FamilyMemberRow {
   custrecord_cryo_nombremiembro: string | null;
   custrecord_cryo_parentesco: string | null;
   custrecord_cryo_titular: string | null;
+  custrecord_cryo_telefonocelular: string | null;
   isinactive: string | null;
   lastmodifiedby: string | null;
   owner: string | null;
