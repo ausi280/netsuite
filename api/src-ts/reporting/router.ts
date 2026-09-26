@@ -25,6 +25,8 @@ import { chargeDomiciledRoute } from './paymentsChargeController';
 import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
 import { exportProspectosRoute, listProspectosRoute } from './prospectosController';
 import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
+import { exportNotesReportRoute, listNotesReportRoute } from './notesReportController';
+import { exportContratosReportRoute, listContratosReportRoute } from './contratosReportController';
 
 /**
  * Assembles the read-only reporting API router: Entra ID access-token auth
@@ -88,6 +90,16 @@ export function buildReportingRouter(): Router {
   // /:entity/export, or that route would swallow "cuentas" as an entity key and 404.
   router.get('/cuentas', listCuentasRoute);
   router.get('/cuentas/export', exportCuentasRoute);
+  // Reporte de Notas (NetSuite-native Notes across every contract, date-filtered) is likewise
+  // bespoke, not a generic ENTITY_REGISTRY entity - must be registered before /:entity/export, or
+  // that route would swallow "notas" as an entity key and 404.
+  router.get('/notas', listNotesReportRoute);
+  router.get('/notas/export', exportNotesReportRoute);
+  // Reporte Contratos (wide per-contract export mirroring a legacy reference spreadsheet) is
+  // likewise bespoke, not a generic ENTITY_REGISTRY entity - must be registered before
+  // /:entity/export, or that route would swallow "contratos-report" as an entity key and 404.
+  router.get('/contratos-report', listContratosReportRoute);
+  router.get('/contratos-report/export', exportContratosReportRoute);
   // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics"/"export" as an id value.
   router.get('/:entity/subsidiaries', listSubsidiaryOptions);
   router.get('/:entity/analytics', getPartidaAnalytics);

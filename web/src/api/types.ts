@@ -433,14 +433,18 @@ export interface ProspectosResponse {
  * (unlike Adeudo, this field is populated across every partida status, not just Vencido). Link
  * Pago = `https://renovaciones.cryo-cell.com.mx/dashboard/{token}`, token =
  * custrecord_nso_token. Teléfono celular (Titular 2) = the same family_members row's
- * custrecord_cryo_telefonocelular - the only phone field that table has (one per family member,
- * not the legacy system's Casa/Cel Madre/Cel Padre/Oficina Madre/Oficina Padre/Familiar 1/2
- * breakdown by type), so tel_casa1/2, cel_mama/papa, tel_oficina_madre/padre and tel_pariente1/2
- * still have no real NetSuite home. Fields typed as always-null here (referencia_sap,
- * fp_dx, tel_casa1/2, cel_mama/papa, tel_oficina_madre/padre, tel_pariente1/2,
- * super_promo, token_sat, pagado_hasta_dx) have NO confirmed NetSuite source -
- * see CuentasResponse.unavailableColumns, which the page surfaces as a note instead of silently
- * rendering blank cells that look like real (missing) data.
+ * custrecord_cryo_telefonocelular - the only phone field that table has (one per family member).
+ * Teléfono 1-10 = the titular's own numbered "Teléfono N" custom entity fields on
+ * netsuite_customers (confirmed by the user) - plain numbered fields with no attempt at semantic
+ * relabeling (no "Cel Mamá"/"Tel Casa" distinction), replacing the old guessed Cryo.dbo-style
+ * columns that never had a confirmed source. Field ids are irregular (Teléfono 1/2 carry a
+ * doubled "custentitycustentity_" prefix; Teléfono 5 is `custentity3`, an auto-numbered id) - see
+ * api/src-ts/reporting/cuentasRepository.ts for the full explanation. Fields typed as always-null
+ * here (fp_dx, pagado_hasta_dx) have NO confirmed NetSuite source - see
+ * CuentasResponse.unavailableColumns, which the page surfaces as a note instead of silently
+ * rendering blank cells that look like real (missing) data. Referencia SAP, SuperPromo and
+ * TokenSAT used to be always-null placeholders here too; removed from the report entirely at the
+ * user's request.
  */
 export interface CuentaRow {
   netsuite_id: string;
@@ -450,6 +454,16 @@ export interface CuentaRow {
   titular_nombre: string | null;
   titular_email: string | null;
   titular_telefono: string | null;
+  telefono_1: string | null;
+  telefono_2: string | null;
+  telefono_3: string | null;
+  telefono_4: string | null;
+  telefono_5: string | null;
+  telefono_6: string | null;
+  telefono_7: string | null;
+  telefono_8: string | null;
+  telefono_9: string | null;
+  telefono_10: string | null;
   fecha_nacimiento_confirmada: string | null;
   mes_nacimiento: number | null;
   titular2_nombre: string | null;
@@ -462,7 +476,6 @@ export interface CuentaRow {
   tipo_servicio: string | null;
   nombre_hijo: string | null;
   referencia_cie: string | null;
-  referencia_sap: null;
   zona: string | null;
   fp_scu: string | null;
   fp_tcu: string | null;
@@ -472,17 +485,7 @@ export interface CuentaRow {
   estatus_cliente: string | null;
   estatus_cobranza: string | null;
   metal: string | null;
-  tel_casa1: null;
-  tel_casa2: null;
-  cel_mama: null;
-  cel_papa: null;
-  tel_oficina_madre: null;
-  tel_oficina_padre: null;
-  tel_pariente1: null;
-  tel_pariente2: null;
-  super_promo: null;
   link_pago: string | null;
-  token_sat: null;
   pagado_hasta_scu: string | null;
   pagado_hasta_tcu: string | null;
   pagado_hasta_dx: null;
@@ -499,6 +502,118 @@ export interface CuentasResponse {
   total: number;
   totalPages: number;
   unavailableColumns: Array<{ key: keyof CuentaRow; label: string }>;
+}
+
+/**
+ * One row of the "Reporte de Notas" report - a NetSuite-native Note attached to a Contrato, date-
+ * filtered across EVERY contract (not per-contract like the dossier's Notes tab). Not backed by
+ * our synced SQL tables at all - see api/src-ts/reporting/notesReportRepository.ts for why (Notes
+ * reject SuiteQL/N-search filtering on their own "attached to" fields in this account), so this
+ * always calls NetSuite directly through a RESTlet, same as the per-contract lookup.
+ */
+export type NotesReportSistema = 'Sistema Anterior' | 'NetSuite';
+
+export interface NotesReportRow {
+  contrato: string | null;
+  /** The contract's legacy folio (custrecord_cryo_contratosistemaanterior) regardless of which
+   * system this row came from - for a "Sistema Anterior" row this is simply its own Folio. */
+  folio_sistema_anterior: string | null;
+  fecha_creacion: string | null;
+  usuario: string | null;
+  titulo: string | null;
+  nota: string | null;
+  /** Which system this note came from - "Sistema Anterior" (pre-NetSuite CryoCell NotasCobranza)
+   * or "NetSuite" (NetSuite-native Notes) - confirmed by the user. */
+  sistema: NotesReportSistema;
+}
+
+export interface NotesReportResponse {
+  success: true;
+  data: NotesReportRow[];
+  /** True when the date range matched more notes than the backend's safety cap could fetch in one
+   * request - narrow the range to see the rest. */
+  truncated: boolean;
+}
+
+/**
+ * One row of "Reporte Contratos" - a wide, one-row-per-contract export mirroring a legacy
+ * reference spreadsheet's exact column set, sourced entirely from NetSuite. See the file-level
+ * comment in api/src-ts/reporting/contratosReportRepository.ts for exactly which column comes
+ * from where, and ContratosReportResponse.unavailableColumns for the columns with no confirmed
+ * NetSuite source (checked against the full customrecord1184 field list, not merely unchecked).
+ */
+export interface ContratoReportRow {
+  netsuite_id: string;
+  contrato: string | null;
+  folio_sistema_anterior: string | null;
+  fecha_alta: string | null;
+  estado_contrato: string | null;
+  titular_contrato: string | null;
+  especimen: string | null;
+  titular2: string | null;
+  fecha_nacimiento: string | null;
+  fecha_procesamiento: string | null;
+  vendedor: string | null;
+  cobrador_dueno: string | null;
+  scu: boolean;
+  estado_sangre: string | null;
+  costo_anualidad_sangre: number | null;
+  pagado_hasta_sangre: string | null;
+  tcu: boolean;
+  estado_tejido: string | null;
+  costo_anualidad_tejido: number | null;
+  pagado_hasta_tejido: string | null;
+  medico: string | null;
+  telefono_titular: string | null;
+  correo_titular: string | null;
+  zona: string | null;
+  subsidiaria: string | null;
+  costo_dx: null;
+  costo_adn: number | null;
+  costo_placenta: number | null;
+  mes_nacimiento: number | null;
+  telefono_1: string | null;
+  telefono_2: string | null;
+  telefono_3: string | null;
+  telefono_4: string | null;
+  telefono_5: string | null;
+  telefono_6: string | null;
+  telefono_7: string | null;
+  telefono_8: string | null;
+  telefono_9: string | null;
+  telefono_10: string | null;
+  correo_titular2: string | null;
+  zona_franquicia: string | null;
+  tipo: null;
+  razon_social: null;
+  rfc_fac: null;
+  dir_fac: null;
+  col_fac: null;
+  cp_fac: null;
+  pais_fac: null;
+  estado_fac: null;
+  ciudades_fac: null;
+  usocfdi: null;
+  regimen_fiscal: null;
+  referencia_cie: string | null;
+  referencia_sap: string | null;
+  zona_franquicia_asociado: string | null;
+  token: string | null;
+  fecha_venta: null;
+  estatus_cliente: string | null;
+  estatus_cobranza: string | null;
+  metal: string | null;
+  pago_automatico: boolean | null;
+}
+
+export interface ContratosReportResponse {
+  success: true;
+  data: ContratoReportRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  unavailableColumns: Array<{ key: keyof ContratoReportRow; label: string }>;
 }
 
 export interface ChargeDomiciledRequest {

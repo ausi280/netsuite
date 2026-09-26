@@ -192,6 +192,27 @@ export function ReportPage() {
             Ver comisiones
           </Link>
         ) : null}
+        {entityKey === 'contracts' ? (
+          <Link to="/reports/notas" className={styles.graphsLink}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M4 4h16v12H7l-3 3V4z" />
+              <line x1="8" y1="9" x2="16" y2="9" />
+              <line x1="8" y1="13" x2="13" y2="13" />
+            </svg>
+            Ver notas
+          </Link>
+        ) : null}
+        {entityKey === 'contracts' ? (
+          <Link to="/reports/contratos-report" className={styles.graphsLink}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="7" y1="13" x2="7" y2="13.01" />
+              <line x1="11" y1="13" x2="17" y2="13" />
+            </svg>
+            Ver Reporte Contratos
+          </Link>
+        ) : null}
         {isVendorTransactions && vendorId ? (
           <Link to="/reports/vendor-transactions" className={styles.graphsLink}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

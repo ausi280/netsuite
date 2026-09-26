@@ -19,6 +19,8 @@ import type {
   ContractNetSuiteNotesResponse,
   NetSuiteNote,
   NotaCobranza,
+  NotesReportResponse,
+  NotesReportRow,
   PaginatedRows,
   PartidaAnalyticsResponse,
   PartidaBreakdownRow,
@@ -28,6 +30,8 @@ import type {
   ProspectosResponse,
   CuentaRow,
   CuentasResponse,
+  ContratoReportRow,
+  ContratosReportResponse,
   ReportEntityKey,
   ReportRecord,
   SortDir,
@@ -431,4 +435,72 @@ export async function fetchCuentas(token: string | null, params: CuentasParams):
 export async function fetchCuentasExportCsv(token: string | null, params: Pick<CuentasParams, 'search' | 'subsidiary'>): Promise<Blob> {
   const query = buildCuentasQuery(params);
   return apiFetchBlob(`/reports/cuentas/export?${query.toString()}`, { token });
+}
+
+export interface NotesReportResult {
+  data: NotesReportRow[];
+  truncated: boolean;
+}
+
+/** "Reporte de Notas" - every NetSuite-native Note attached to a Contrato whose own date falls
+ * within [dateFrom, dateTo] ("YYYY-MM-DD"), across every contract - see
+ * api/src-ts/reporting/notesReportRepository.ts. Not paginated on our side - the backend already
+ * bounds how much it fetches per request (see `truncated`). */
+export async function fetchNotesReport(token: string | null, dateFrom: string, dateTo: string): Promise<NotesReportResult> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  const result = await apiFetch<NotesReportResponse>(`/reports/notas?${query.toString()}`, { token });
+  return { data: result.data, truncated: result.truncated };
+}
+
+/** CSV of the same notes report (unpaginated - the whole filtered set), same convention as fetchProspectosExportCsv. */
+export async function fetchNotesReportExportCsv(token: string | null, dateFrom: string, dateTo: string): Promise<Blob> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  return apiFetchBlob(`/reports/notas/export?${query.toString()}`, { token });
+}
+
+export interface ContratosReportParams {
+  page: number;
+  pageSize: number;
+  search: string;
+  subsidiary: string[];
+}
+
+export interface ContratosReportResult {
+  data: ContratoReportRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  unavailableColumns: Array<{ key: keyof ContratoReportRow; label: string }>;
+}
+
+function buildContratosReportQuery(
+  params: Pick<ContratosReportParams, 'search' | 'subsidiary'> & Partial<Pick<ContratosReportParams, 'page' | 'pageSize'>>,
+): URLSearchParams {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.pageSize) query.set('pageSize', String(params.pageSize));
+  if (params.search) query.set('search', params.search);
+  if (params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
+  return query;
+}
+
+/** "Reporte Contratos" - wide per-contract export - see api/src-ts/reporting/contratosReportRepository.ts. */
+export async function fetchContratosReport(token: string | null, params: ContratosReportParams): Promise<ContratosReportResult> {
+  const query = buildContratosReportQuery(params);
+  const result = await apiFetch<ContratosReportResponse>(`/reports/contratos-report?${query.toString()}`, { token });
+  return {
+    data: result.data,
+    page: result.page,
+    pageSize: result.pageSize,
+    total: result.total,
+    totalPages: result.totalPages,
+    unavailableColumns: result.unavailableColumns,
+  };
+}
+
+/** CSV of every contrato matching the current search/subsidiary filters (unpaginated - the whole filtered set). */
+export async function fetchContratosReportExportCsv(token: string | null, params: Pick<ContratosReportParams, 'search' | 'subsidiary'>): Promise<Blob> {
+  const query = buildContratosReportQuery(params);
+  return apiFetchBlob(`/reports/contratos-report/export?${query.toString()}`, { token });
 }

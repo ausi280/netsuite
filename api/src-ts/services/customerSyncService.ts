@@ -10,7 +10,12 @@ export class CustomerSyncService extends BaseSyncService<RawNetSuiteRecord, Cust
 
   protected buildQuery(watermark: Date | null, tieBreakId?: string | null): string {
     return SuiteQlQueryBuilder.from('customer')
-      .select('id', 'entityid', 'companyname', 'email', 'phone', 'isinactive', 'datecreated', 'lastmodifieddate')
+      .select(
+        'id', 'entityid', 'companyname', 'email', 'phone', 'isinactive', 'datecreated', 'lastmodifieddate',
+        'custentitycustentity_cryo_telefono1', 'custentitycustentity_cryo_telefono2', 'custentity_cryo_telefono3',
+        'custentity_cryo_telefono4', 'custentity3', 'custentity_cryo_telefono6', 'custentity_cryo_telefono7',
+        'custentity_cryo_telefono8', 'custentity_cryo_telefono9', 'custentity_cryo_telefono10',
+      )
       .whereWatermark('lastmodifieddate', watermark, tieBreakId)
       .orderBy('lastmodifieddate', 'ASC')
       .build();

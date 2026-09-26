@@ -28,3 +28,44 @@ export async function getNotasCobranza(legacyDb: Knex, folio: string): Promise<N
     urgente: Boolean(row.urgente),
   }));
 }
+
+export interface NotaCobranzaBulkRow {
+  folio: string | null;
+  fecha: string | null;
+  usuario: string | null;
+  nota: string | null;
+  urgente: boolean;
+}
+
+/** "YYYY-MM-DD" dateTo -> the next day, so the range filter can use an exclusive `<` and still
+ * include every note made anytime during dateTo itself (Fecha carries a time-of-day) - same
+ * convention as paymentsListRepository.ts's nextDayIso. */
+function nextDayIso(dateStr: string): string {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Every NotasCobranza row across EVERY folio whose own Fecha falls within [dateFrom, dateTo]
+ * ("YYYY-MM-DD") - the bulk/date-range counterpart to getNotasCobranza's single-folio lookup,
+ * for the "Reporte de Notas" report (combined with NetSuite-native notes - see
+ * notesReportRepository.ts's getCombinedNotesReport). Returns the raw Folio, not a resolved
+ * contract name - the caller resolves Folio -> contract name against its own already-synced
+ * netsuite_contracts table, since this legacy database has no notion of NetSuite contracts.
+ */
+export async function getNotasCobranzaReport(legacyDb: Knex, dateFrom: string, dateTo: string): Promise<NotaCobranzaBulkRow[]> {
+  const rows = (await legacyDb(TABLE)
+    .where('Fecha', '>=', dateFrom)
+    .andWhere('Fecha', '<', nextDayIso(dateTo))
+    .select('Folio as folio', 'Fecha as fecha', 'Usuario as usuario', 'Nota as nota', 'Urgente as urgente')
+    .orderBy('Fecha', 'desc')) as Array<{ folio: string | null; fecha: unknown; usuario: string | null; nota: string | null; urgente: unknown }>;
+
+  return rows.map((row) => ({
+    folio: row.folio,
+    fecha: row.fecha instanceof Date ? row.fecha.toISOString() : (row.fecha as string | null),
+    usuario: row.usuario,
+    nota: row.nota,
+    urgente: Boolean(row.urgente),
+  }));
+}

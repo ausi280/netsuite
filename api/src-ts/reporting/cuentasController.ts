@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express';
 import knex from '../db/connection';
 import { getEntityConfig } from './entityRegistry';
-import { getCuentasForExport, getCuentasPaged, UNAVAILABLE_COLUMNS } from './cuentasRepository';
-import type { CuentaRow } from './cuentasRepository';
+import { buildCuentaRow, getCuentasPaged, streamCuentasForExport, UNAVAILABLE_COLUMNS } from './cuentasRepository';
+import type { CuentaRow, RawCuentaRow } from './cuentasRepository';
 import { csvRow, formatExportValue } from './csvExport';
 import type { UserPermissions } from './permissionsRepository';
 
@@ -49,7 +49,6 @@ const EXPORT_COLUMNS: Array<{ key: keyof CuentaRow; header: string }> = [
   { key: 'tipo_servicio', header: 'Tipo de Servicio' },
   { key: 'nombre_hijo', header: 'Nombre Hijo' },
   { key: 'referencia_cie', header: 'Referencia CIE NUEVA' },
-  { key: 'referencia_sap', header: 'Referencia SAP' },
   { key: 'zona', header: 'Zona (Franquicia/Asociado)' },
   { key: 'mes_nacimiento', header: 'Mes Nacimiento' },
   { key: 'fp_scu', header: 'FP SCU' },
@@ -60,17 +59,17 @@ const EXPORT_COLUMNS: Array<{ key: keyof CuentaRow; header: string }> = [
   { key: 'estatus_cliente', header: 'Estatus Cliente' },
   { key: 'estatus_cobranza', header: 'Estatus Cobranza' },
   { key: 'metal', header: 'Metal' },
-  { key: 'tel_casa1', header: 'Tel Casa 1' },
-  { key: 'tel_casa2', header: 'Tel Casa 2' },
-  { key: 'cel_mama', header: 'Cel Mamá' },
-  { key: 'cel_papa', header: 'Cel Papá' },
-  { key: 'tel_oficina_madre', header: 'Tel Oficina Madre' },
-  { key: 'tel_oficina_padre', header: 'Tel Oficina Padre' },
-  { key: 'tel_pariente1', header: 'Tel Pariente 1' },
-  { key: 'tel_pariente2', header: 'Tel Pariente 2' },
-  { key: 'super_promo', header: 'SuperPromo' },
+  { key: 'telefono_1', header: 'Teléfono 1' },
+  { key: 'telefono_2', header: 'Teléfono 2' },
+  { key: 'telefono_3', header: 'Teléfono 3' },
+  { key: 'telefono_4', header: 'Teléfono 4' },
+  { key: 'telefono_5', header: 'Teléfono 5' },
+  { key: 'telefono_6', header: 'Teléfono 6' },
+  { key: 'telefono_7', header: 'Teléfono 7' },
+  { key: 'telefono_8', header: 'Teléfono 8' },
+  { key: 'telefono_9', header: 'Teléfono 9' },
+  { key: 'telefono_10', header: 'Teléfono 10' },
   { key: 'link_pago', header: 'Link Pago' },
-  { key: 'token_sat', header: 'TokenSAT' },
   { key: 'pagado_hasta_scu', header: 'Pagado Hasta SCU' },
   { key: 'pagado_hasta_tcu', header: 'Pagado Hasta TCU' },
   { key: 'pagado_hasta_dx', header: 'Pagado Hasta DX' },
@@ -96,14 +95,25 @@ export async function exportCuentasRoute(req: Request, res: Response): Promise<v
   }
 
   const { search, subsidiary } = req.query;
-  const rows = await getCuentasForExport(knex, { search, subsidiary }, subsidiaryRestrictionFor(permissions!));
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="cuentas.csv"');
   res.write('﻿');
   res.write(csvRow(EXPORT_COLUMNS.map((c) => c.header)));
-  for (const row of rows) {
-    res.write(csvRow(EXPORT_COLUMNS.map((c) => formatCuentaValue(c.key, row[c.key]))));
+
+  const stream = streamCuentasForExport(knex, { search, subsidiary }, subsidiaryRestrictionFor(permissions!));
+  try {
+    for await (const raw of stream as AsyncIterable<RawCuentaRow>) {
+      const row = buildCuentaRow(raw);
+      const canWriteMore = res.write(csvRow(EXPORT_COLUMNS.map((c) => formatCuentaValue(c.key, row[c.key]))));
+      if (!canWriteMore) {
+        await new Promise<void>((resolve) => res.once('drain', resolve));
+      }
+    }
+  } catch (err) {
+    // Headers are already sent by this point (streaming started before the query could fail
+    // outright) - the best we can do is stop the response instead of throwing past Express.
+    console.error('Error streaming cuentas export:', err);
   }
   res.end();
 }

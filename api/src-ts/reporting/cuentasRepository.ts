@@ -69,19 +69,25 @@ import type { Paginated } from './types';
  *
  * Teléfono celular (Titular 2) = netsuite_family_members.custrecord_cryo_telefonocelular, on the
  * SAME family_members row already joined for titular2_nombre/titular2_email (confirmed by the
- * user that phones belong on family_members, not Cryo.dbo - and this is the only phone field that
- * table actually has: it models one phone per family member, not the legacy system's Casa/Cel
- * Madre/Cel Padre/Oficina Madre/Oficina Padre/Familiar 1/Familiar 2 breakdown by type, and
- * family_members itself only ever has a Titular 2 or Hijo row per family - never a distinct
- * "pariente"/emergency-contact entry - so tel_casa1/2, cel_mama, cel_papa, tel_oficina_madre/
- * padre and tel_pariente1/2 still have no real NetSuite home and stay in UNAVAILABLE_COLUMNS).
+ * user that this specific phone belongs on family_members, not Cryo.dbo).
  *
- * Everything else Cryo.dbo used to fill in here (Numero de años and TokenSAT - Cryo.dbo.Contrato.
- * Anos/Titular.TokenSAT, neither confirmed to have a NetSuite equivalent:
- * custrecord_cryo_aniosanticipados is a different, always-'0' field) is now in
- * UNAVAILABLE_COLUMNS instead, same as every other column with no confirmed NetSuite source.
- * Confirm the real NetSuite field for any of these (there may be one this session's
- * schema search simply didn't find) and they can move out of that list.
+ * Teléfono 1-10 = the titular's (netsuite_customers, joined as TITULAR) own numbered "Teléfono N"
+ * custom entity fields (confirmed by the user) - these replaced the old guessed Cryo.dbo-style
+ * Tel Casa 1/2, Cel Mamá/Papá, Tel Oficina Madre/Padre, Tel Pariente 1/2 columns, which never had
+ * a confirmed NetSuite source and sat in UNAVAILABLE_COLUMNS for the whole rest of this file's
+ * history - the user instead wants the plain numbered NetSuite fields with no attempt at
+ * semantic relabeling. Field ids are irregular (confirmed live via NetSuite's own metadata-
+ * catalog schema, NOT by naming convention): Teléfono 1/2 carry a doubled
+ * "custentitycustentity_" prefix from how they were originally created, and Teléfono 5 is
+ * `custentity3` - an auto-numbered id that doesn't follow the custentity_cryo_telefonoN pattern
+ * at all. No telefono5-named field exists; custentity3 IS "Teléfono 5" as its own field label.
+ *
+ * Referencia SAP, SuperPromo and TokenSAT (Cryo.dbo.Titular.TokenSAT) never had a confirmed
+ * NetSuite source when this report was built and sat in UNAVAILABLE_COLUMNS as permanent-null
+ * placeholders; removed from the report entirely at the user's request rather than kept as blank
+ * columns. Note: custrecord_cryo_mx_referencia_sap ("Referencia SAP") was later confirmed live and
+ * backfilled onto netsuite_contracts for Reporte Contratos - if Cuentas should show it after all,
+ * it can be wired back in as a real column instead of staying removed.
  */
 
 // Every one of these is the FULL confirmed set of values actually in use, resolved via
@@ -162,7 +168,6 @@ export interface CuentaRow {
   tipo_servicio: string | null;
   nombre_hijo: string | null;
   referencia_cie: string | null;
-  referencia_sap: null;
   zona: string | null;
   fp_scu: string | null;
   fp_tcu: string | null;
@@ -176,17 +181,17 @@ export interface CuentaRow {
   estatus_cliente: string | null;
   estatus_cobranza: string | null;
   metal: string | null;
-  tel_casa1: null;
-  tel_casa2: null;
-  cel_mama: null;
-  cel_papa: null;
-  tel_oficina_madre: null;
-  tel_oficina_padre: null;
-  tel_pariente1: null;
-  tel_pariente2: null;
-  super_promo: null;
+  telefono_1: string | null;
+  telefono_2: string | null;
+  telefono_3: string | null;
+  telefono_4: string | null;
+  telefono_5: string | null;
+  telefono_6: string | null;
+  telefono_7: string | null;
+  telefono_8: string | null;
+  telefono_9: string | null;
+  telefono_10: string | null;
   link_pago: string | null;
-  token_sat: null;
   dueno: string | null;
   no_molestar: boolean | null;
 }
@@ -197,25 +202,14 @@ export interface CuentaRow {
  * so the UI can render one clear note instead of pretending these are just empty for this
  * contract. */
 export const UNAVAILABLE_COLUMNS: Array<{ key: keyof CuentaRow; label: string }> = [
-  { key: 'referencia_sap', label: 'Referencia SAP' },
   { key: 'fp_dx', label: 'FP DX' },
-  { key: 'tel_casa1', label: 'Tel Casa 1' },
-  { key: 'tel_casa2', label: 'Tel Casa 2' },
-  { key: 'cel_mama', label: 'Cel Mamá' },
-  { key: 'cel_papa', label: 'Cel Papá' },
-  { key: 'tel_oficina_madre', label: 'Tel Oficina Madre' },
-  { key: 'tel_oficina_padre', label: 'Tel Oficina Padre' },
-  { key: 'tel_pariente1', label: 'Tel Pariente 1' },
-  { key: 'tel_pariente2', label: 'Tel Pariente 2' },
-  { key: 'super_promo', label: 'SuperPromo' },
-  { key: 'token_sat', label: 'TokenSAT' },
   { key: 'pagado_hasta_dx', label: 'Pagado Hasta DX' },
 ];
 
 const TABLE = 'netsuite_contracts as C';
 const SUBSIDIARY_COLUMN = 'C.custrecord_cryo_subsidiariacontrato';
 
-interface RawCuentaRow {
+export interface RawCuentaRow {
   netsuite_id: string;
   contrato: string | null;
   folio_sistema_anterior: string | null;
@@ -223,6 +217,16 @@ interface RawCuentaRow {
   titular_nombre: string | null;
   titular_email: string | null;
   titular_telefono: string | null;
+  telefono_1: string | null;
+  telefono_2: string | null;
+  telefono_3: string | null;
+  telefono_4: string | null;
+  telefono_5: string | null;
+  telefono_6: string | null;
+  telefono_7: string | null;
+  telefono_8: string | null;
+  telefono_9: string | null;
+  telefono_10: string | null;
   fecha_nacimiento_confirmada: string | null;
   mes_nacimiento: number | null;
   titular2_nombre: string | null;
@@ -264,90 +268,71 @@ const SERVTIPO_PLACENTA = '15';
 const PARTIDA_ESTATUS_PENDIENTE = '3';
 const PARTIDA_ESTATUS_VENCIDO = '4';
 
-/** "Numero de años" (confirmed by the user) - count of DISTINCT years among this contract's
- * PENDIENTE (custrecord_cryo_estatuspartida = '3') partidas, counting only years already at or
- * before the current calendar year (a Pendiente partida dated for a future year isn't "behind"
- * yet, so it doesn't count). */
-function numeroAnosSubquery(db: Knex): Knex.Raw {
-  return db.raw(
-    `(
-      SELECT COUNT(DISTINCT P.custrecord_cryo_aniopartida)
-      FROM netsuite_partidas P
-      WHERE P.custrecord_cryo_numcontrato = C.netsuite_id
-        AND P.custrecord_cryo_estatuspartida = ?
-        AND P.isinactive = 'F'
-        AND TRY_CONVERT(int, P.custrecord_cryo_aniopartida) <= YEAR(GETDATE())
-    ) as numero_anos`,
-    [PARTIDA_ESTATUS_PENDIENTE],
-  );
-}
+/**
+ * Costo de anualidad + Pagado Hasta (SCU/TCU/ADN) + FP (SCU/TCU/ADN) + Tipo de Servicio, all in
+ * ONE scan of the contract's active netsuite_services rows via CROSS APPLY, instead of 8 separate
+ * correlated subqueries each re-scanning the same handful of rows - this was most of the cost of
+ * the CSV export (11 correlated subqueries x up to ~219k contracts, ~3.75ms/row -> ~14 minutes for
+ * the full unfiltered export). ROW_NUMBER() PARTITION BY tipodeserv preserves the exact "most
+ * recently modified row wins" tie-break the old TOP-1/ORDER BY subqueries used for the unlikely
+ * case of more than one active service of the same type. NULLIF(..., '') keeps tipo_servicio NULL
+ * (not '') when the contract has no active services, matching STRING_AGG's old empty-set
+ * behavior (CONCAT treats NULL args as '', so with zero matching types it would otherwise
+ * collapse to an empty string instead of NULL).
+ */
+const SERVICES_CROSS_APPLY_SQL = `CROSS APPLY (
+  SELECT
+    SUM(TRY_CONVERT(decimal(18,2), S.custrecord_cryo_precioanualtotal)) as costo_anualidad,
+    MAX(CASE WHEN S.rn = 1 AND S.custrecord_cryo_tipodeserv = ? THEN S.custrecord_cryo_pagadohasta END) as pagado_hasta_scu,
+    MAX(CASE WHEN S.rn = 1 AND S.custrecord_cryo_tipodeserv = ? THEN S.custrecord_cryo_pagadohasta END) as pagado_hasta_tcu,
+    MAX(CASE WHEN S.rn = 1 AND S.custrecord_cryo_tipodeserv = ? THEN S.custrecord_cryo_pagadohasta END) as pagado_hasta_adn,
+    MAX(CASE WHEN S.rn = 1 AND S.custrecord_cryo_tipodeserv = ? THEN S.custrecord_cryo_fecha_procesoserv END) as fp_scu,
+    MAX(CASE WHEN S.rn = 1 AND S.custrecord_cryo_tipodeserv = ? THEN S.custrecord_cryo_fecha_procesoserv END) as fp_tcu,
+    MAX(CASE WHEN S.rn = 1 AND S.custrecord_cryo_tipodeserv = ? THEN S.custrecord_cryo_fecha_procesoserv END) as fp_adn,
+    NULLIF(STUFF(CONCAT(
+      CASE WHEN MAX(CASE WHEN S.custrecord_cryo_tipodeserv = ? THEN 1 END) = 1 THEN '+S' END,
+      CASE WHEN MAX(CASE WHEN S.custrecord_cryo_tipodeserv = ? THEN 1 END) = 1 THEN '+T' END,
+      CASE WHEN MAX(CASE WHEN S.custrecord_cryo_tipodeserv = ? THEN 1 END) = 1 THEN '+D' END,
+      CASE WHEN MAX(CASE WHEN S.custrecord_cryo_tipodeserv = ? THEN 1 END) = 1 THEN '+P' END,
+      CASE WHEN MAX(CASE WHEN S.custrecord_cryo_tipodeserv = ? THEN 1 END) = 1 THEN '+A' END
+    ), 1, 1, ''), '') as tipo_servicio
+  FROM (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY custrecord_cryo_tipodeserv ORDER BY lastmodifieddate_dt DESC) as rn
+    FROM netsuite_services
+    WHERE custrecord_cryo_idcontrato = C.netsuite_id AND isinactive = 'F'
+  ) S
+) SVC`;
 
-/** "Tipo de Servicio" - one letter per distinct ACTIVE (isinactive = 'F', same convention as
- * costo_anualidad above) service on the contract - Sangre=S, Tejido=T, Diente=D, Placenta=P,
- * Adn=A - joined with "+" in that fixed order (not the order the services happen to sit in on
- * the contract), e.g. "S+T". Any other service type (Fibroblastos, Pulpa Dental) is left out,
- * since only these five were asked for. */
-function tipoServicioSubquery(db: Knex): Knex.Raw {
-  return db.raw(
-    `(
-      SELECT STRING_AGG(letra, '+') WITHIN GROUP (ORDER BY orden)
-      FROM (
-        SELECT DISTINCT
-          CASE S.custrecord_cryo_tipodeserv
-            WHEN ? THEN 'S' WHEN ? THEN 'T' WHEN ? THEN 'D' WHEN ? THEN 'P' WHEN ? THEN 'A'
-          END AS letra,
-          CASE S.custrecord_cryo_tipodeserv
-            WHEN ? THEN 1 WHEN ? THEN 2 WHEN ? THEN 3 WHEN ? THEN 4 WHEN ? THEN 5
-          END AS orden
-        FROM netsuite_services S
-        WHERE S.custrecord_cryo_idcontrato = C.netsuite_id AND S.isinactive = 'F'
-      ) t
-      WHERE letra IS NOT NULL
-    ) as tipo_servicio`,
-    [
-      SERVTIPO_SCU, SERVTIPO_TCU, SERVTIPO_DIENTE, SERVTIPO_PLACENTA, SERVTIPO_ADN,
-      SERVTIPO_SCU, SERVTIPO_TCU, SERVTIPO_DIENTE, SERVTIPO_PLACENTA, SERVTIPO_ADN,
-    ],
-  );
-}
+const SERVICES_CROSS_APPLY_BINDINGS = [
+  SERVTIPO_SCU, SERVTIPO_TCU, SERVTIPO_ADN,
+  SERVTIPO_SCU, SERVTIPO_TCU, SERVTIPO_ADN,
+  SERVTIPO_SCU, SERVTIPO_TCU, SERVTIPO_DIENTE, SERVTIPO_PLACENTA, SERVTIPO_ADN,
+];
 
-/** "Pagado Hasta" for one service type on this contract - a bare paid-through YEAR (e.g. "2027"),
- * straight from the active netsuite_services row's own custrecord_cryo_pagadohasta (confirmed by
- * the user - NOT derived from partidas, despite the original guess). TOP 1 / ORDER BY is only a
- * safety net for the unlikely case of more than one active service of the same type on a
- * contract - normally there's exactly one. */
-function pagadoHastaSubquery(db: Knex, servtipo: string, alias: string): Knex.Raw {
-  return db.raw(
-    `(
-      SELECT TOP 1 S.custrecord_cryo_pagadohasta
-      FROM netsuite_services S
-      WHERE S.custrecord_cryo_idcontrato = C.netsuite_id
-        AND S.custrecord_cryo_tipodeserv = ?
-        AND S.isinactive = 'F'
-      ORDER BY S.lastmodifieddate_dt DESC
-    ) as ??`,
-    [servtipo, alias],
-  );
-}
+/**
+ * Adeudo total + Interés + Numero de años, all in ONE scan of the contract's active
+ * netsuite_partidas rows via CROSS APPLY, instead of 3 separate correlated subqueries (same
+ * reasoning as SERVICES_CROSS_APPLY_SQL above). SUM(CASE ... END) with no ELSE relies on SQL
+ * Server's SUM ignoring NULLs, so - like the old subqueries' plain WHERE-filtered SUM - it
+ * returns NULL rather than 0 when a contract has partidas but none in the matching status/date
+ * range, instead of silently turning a "no data" blank into a "$0.00".
+ */
+const PARTIDAS_CROSS_APPLY_SQL = `CROSS APPLY (
+  SELECT
+    SUM(CASE
+      WHEN P.custrecord_cryo_estatuspartida = ? AND TRY_CONVERT(date, P.custrecord_cryo_fechapartida, 103) < CAST(GETDATE() AS date)
+      THEN TRY_CONVERT(decimal(18,2), P.custrecord_cryo_importepartida)
+    END) as adeudo_total,
+    SUM(TRY_CONVERT(decimal(18,2), P.custrecord_cryo_interes)) as interes,
+    COUNT(DISTINCT CASE
+      WHEN P.custrecord_cryo_estatuspartida = ? AND TRY_CONVERT(int, P.custrecord_cryo_aniopartida) <= YEAR(GETDATE())
+      THEN P.custrecord_cryo_aniopartida
+    END) as numero_anos
+  FROM netsuite_partidas P
+  WHERE P.custrecord_cryo_numcontrato = C.netsuite_id AND P.isinactive = 'F'
+) PART`;
 
-/** "FP" (Fecha Procesamiento) for one service type on this contract - the active netsuite_services
- * row's own custrecord_cryo_fecha_procesoserv (confirmed by the user - a real Date field on the
- * Servicio record; it only ever came back empty because the integration role lacked field-level
- * access to it, fixed live in NetSuite, then backfilled here). Same shape/safety-net TOP 1 as
- * Pagado Hasta above. */
-function fpSubquery(db: Knex, servtipo: string, alias: string): Knex.Raw {
-  return db.raw(
-    `(
-      SELECT TOP 1 S.custrecord_cryo_fecha_procesoserv
-      FROM netsuite_services S
-      WHERE S.custrecord_cryo_idcontrato = C.netsuite_id
-        AND S.custrecord_cryo_tipodeserv = ?
-        AND S.isinactive = 'F'
-      ORDER BY S.lastmodifieddate_dt DESC
-    ) as ??`,
-    [servtipo, alias],
-  );
-}
+const PARTIDAS_CROSS_APPLY_BINDINGS = [PARTIDA_ESTATUS_VENCIDO, PARTIDA_ESTATUS_PENDIENTE];
 
 /**
  * Only the join(s) actually needed to filter/count rows - TITULAR only when `search` will
@@ -381,6 +366,8 @@ function addOutputJoins(qb: Knex.QueryBuilder, search: string): Knex.QueryBuilde
   }
   qb.leftJoin('netsuite_family_members as TITULAR2', 'TITULAR2.netsuite_id', 'C.custrecord_cryo_padres');
   qb.leftJoin('netsuite_employees as DUENO', 'DUENO.netsuite_id', 'C.custrecord_cryo_duenio');
+  qb.joinRaw(SERVICES_CROSS_APPLY_SQL, SERVICES_CROSS_APPLY_BINDINGS);
+  qb.joinRaw(PARTIDAS_CROSS_APPLY_SQL, PARTIDAS_CROSS_APPLY_BINDINGS);
   return qb;
 }
 
@@ -393,6 +380,16 @@ function selectCuentaColumns(qb: Knex.QueryBuilder, db: Knex): Knex.QueryBuilder
     'TITULAR.companyname as titular_nombre',
     'TITULAR.email as titular_email',
     'TITULAR.phone as titular_telefono',
+    'TITULAR.custentitycustentity_cryo_telefono1 as telefono_1',
+    'TITULAR.custentitycustentity_cryo_telefono2 as telefono_2',
+    'TITULAR.custentity_cryo_telefono3 as telefono_3',
+    'TITULAR.custentity_cryo_telefono4 as telefono_4',
+    'TITULAR.custentity3 as telefono_5',
+    'TITULAR.custentity_cryo_telefono6 as telefono_6',
+    'TITULAR.custentity_cryo_telefono7 as telefono_7',
+    'TITULAR.custentity_cryo_telefono8 as telefono_8',
+    'TITULAR.custentity_cryo_telefono9 as telefono_9',
+    'TITULAR.custentity_cryo_telefono10 as telefono_10',
     'C.custrecord_cryo_fnacimientoconf as fecha_nacimiento_confirmada',
     db.raw(`MONTH(TRY_CONVERT(date, C.custrecord_cryo_fnacimientoconf, 103)) as mes_nacimiento`),
     'TITULAR2.custrecord_cryo_nombremiembro as titular2_nombre',
@@ -414,43 +411,25 @@ function selectCuentaColumns(qb: Knex.QueryBuilder, db: Knex): Knex.QueryBuilder
         AND FM.custrecord_cryo_parentesco = '1'
       ORDER BY FM.netsuite_id
     ) as nombre_hijo`),
-    db.raw(`(
-      SELECT SUM(TRY_CONVERT(decimal(18,2), S.custrecord_cryo_precioanualtotal))
-      FROM netsuite_services S
-      WHERE S.custrecord_cryo_idcontrato = C.netsuite_id AND S.isinactive = 'F'
-    ) as costo_anualidad`),
-    db.raw(
-      `(
-        SELECT SUM(TRY_CONVERT(decimal(18,2), P.custrecord_cryo_importepartida))
-        FROM netsuite_partidas P
-        WHERE P.custrecord_cryo_numcontrato = C.netsuite_id
-          AND P.custrecord_cryo_estatuspartida = ?
-          AND P.isinactive = 'F'
-          AND TRY_CONVERT(date, P.custrecord_cryo_fechapartida, 103) < CAST(GETDATE() AS date)
-      ) as adeudo_total`,
-      [PARTIDA_ESTATUS_VENCIDO],
-    ),
+    'SVC.costo_anualidad as costo_anualidad',
+    'PART.adeudo_total as adeudo_total',
     // Not filtered by estatuspartida/date like adeudo_total - confirmed live that
     // custrecord_cryo_interes is populated across every partida status (Vencido, Pagado,
     // Parcialmente pagado, Pendiente alike), not just overdue ones, so this is the contract's
     // total interest across every active partida, full stop.
-    db.raw(`(
-      SELECT SUM(TRY_CONVERT(decimal(18,2), P.custrecord_cryo_interes))
-      FROM netsuite_partidas P
-      WHERE P.custrecord_cryo_numcontrato = C.netsuite_id AND P.isinactive = 'F'
-    ) as interes`),
-    pagadoHastaSubquery(db, SERVTIPO_SCU, 'pagado_hasta_scu'),
-    pagadoHastaSubquery(db, SERVTIPO_TCU, 'pagado_hasta_tcu'),
-    pagadoHastaSubquery(db, SERVTIPO_ADN, 'pagado_hasta_adn'),
-    fpSubquery(db, SERVTIPO_SCU, 'fp_scu'),
-    fpSubquery(db, SERVTIPO_TCU, 'fp_tcu'),
-    fpSubquery(db, SERVTIPO_ADN, 'fp_adn'),
-    tipoServicioSubquery(db),
-    numeroAnosSubquery(db),
+    'PART.interes as interes',
+    'SVC.pagado_hasta_scu as pagado_hasta_scu',
+    'SVC.pagado_hasta_tcu as pagado_hasta_tcu',
+    'SVC.pagado_hasta_adn as pagado_hasta_adn',
+    'SVC.fp_scu as fp_scu',
+    'SVC.fp_tcu as fp_tcu',
+    'SVC.fp_adn as fp_adn',
+    'SVC.tipo_servicio as tipo_servicio',
+    'PART.numero_anos as numero_anos',
   );
 }
 
-function buildCuentaRow(raw: RawCuentaRow): CuentaRow {
+export function buildCuentaRow(raw: RawCuentaRow): CuentaRow {
   return {
     netsuite_id: raw.netsuite_id,
     contrato: raw.contrato,
@@ -459,6 +438,16 @@ function buildCuentaRow(raw: RawCuentaRow): CuentaRow {
     titular_nombre: raw.titular_nombre,
     titular_email: raw.titular_email,
     titular_telefono: raw.titular_telefono,
+    telefono_1: raw.telefono_1,
+    telefono_2: raw.telefono_2,
+    telefono_3: raw.telefono_3,
+    telefono_4: raw.telefono_4,
+    telefono_5: raw.telefono_5,
+    telefono_6: raw.telefono_6,
+    telefono_7: raw.telefono_7,
+    telefono_8: raw.telefono_8,
+    telefono_9: raw.telefono_9,
+    telefono_10: raw.telefono_10,
     fecha_nacimiento_confirmada: raw.fecha_nacimiento_confirmada,
     mes_nacimiento: raw.mes_nacimiento,
     titular2_nombre: raw.titular2_nombre,
@@ -471,7 +460,6 @@ function buildCuentaRow(raw: RawCuentaRow): CuentaRow {
     tipo_servicio: raw.tipo_servicio,
     nombre_hijo: raw.nombre_hijo,
     referencia_cie: raw.ns_referencia_cie,
-    referencia_sap: null,
     zona: (raw.ns_franquicia_asociado && FRANQUICIA_ASOCIADO_LABELS[raw.ns_franquicia_asociado]) || null,
     fp_scu: raw.fp_scu,
     fp_tcu: raw.fp_tcu,
@@ -481,17 +469,7 @@ function buildCuentaRow(raw: RawCuentaRow): CuentaRow {
     estatus_cliente: (raw.ns_estatus_cliente && MX_ESTATUS_CLIENTE_LABELS[raw.ns_estatus_cliente]) || null,
     estatus_cobranza: (raw.ns_estatus_cobranza && MX_ESTATUS_COBRANZA_LABELS[raw.ns_estatus_cobranza]) || null,
     metal: (raw.ns_metal && CLASIFICADOR_METAL_LABELS[raw.ns_metal]) || null,
-    tel_casa1: null,
-    tel_casa2: null,
-    cel_mama: null,
-    cel_papa: null,
-    tel_oficina_madre: null,
-    tel_oficina_padre: null,
-    tel_pariente1: null,
-    tel_pariente2: null,
-    super_promo: null,
     link_pago: buildLinkPago(raw.ns_token),
-    token_sat: null,
     pagado_hasta_scu: raw.pagado_hasta_scu,
     pagado_hasta_tcu: raw.pagado_hasta_tcu,
     pagado_hasta_dx: null,
@@ -549,4 +527,28 @@ export async function getCuentasForExport(
 
   const rawRows = (await selectCuentaColumns(addOutputJoins(qb, search), db).orderBy('C.lastmodifieddate_dt', 'desc')) as RawCuentaRow[];
   return rawRows.map(buildCuentaRow);
+}
+
+/**
+ * Same unpaginated query as getCuentasForExport, but as a true row-by-row stream (knex's mssql
+ * dialect streams rows off the tedious driver's own 'row' event, not a buffered wrapper) instead
+ * of one big awaited array. The old export route awaited the whole ~219k-row result before writing
+ * a single byte to the response - the user saw nothing for the entire query duration, then a
+ * sudden full flush. Streaming lets the download start within a couple seconds (as soon as SQL
+ * Server's sort + first joined rows are ready) and spreads the rest across the transfer, instead
+ * of one long silent wait that reads as "stuck".
+ */
+export function streamCuentasForExport(
+  db: Knex,
+  params: Pick<CuentasParams, 'search' | 'subsidiary'>,
+  restrictSubsidiaries: Set<string> | null,
+): NodeJS.ReadableStream {
+  const search = typeof params.search === 'string' ? params.search.trim() : '';
+  const requestedSubsidiaries = parseSubsidiaryFilter(params.subsidiary);
+
+  const qb = baseCuentasQuery(db, search);
+  if (restrictSubsidiaries !== null) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
+  if (requestedSubsidiaries.size > 0) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, requestedSubsidiaries);
+
+  return selectCuentaColumns(addOutputJoins(qb, search), db).orderBy('C.lastmodifieddate_dt', 'desc').stream();
 }
