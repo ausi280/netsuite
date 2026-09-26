@@ -133,6 +133,19 @@ async function getNetSuiteNotesReport(http: NetSuiteHttpClient, dateFrom: string
   return { rows, truncated: true };
 }
 
+// SQL Server (mssql/tedious) caps a single query at 2100 bound parameters, and each `whereIn`
+// value is its own parameter - a wide date range can pull in thousands of distinct contracts, so
+// these lookups must be chunked well under that limit.
+const SQL_SERVER_WHERE_IN_CHUNK_SIZE = 2000;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 /** Resolves each distinct legacy Folio to its matching NetSuite contract's own `name` (e.g.
  * "MX-CC-2026-115451-1"), so legacy-system rows show the same "Contrato" identifier the NetSuite
  * side uses instead of the raw Folio. A folio with no matching contract (never migrated, or a
@@ -141,13 +154,15 @@ async function resolveFolioToContratoName(db: Knex, folios: string[]): Promise<M
   const distinctFolios = [...new Set(folios.filter((f): f is string => Boolean(f)))];
   if (distinctFolios.length === 0) return new Map();
 
-  const rows = await db('netsuite_contracts')
-    .whereIn('custrecord_cryo_contratosistemaanterior', distinctFolios)
-    .select('custrecord_cryo_contratosistemaanterior as folio', 'name');
-
   const map = new Map<string, string>();
-  for (const row of rows as Array<{ folio: string | null; name: string | null }>) {
-    if (row.folio && row.name) map.set(row.folio, row.name);
+  for (const batch of chunk(distinctFolios, SQL_SERVER_WHERE_IN_CHUNK_SIZE)) {
+    const rows = await db('netsuite_contracts')
+      .whereIn('custrecord_cryo_contratosistemaanterior', batch)
+      .select('custrecord_cryo_contratosistemaanterior as folio', 'name');
+
+    for (const row of rows as Array<{ folio: string | null; name: string | null }>) {
+      if (row.folio && row.name) map.set(row.folio, row.name);
+    }
   }
   return map;
 }
@@ -159,13 +174,15 @@ async function resolveContratoFolios(db: Knex, recordIds: string[]): Promise<Map
   const distinctIds = [...new Set(recordIds.filter((id): id is string => Boolean(id)))];
   if (distinctIds.length === 0) return new Map();
 
-  const rows = await db('netsuite_contracts')
-    .whereIn('netsuite_id', distinctIds)
-    .select('netsuite_id', 'custrecord_cryo_contratosistemaanterior as folio');
-
   const map = new Map<string, string | null>();
-  for (const row of rows as Array<{ netsuite_id: string; folio: string | null }>) {
-    map.set(row.netsuite_id, row.folio);
+  for (const batch of chunk(distinctIds, SQL_SERVER_WHERE_IN_CHUNK_SIZE)) {
+    const rows = await db('netsuite_contracts')
+      .whereIn('netsuite_id', batch)
+      .select('netsuite_id', 'custrecord_cryo_contratosistemaanterior as folio');
+
+    for (const row of rows as Array<{ netsuite_id: string; folio: string | null }>) {
+      map.set(row.netsuite_id, row.folio);
+    }
   }
   return map;
 }
