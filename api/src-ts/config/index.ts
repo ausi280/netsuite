@@ -28,6 +28,7 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   peServicio: '55 8 * * *',
   otrosContrato: '0 9 * * *',
   fcellsContrato: '5 9 * * *',
+  customerAddress: '10 9 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -79,6 +80,7 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     OTROS_CONTRATO: mergeEntityConfig('otrosContrato', raw?.OTROS_CONTRATO),
     PE_SERVICIO: mergeEntityConfig('peServicio', raw?.PE_SERVICIO),
     FCELLS_CONTRATO: mergeEntityConfig('fcellsContrato', raw?.FCELLS_CONTRATO),
+    CUSTOMER_ADDRESS: mergeEntityConfig('customerAddress', raw?.CUSTOMER_ADDRESS),
   };
 }
 

@@ -77,7 +77,8 @@
                 "VENDOR_BILL_PAYMENT": { "ENABLED": true, "CRON": "50 8 * * *" },
                 "OTROS_CONTRATO": { "ENABLED": true, "CRON": "0 9 * * *" },
                 "PE_SERVICIO": { "ENABLED": true, "CRON": "55 8 * * *" },
-                "FCELLS_CONTRATO": { "ENABLED": true, "CRON": "5 9 * * *" }
+                "FCELLS_CONTRATO": { "ENABLED": true, "CRON": "5 9 * * *" },
+                "CUSTOMER_ADDRESS": { "ENABLED": true, "CRON": "10 9 * * *" }
             }
         },
         "META" : {

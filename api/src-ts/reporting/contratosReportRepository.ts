@@ -31,11 +31,15 @@ import type { Paginated } from './types';
  * - Token = custrecord_nso_token, exposed raw here (unlike Cuentas' Link Pago, which wraps it in
  *   the renovaciones.cryo-cell.com.mx URL) - this report's column is literally "Token".
  *
+ * The 10 fiscal/CFDI columns (RazonSocial..RegimenFiscal) live on the Titular's Address Book
+ * "billing" row (customer > Address tab, `defaultbilling = 'T'`), now synced by
+ * customerAddressSyncService.ts into netsuite_customer_addresses - joined in below via
+ * TITULAR.netsuite_id = FACT.customer_id AND FACT.defaultbilling = 'T'. A customer with no address
+ * marked as the default billing one (or none at all) simply gets nulls for these, via the LEFT JOIN.
+ *
  * Still unavailable (checked against the FULL confirmed customrecord1184 field list - no plausible
  * match exists, not merely unchecked): Fecha Venta, Costo DX (same unconfirmed servtipo-id gap as
- * Cuentas' pagado_hasta_dx/fp_dx), "Tipo", and the 10 fiscal/CFDI columns (RazonSocial..RegimenFiscal
- * - these live on the customer's address book, which isn't synced anywhere in this app; a real new
- * sync would be needed, not a quick backfill).
+ * Cuentas' pagado_hasta_dx/fp_dx), and "Tipo".
  */
 
 const CONTRACT_STATUS_LABELS: Record<string, string> = {
@@ -164,16 +168,16 @@ export interface ContratoReportRow {
   correo_titular2: string | null;
   zona_franquicia: string | null;
   tipo: null;
-  razon_social: null;
-  rfc_fac: null;
-  dir_fac: null;
-  col_fac: null;
-  cp_fac: null;
-  pais_fac: null;
-  estado_fac: null;
-  ciudades_fac: null;
-  usocfdi: null;
-  regimen_fiscal: null;
+  razon_social: string | null;
+  rfc_fac: string | null;
+  dir_fac: string | null;
+  col_fac: string | null;
+  cp_fac: string | null;
+  pais_fac: string | null;
+  estado_fac: string | null;
+  ciudades_fac: string | null;
+  usocfdi: string | null;
+  regimen_fiscal: string | null;
   referencia_cie: string | null;
   referencia_sap: string | null;
   zona_franquicia_asociado: string | null;
@@ -191,16 +195,6 @@ export interface ContratoReportRow {
 export const UNAVAILABLE_COLUMNS: Array<{ key: keyof ContratoReportRow; label: string }> = [
   { key: 'costo_dx', label: 'Costo DX' },
   { key: 'tipo', label: 'Tipo' },
-  { key: 'razon_social', label: 'RazonSocial' },
-  { key: 'rfc_fac', label: 'RFCFac' },
-  { key: 'dir_fac', label: 'DirFac' },
-  { key: 'col_fac', label: 'ColFac' },
-  { key: 'cp_fac', label: 'CPFac' },
-  { key: 'pais_fac', label: 'PaisFac' },
-  { key: 'estado_fac', label: 'EstadoFac' },
-  { key: 'ciudades_fac', label: 'CiudadesFac' },
-  { key: 'usocfdi', label: 'usocfdi' },
-  { key: 'regimen_fiscal', label: 'RegimenFiscal' },
   { key: 'fecha_venta', label: 'Fecha Venta' },
 ];
 
@@ -251,6 +245,16 @@ interface RawContratoReportRow {
   ns_referencia_cie: string | null;
   ns_referencia_sap: string | null;
   ns_token: string | null;
+  razon_social: string | null;
+  rfc_fac: string | null;
+  dir_fac: string | null;
+  col_fac: string | null;
+  cp_fac: string | null;
+  pais_fac: string | null;
+  estado_fac: string | null;
+  ciudades_fac: string | null;
+  usocfdi: string | null;
+  regimen_fiscal: string | null;
   ns_estatus_cliente: string | null;
   ns_estatus_cobranza: string | null;
   ns_metal: string | null;
@@ -338,6 +342,9 @@ function addOutputJoins(qb: Knex.QueryBuilder, search: string): Knex.QueryBuilde
   qb.leftJoin('netsuite_employees as VEND', 'VEND.netsuite_id', 'C.custrecord_cryo_vendedor');
   qb.leftJoin('netsuite_employees as DUENO', 'DUENO.netsuite_id', 'C.custrecord_cryo_duenio');
   qb.leftJoin('netsuite_employees as MEDICO', 'MEDICO.netsuite_id', 'C.custrecord_cryo_ginecoloco');
+  qb.leftJoin('netsuite_customer_addresses as FACT', function () {
+    this.on('FACT.customer_id', '=', 'TITULAR.netsuite_id').andOnVal('FACT.defaultbilling', '=', 'T');
+  });
   return qb;
 }
 
@@ -380,6 +387,16 @@ function selectContratoColumns(qb: Knex.QueryBuilder, db: Knex): Knex.QueryBuild
     'C.custrecord_cryo_mx_estatus_cobranza as ns_estatus_cobranza',
     'C.custrecord_cryo_mx_clasificadormetal as ns_metal',
     'C.custrecord_cryo_mx_pagoautomatico as ns_pago_automatico',
+    'FACT.custrecord_cryo_razonsocial as razon_social',
+    'FACT.custrecord_cryo_rfc as rfc_fac',
+    'FACT.addr1 as dir_fac',
+    'FACT.custrecord_colonia as col_fac',
+    'FACT.zip as cp_fac',
+    'FACT.country as pais_fac',
+    'FACT.state as estado_fac',
+    'FACT.city as ciudades_fac',
+    'FACT.custrecord_cryo_usocfdi as usocfdi',
+    'FACT.custrecord_cryo_regimenfiscal as regimen_fiscal',
     serviceExistsSubquery(db, SERVTIPO_SCU, 'scu'),
     serviceStatusSubquery(db, SERVTIPO_SCU, 'ns_estado_sangre'),
     costoAnualidadSubquery(db, SERVTIPO_SCU, 'costo_anualidad_sangre'),
@@ -437,16 +454,16 @@ function buildContratoRow(raw: RawContratoReportRow): ContratoReportRow {
     correo_titular2: raw.correo_titular2,
     zona_franquicia: (raw.ns_zona_franquicia && FRANQUICIA_ASOCIADO_LABELS[raw.ns_zona_franquicia]) || null,
     tipo: null,
-    razon_social: null,
-    rfc_fac: null,
-    dir_fac: null,
-    col_fac: null,
-    cp_fac: null,
-    pais_fac: null,
-    estado_fac: null,
-    ciudades_fac: null,
-    usocfdi: null,
-    regimen_fiscal: null,
+    razon_social: raw.razon_social,
+    rfc_fac: raw.rfc_fac,
+    dir_fac: raw.dir_fac,
+    col_fac: raw.col_fac,
+    cp_fac: raw.cp_fac,
+    pais_fac: raw.pais_fac,
+    estado_fac: raw.estado_fac,
+    ciudades_fac: raw.ciudades_fac,
+    usocfdi: raw.usocfdi,
+    regimen_fiscal: raw.regimen_fiscal,
     referencia_cie: raw.ns_referencia_cie,
     referencia_sap: raw.ns_referencia_sap,
     zona_franquicia_asociado: (raw.ns_zona_franquicia && FRANQUICIA_ASOCIADO_LABELS[raw.ns_zona_franquicia]) || null,

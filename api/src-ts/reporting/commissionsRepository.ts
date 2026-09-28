@@ -11,7 +11,10 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * together for tier resolution, and each has its own nivel per employee
  * (employee_details.nivel_contratos / nivel_otros_contratos):
  *   - A regular contract's services (Sangre/Tejido/ADN/Placenta/etc.) contribute their processing
- *     price to that contract's total. The Contratos RATE is resolved once per vendedor, from
+ *     price to that contract's total - ONLY when that service's own Estado del Pago
+ *     (custrecord_cryo_statuspagoserv) is Pagado; an unpaid/overdue service contributes nothing
+ *     yet, and a contract with none of its services Pagado pays no commission at all. The
+ *     Contratos RATE is resolved once per vendedor, from
  *     their TOTAL contracts-services sum across every contract they sold in the period (every
  *     subsidiary, not just one), under their nivel_contratos - then that one rate is applied to
  *     each contract's own total.
@@ -59,6 +62,14 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * stay visible, but must never zero out or restrict a real commission calculation). Kept in
  * ContractCommission purely so the UI can still show the badge.
  */
+
+// custrecord_cryo_statuspagoserv (Estado del Pago) on customrecord_cryo_servicios - confirmed live
+// via BUILTIN.DF: 1=Pagado, 3=Pendiente, 4=Vencido. Only Pagado services count toward a contract's
+// commission at all (total_servicios, Placenta detection, the vendedor's tier-resolution total) -
+// an unpaid service simply doesn't contribute yet; if none of a contract's services are Pagado,
+// its total_servicios is 0 and it pays no commission, per explicit instruction ("if not we are not
+// paying comission for that contract").
+const SERVICE_PAYMENT_STATUS_PAGADO = '1';
 
 // Fixed business rules, deliberately NOT part of the configurable commission_level_tiers table -
 // these apply "no matter what" nivel the vendedor is on.
@@ -544,6 +555,7 @@ export async function getCommissionsByVendedor(
     db<ServiceRow>('netsuite_services')
       .whereIn('custrecord_cryo_idcontrato', allContractIds)
       .andWhere('isinactive', 'F')
+      .andWhere('custrecord_cryo_statuspagoserv', SERVICE_PAYMENT_STATUS_PAGADO)
       .select('netsuite_id', 'custrecord_cryo_idcontrato', 'custrecord_cryo_tipodeserv', 'custrecord_cryo_precioprocesamiento'),
     db<AnualidadPartidaRow>('netsuite_partidas')
       .whereIn('custrecord_cryo_numcontrato', displayContractIds)

@@ -27,6 +27,7 @@ import { VendorBillPaymentRepository } from './repositories/vendorBillPaymentRep
 import { OtrosContratoRepository } from './repositories/otrosContratoRepository';
 import { PeServicioRepository } from './repositories/peServicioRepository';
 import { FcellsContratoRepository } from './repositories/fcellsContratoRepository';
+import { CustomerAddressRepository } from './repositories/customerAddressRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
 import { FamilyMemberSyncService } from './services/familyMemberSyncService';
@@ -48,6 +49,7 @@ import { VendorBillPaymentSyncService } from './services/vendorBillPaymentSyncSe
 import { OtrosContratoSyncService } from './services/otrosContratoSyncService';
 import { PeServicioSyncService } from './services/peServicioSyncService';
 import { FcellsContratoSyncService } from './services/fcellsContratoSyncService';
+import { CustomerAddressSyncService } from './services/customerAddressSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
 import type { EntitySyncService } from './services/types';
 
@@ -96,6 +98,7 @@ export function bootstrap(): Bootstrapped {
     new PeServicioSyncService(db, http, syncState, rawStore, new PeServicioRepository(db), overlapMinutes),
     new OtrosContratoSyncService(db, http, syncState, rawStore, new OtrosContratoRepository(db), overlapMinutes),
     new FcellsContratoSyncService(db, http, syncState, rawStore, new FcellsContratoRepository(db), overlapMinutes),
+    new CustomerAddressSyncService(db, http, syncState, rawStore, new CustomerAddressRepository(db), overlapMinutes),
   ];
 
   const entityLimiter = new Bottleneck({ maxConcurrent: config.erp.SYNC.MAX_CONCURRENT_ENTITIES });
