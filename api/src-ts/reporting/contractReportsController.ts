@@ -5,6 +5,8 @@ import { bootstrap } from '../bootstrap';
 import { paramString } from './controller';
 import { getEntityConfig } from './entityRegistry';
 import { getContractDossier } from './contractDossierRepository';
+import { getEstadoCuenta } from './estadoCuentaRepository';
+import { generateEstadoCuentaPdf } from './estadoCuentaPdf';
 import { getCommissionsByVendedor, resolveSelfVendedorId } from './commissionsRepository';
 import type { VendedorCommissionGroup } from './commissionsRepository';
 import { buildCommissionsCsv } from './commissionsExport';
@@ -55,6 +57,29 @@ export async function getContractDossierRoute(req: Request, res: Response): Prom
   }
 
   res.status(200).json({ success: true, data: dossier });
+}
+
+/** GET /api/reports/contracts/:id/estado-cuenta — customer-facing account statement PDF for one
+ * contract (client/espécimen info + charges history), gated the same as the dossier. */
+export async function getEstadoCuentaPdfRoute(req: Request, res: Response): Promise<void> {
+  const permissions = req.permissions;
+  if (!isContractsAllowed(permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const id = paramString(req.params.id);
+  const estadoCuenta = await getEstadoCuenta(knex, getLegacyDb(), id, subsidiaryRestrictionFor(permissions!));
+  if (!estadoCuenta) {
+    res.status(404).json({ success: false, message: `Contract record not found for id ${id}` });
+    return;
+  }
+
+  const pdf = await generateEstadoCuentaPdf(estadoCuenta);
+  res.setHeader('Content-Type', 'application/pdf');
+  // "inline", not "attachment" - opened in a browser tab (see ReportDetailPage.tsx), not downloaded.
+  res.setHeader('Content-Disposition', `inline; filename="estado-cuenta-${estadoCuenta.id_cliente ?? id}.pdf"`);
+  res.status(200).send(pdf);
 }
 
 function parsePositiveInt(value: unknown): number | null {

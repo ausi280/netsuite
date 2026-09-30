@@ -416,6 +416,59 @@ export interface ProspectosResponse {
   totalPages: number;
 }
 
+/** One (year, month) bucket of "Reporte de Marketing"'s sales-by-month chart - a "sale" is any
+ * Prospecto with a matched Contrato, bucketed by the CONTRACT's own FechaVenta (not the
+ * prospecto's capture date), split online/offline by the prospecto's own channel. See the
+ * file-level comment in api/src-ts/reporting/marketingRepository.ts for exactly which
+ * Cryo.dbo.TipoCanal ids count as "online" (confirmed live, per empresa). */
+export interface MarketingSalesByMonthRow {
+  anio: number;
+  mes: number;
+  online: number;
+  offline: number;
+  total: number;
+}
+
+export type ProspectoQualificationCategory = 'Calificados' | 'No contactado' | 'Lead no calificado';
+
+export interface ProspectoQualificationSummary {
+  calificados: number;
+  no_contactado: number;
+  lead_no_calificado: number;
+  total: number;
+}
+
+/** One (year, month) bucket of the qualification chart, by Prospecto.FechaCaptura - same
+ * year/month bucketing convention as MarketingSalesByMonthRow. */
+export interface QualificationByMonthRow extends ProspectoQualificationSummary {
+  anio: number;
+  mes: number;
+}
+
+/** One distinct (year, month, empresa, motivo) combination actually present in the date range,
+ * with its resolved category - shown in full so it's always clear exactly which raw
+ * Cryo.dbo.noventa row rolled into which bucket, per empresa and per month (the same motivo name
+ * can be a different ID_NoVenta per empresa - see the repository file-level comment). */
+export interface MarketingMotivoBreakdownRow {
+  anio: number;
+  mes: number;
+  id_empresa: number;
+  id_noventa: number | null;
+  motivo: string;
+  categoria: ProspectoQualificationCategory;
+  cantidad: number;
+}
+
+export interface MarketingReportResponse {
+  success: true;
+  salesByMonth: MarketingSalesByMonthRow[];
+  qualification: {
+    summary: ProspectoQualificationSummary;
+    byMonth: QualificationByMonthRow[];
+    motivos: MarketingMotivoBreakdownRow[];
+  };
+}
+
 /**
  * One row of the "Cuentas" per-contract account/collections detail sheet, reached from the
  * Partidas report. Sourced ENTIRELY from NetSuite, by design - no legacy Cryo.dbo/CryoCell

@@ -10,6 +10,7 @@ import {
   getCommissionsPdfRoute,
   getCommissionsReportRoute,
   getContractDossierRoute,
+  getEstadoCuentaPdfRoute,
   getContractNetSuiteNotesRoute,
   getContractNotasRoute,
 } from './contractReportsController';
@@ -24,6 +25,7 @@ import {
 import { chargeDomiciledRoute } from './paymentsChargeController';
 import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
 import { exportProspectosRoute, listProspectosRoute } from './prospectosController';
+import { getMarketingReportRoute } from './marketingController';
 import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
 import { exportNotesReportRoute, listNotesReportRoute } from './notesReportController';
 import { exportContratosReportRoute, listContratosReportRoute } from './contratosReportController';
@@ -60,6 +62,7 @@ export function buildReportingRouter(): Router {
   router.get('/contracts/commissions/pdf', getCommissionsPdfRoute);
   router.get('/contracts/vendedores', listVendedorOptionsRoute);
   router.get('/contracts/:id/dossier', getContractDossierRoute);
+  router.get('/contracts/:id/estado-cuenta', getEstadoCuentaPdfRoute);
   router.get('/contracts/:id/notas', getContractNotasRoute);
   router.get('/contracts/:id/netsuite-notes', getContractNetSuiteNotesRoute);
   // PATCH on a distinct HTTP method from every GET route above, so no ordering concern here -
@@ -85,6 +88,10 @@ export function buildReportingRouter(): Router {
   // an entity key and 404 (it isn't a registered ReportEntityKey).
   router.get('/prospectos', listProspectosRoute);
   router.get('/prospectos/export', exportProspectosRoute);
+  // Reporte de Marketing (sales-by-month online/offline split + prospecto qualification funnel,
+  // built on the same Prospecto data as /prospectos) - likewise bespoke, must be registered before
+  // /:entity/export, or that route would swallow "marketing" as an entity key and 404.
+  router.get('/marketing', getMarketingReportRoute);
   // Cuentas (per-contract account/collections detail, reached from the Partidas report) is
   // likewise bespoke, not a generic ENTITY_REGISTRY entity - must be registered before
   // /:entity/export, or that route would swallow "cuentas" as an entity key and 404.

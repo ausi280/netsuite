@@ -12,6 +12,8 @@ import { ContractDossierView } from '../components/reports/ContractDossierView';
 import { NotasCobranzaSection } from '../components/reports/NotasCobranzaSection';
 import { NetSuiteNotesSection } from '../components/reports/NetSuiteNotesSection';
 import { NotFoundPage } from './NotFoundPage';
+import { fetchEstadoCuentaPdf } from '../api/reportsApi';
+import { useApiToken } from '../auth/useApiToken';
 import styles from './ReportDetailPage.module.css';
 
 function isValidEntityKey(key: string | undefined): key is ReportEntityKey {
@@ -21,6 +23,9 @@ function isValidEntityKey(key: string | undefined): key is ReportEntityKey {
 export function ReportDetailPage() {
   const { entityKey: rawEntityKey, id: rawId } = useParams<{ entityKey: string; id: string }>();
   const [showRaw, setShowRaw] = useState(false);
+  const { getAccessToken } = useApiToken();
+  const [isDownloadingEstadoCuenta, setIsDownloadingEstadoCuenta] = useState(false);
+  const [estadoCuentaError, setEstadoCuentaError] = useState<string | null>(null);
 
   const isValid = isValidEntityKey(rawEntityKey) && Boolean(rawId);
   const entityKey = (isValid ? rawEntityKey : 'customers') as ReportEntityKey;
@@ -57,6 +62,31 @@ export function ReportDetailPage() {
   }
   const title = `${titleParts[0]} · ${titleParts.slice(1).join(' / ')}`;
 
+  async function handleDownloadEstadoCuenta() {
+    setIsDownloadingEstadoCuenta(true);
+    setEstadoCuentaError(null);
+    // Opened synchronously, in the same tick as the click, so it isn't blocked as a popup - the
+    // PDF is fetched (it needs an Authorization header, so a plain <a href> can't reach it
+    // directly) and handed to this already-open tab once ready, rather than opening a new tab
+    // only after the async fetch resolves.
+    const tab = window.open('', '_blank');
+    try {
+      const token = await getAccessToken();
+      const blob = await fetchEstadoCuentaPdf(token, id);
+      const url = URL.createObjectURL(blob);
+      if (tab) {
+        tab.location.href = url;
+      } else {
+        window.location.href = url;
+      }
+    } catch (error) {
+      tab?.close();
+      setEstadoCuentaError(error instanceof Error ? error.message : 'No se pudo generar el estado de cuenta.');
+    } finally {
+      setIsDownloadingEstadoCuenta(false);
+    }
+  }
+
   return (
     <AppShell breadcrumbs={[{ label: 'Reportes', to: '/' }, { label: config.label, to: `/reports/${entityKey}` }, { label: id }]}>
       <Link to={`/reports/${entityKey}`} className={styles.backLink}>
@@ -80,7 +110,19 @@ export function ReportDetailPage() {
             Ver transacciones
           </Link>
         ) : null}
+        {isContract && dossierData ? (
+          <button type="button" className={styles.transactionsLink} onClick={handleDownloadEstadoCuenta} disabled={isDownloadingEstadoCuenta}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <line x1="3" y1="9" x2="21" y2="9" />
+              <line x1="7" y1="13" x2="17" y2="13" />
+              <line x1="7" y1="17" x2="13" y2="17" />
+            </svg>
+            {isDownloadingEstadoCuenta ? 'Generando...' : 'Ver Estado de Cuenta'}
+          </button>
+        ) : null}
       </div>
+      {estadoCuentaError ? <p className={styles.errorNote}>{estadoCuentaError}</p> : null}
       {isLoading ? <LoadingState label="Cargando registro..." /> : null}
       {isError ? (
         <ErrorState

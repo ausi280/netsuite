@@ -25,6 +25,25 @@
   text-decoration: underline;
 }
 
+button.transactionsLink {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+
+button.transactionsLink:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.errorNote {
+  color: var(--color-danger);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
 .card {
   background: var(--color-white);
   border-radius: var(--radius-lg);

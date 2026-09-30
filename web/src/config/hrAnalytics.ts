@@ -1,6 +1,6 @@
 import type { HrDimension } from '../api/types';
 
-export type ChartKind = 'trend' | 'bar';
+export type ChartKind = 'trend' | 'bar' | 'donut';
 
 export interface HrDimensionConfig {
   key: HrDimension;
@@ -15,6 +15,9 @@ export interface HrDimensionConfig {
    * still get colored bars via keyColor, but skip the legend - with 10+ bars it would just repeat
    * the x-axis labels. */
   showLegend?: boolean;
+  /** Full-width panel instead of sharing a grid row - for dimensions with enough categories that
+   * a shared-row bar chart gets too cramped to read (brand, department). */
+  wide?: boolean;
 }
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat('es-MX', { month: 'short', year: 'numeric' });
@@ -46,13 +49,14 @@ function categoryColor(_key: string, index: number): string {
 }
 
 // 'status' (active vs. inactive) and 'gender' both use the same blue/dark two-tone the reference
-// dashboard uses for its own binary splits (e.g. Female/Male) - NOT red/green. In that dashboard
-// red/green are reserved for month-over-month deltas (an increase/decrease), never for a static
-// category's own bar color.
+// dashboard uses for its own binary splits (e.g. Femenino/Masculino) - NOT red/green. In that
+// dashboard red/green are reserved for month-over-month deltas (an increase/decrease), never for a
+// static category's own bar color.
 const STATUS_LABELS: Record<string, string> = { active: 'Activos', inactive: 'Inactivos' };
 const STATUS_COLORS: Record<string, string> = { active: 'var(--color-primary)', inactive: 'var(--color-neutral-800)' };
 
-const GENDER_COLORS: Record<string, string> = { Female: 'var(--color-primary)', Male: 'var(--color-neutral-800)' };
+// Keys are the actual gender_name values synced from Peopleforce/Sesame - Spanish, not "Female"/"Male".
+const GENDER_COLORS: Record<string, string> = { Femenino: 'var(--color-primary)', Masculino: 'var(--color-neutral-800)' };
 function genderColor(key: string): string {
   return GENDER_COLORS[key] ?? 'var(--color-neutral-300)';
 }
@@ -72,6 +76,7 @@ export const hrDimensions: HrDimensionConfig[] = [
     chartType: 'bar',
     keyLabel: (key) => key,
     keyColor: categoryColor,
+    wide: true,
   },
   {
     key: 'department',
@@ -79,11 +84,12 @@ export const hrDimensions: HrDimensionConfig[] = [
     chartType: 'bar',
     keyLabel: (key) => key,
     keyColor: categoryColor,
+    wide: true,
   },
   {
     key: 'gender',
     label: 'Por Género',
-    chartType: 'bar',
+    chartType: 'donut',
     keyLabel: (key) => key,
     keyColor: (key) => genderColor(key),
     showLegend: true,

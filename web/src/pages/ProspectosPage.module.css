@@ -42,6 +42,28 @@
   cursor: default;
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.graphsLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.graphsLink:hover {
+  text-decoration: underline;
+}
+
 .dateFilters {
   display: flex;
   align-items: flex-end;

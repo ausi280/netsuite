@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { SimpleTable } from '../components/table/SimpleTable';
 import type { SimpleColumn } from '../components/table/SimpleTable';
@@ -115,14 +116,24 @@ export function ProspectosPage() {
           <h1 className={styles.title}>Prospectos</h1>
           <p className={styles.subtitle}>Embudo de prospectos capturados, filtrado por fecha de captura.</p>
         </div>
-        <button type="button" className={styles.actionButton} onClick={handleExport} disabled={isExporting}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <path d="M12 3v12" />
-            <path d="M7 10l5 5 5-5" />
-            <path d="M4 20h16" />
-          </svg>
-          {isExporting ? 'Exportando...' : 'Exportar CSV'}
-        </button>
+        <div className={styles.actions}>
+          <Link to="/reports/marketing" className={styles.graphsLink}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <line x1="12" y1="20" x2="12" y2="10" />
+              <line x1="18" y1="20" x2="18" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="16" />
+            </svg>
+            Ver Reporte de Marketing
+          </Link>
+          <button type="button" className={styles.actionButton} onClick={handleExport} disabled={isExporting}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M12 3v12" />
+              <path d="M7 10l5 5 5-5" />
+              <path d="M4 20h16" />
+            </svg>
+            {isExporting ? 'Exportando...' : 'Exportar CSV'}
+          </button>
+        </div>
       </div>
       {exportError ? <p className={styles.exportError}>{exportError}</p> : null}
       <div className={styles.dateFilters}>

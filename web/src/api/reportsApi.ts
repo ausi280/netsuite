@@ -17,6 +17,7 @@ import type {
   HrSummary,
   HrSummaryResponse,
   ContractNetSuiteNotesResponse,
+  MarketingReportResponse,
   NetSuiteNote,
   NotaCobranza,
   NotesReportResponse,
@@ -229,6 +230,12 @@ export async function fetchCommissionsPdf(
   return apiFetchBlob(`/reports/contracts/commissions/pdf?${query.toString()}`, { token });
 }
 
+/** Customer-facing "Estado de Cuenta" PDF for a single contract - see
+ * api/src-ts/reporting/estadoCuentaPdf.ts. */
+export async function fetchEstadoCuentaPdf(token: string | null, contractId: string): Promise<Blob> {
+  return apiFetchBlob(`/reports/contracts/${encodeURIComponent(contractId)}/estado-cuenta`, { token });
+}
+
 /** New-contract salesperson commissions grid for one calendar month, optionally narrowed to one or
  * more subsidiaries and/or a currency. */
 export async function fetchCommissions(
@@ -389,6 +396,14 @@ export async function fetchProspectos(token: string | null, params: ProspectosPa
 export async function fetchProspectosExportCsv(token: string | null, dateFrom: string, dateTo: string): Promise<Blob> {
   const query = new URLSearchParams({ dateFrom, dateTo });
   return apiFetchBlob(`/reports/prospectos/export?${query.toString()}`, { token });
+}
+
+/** "Reporte de Marketing" - sales-by-month (online/offline split) + prospecto qualification
+ * funnel, built on the same Prospecto data as fetchProspectos - see
+ * api/src-ts/reporting/marketingRepository.ts. */
+export async function fetchMarketingReport(token: string | null, dateFrom: string, dateTo: string): Promise<MarketingReportResponse> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  return apiFetch<MarketingReportResponse>(`/reports/marketing?${query.toString()}`, { token });
 }
 
 export interface CuentasParams {
