@@ -1,0 +1,155 @@
+.heading {
+  margin-bottom: 8px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--color-secondary);
+  margin-top: 4px;
+}
+
+.requesterNote {
+  font-size: 13px;
+  color: var(--color-secondary);
+  margin-bottom: 20px;
+}
+
+.form {
+  max-width: 640px;
+  background: var(--color-white);
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-neutral-800);
+}
+
+.input,
+.select,
+.textarea {
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  color: var(--color-neutral-900);
+  background: var(--color-white);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.select:disabled {
+  background: var(--color-neutral-100);
+  color: var(--color-secondary);
+}
+
+.textarea {
+  resize: vertical;
+}
+
+.subform {
+  background: var(--color-neutral-100);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.subformTitle {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-primary-text);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.fileBox {
+  border: 2px dashed var(--color-neutral-200);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+.fileInput {
+  width: 100%;
+  font-size: 13px;
+}
+
+.fileRow {
+  font-size: 13px;
+  color: var(--color-secondary);
+  margin-top: 6px;
+}
+
+.successBanner {
+  font-size: 14px;
+  color: var(--status-good);
+  background: rgba(12, 163, 12, 0.1);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.errorBanner {
+  font-size: 14px;
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+}
+
+.submitRow {
+  display: flex;
+  justify-content: center;
+}
+
+.submitButton {
+  background: var(--color-primary);
+  border: none;
+  color: var(--color-white);
+  border-radius: var(--radius-md);
+  padding: 12px 32px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-fluent);
+}
+
+.submitButton:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

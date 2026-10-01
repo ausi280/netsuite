@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import type { VendedorCommissionGroup } from '../../api/types';
-import { sumContractsByCurrency, sumOtrosContratosByCurrency } from '../../utils/commissions';
-import { formatCurrency } from '../../utils/format';
+import { formatCommissionAmount, sumContractsByCurrency, sumOtrosContratosByCurrency } from '../../utils/commissions';
 import { ContractCommissionCard } from './ContractCommissionCard';
 import { OtrosContratoCommissionCard } from './OtrosContratoCommissionCard';
 import styles from './VendedorGroupCard.module.css';
@@ -40,7 +39,7 @@ export function VendedorGroupCard({ group, defaultExpanded = true }: VendedorGro
             {contractsTotals.length > 0 ? (
               contractsTotals.map(({ currency, total }) => (
                 <span key={currency ?? 'sin-moneda'} className={styles.totalAmount}>
-                  {formatCurrency(total, currency)}
+                  {formatCommissionAmount(total, currency)}
                 </span>
               ))
             ) : (
@@ -52,7 +51,7 @@ export function VendedorGroupCard({ group, defaultExpanded = true }: VendedorGro
               <span className={styles.totalGroupLabel}>Otros Contratos ({group.otros_contratos_count})</span>
               {otrosContratosTotals.map(({ currency, total }) => (
                 <span key={currency ?? 'sin-moneda'} className={styles.totalAmount}>
-                  {formatCurrency(total, currency)}
+                  {formatCommissionAmount(total, currency)}
                 </span>
               ))}
             </div>
@@ -69,7 +68,7 @@ export function VendedorGroupCard({ group, defaultExpanded = true }: VendedorGro
               </h3>
               <p className={styles.tierExplainer}>
                 Se calcula sobre el total de servicios de contratos de este vendedor en el periodo, en todas sus
-                subsidiarias: {formatCurrency(group.total_ventas_contratos_periodo, null)} →{' '}
+                subsidiarias: {formatCommissionAmount(group.total_ventas_contratos_periodo, null)} →{' '}
                 {group.tier_percentage_contratos !== null ? `${group.tier_percentage_contratos}% de comisión` : 'sin tier configurado'}.
                 Esa misma tasa se aplica a cada contrato de abajo. Las ventas de Otros Contratos no se incluyen en este total.
               </p>
@@ -92,7 +91,7 @@ export function VendedorGroupCard({ group, defaultExpanded = true }: VendedorGro
               </h3>
               <p className={styles.tierExplainer}>
                 Se calcula sobre el total de ventas de Otros Contratos de este vendedor en el periodo, en todas sus
-                subsidiarias: {formatCurrency(group.total_ventas_otros_contratos_periodo, null)} →{' '}
+                subsidiarias: {formatCommissionAmount(group.total_ventas_otros_contratos_periodo, null)} →{' '}
                 {group.tier_percentage_otros_contratos !== null
                   ? `${group.tier_percentage_otros_contratos}% de comisión`
                   : 'sin tier configurado'}

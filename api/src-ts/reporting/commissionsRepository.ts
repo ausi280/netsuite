@@ -24,11 +24,12 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  *     separately, from the vendedor's TOTAL otros-contratos sales sum for the period, under their
  *     nivel_otros_contratos.
  *
- * On top of the Contratos tiered commission, a contract additionally pays a flat 3% Placenta bonus
- * whenever it includes a Placenta service - computed on the contract's FULL services total (not
- * just Placenta's own price), and paid "no matter what" nivel the vendedor is on - a fixed
- * business rule, not one of the configurable commission_level_tiers. Otros Contratos have no
- * Placenta-equivalent bonus.
+ * On top of the Contratos tiered commission, a contract additionally pays a flat 3% bonus whenever
+ * it includes a Placenta OR an ADN service (expanded from Placenta-only on 2026-09-30, per explicit
+ * instruction) - computed on the contract's FULL services total (not just the triggering service's
+ * own price), paid once even if BOTH Placenta and ADN are present (not doubled), and paid "no
+ * matter what" nivel the vendedor is on - a fixed business rule, not one of the configurable
+ * commission_level_tiers. Otros Contratos have no equivalent bonus.
  *
  * Separately, each distinct año with MORE THAN ONE "Anualidad" partida on a contract (a year of
  * storage the customer prepaid in advance) pays a flat $100 bonus - only ONE per year, regardless
@@ -57,7 +58,7 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * already 1.
  *
  * IMPORTANT: as of this session, "Docs Completos" is display-only - it no longer gates anything.
- * Every contract's Placenta/tier/anualidad bonuses, and its contribution to the vendedor's tier
+ * Every contract's Placenta/ADN/tier/anualidad bonuses, and its contribution to the vendedor's tier
  * total, are computed the same regardless of this flag (per explicit instruction: the label should
  * stay visible, but must never zero out or restrict a real commission calculation). Kept in
  * ContractCommission purely so the UI can still show the badge.
@@ -73,8 +74,11 @@ const SERVICE_PAYMENT_STATUS_PAGADO = '1';
 
 // Fixed business rules, deliberately NOT part of the configurable commission_level_tiers table -
 // these apply "no matter what" nivel the vendedor is on.
-const PLACENTA_SERVICE_TYPE_ID = '15';
-const PLACENTA_BONUS_RATE = 3; // percent, of the contract's full services total
+// custrecord_cryo_tipodeserv ids (see SERVICE_TYPE_LABELS on the frontend) - '15' Placenta and '3'
+// ADN both trigger the flat bonus below (ADN added 2026-09-30, per explicit instruction to expand
+// this rule beyond Placenta-only).
+const SPECIAL_BONUS_SERVICE_TYPE_IDS = new Set(['15', '3']);
+const SPECIAL_BONUS_RATE = 3; // percent, of the contract's full services total
 const ANUALIDAD_BONUS_PER_YEAR = 100; // currency units, per distinct año - not per service line
 
 // The only subsidiaries whose contracts were ever tracked in the legacy Cryo.dbo.Contrato system
@@ -87,8 +91,11 @@ export interface ServiceCommissionLine {
   netsuite_id: string;
   /** NetSuite service-type list id (see SERVICE_TYPE_LABELS on the frontend for display labels) - e.g. '15' = Placenta. */
   tipo: string | null;
-  precio_procesamiento: number;
-  is_placenta: boolean;
+  /** Null when the caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
+  precio_procesamiento: number | null;
+  /** True when this line's tipo is one of the services that trigger the contract's flat 3% bonus
+   * (Placenta or ADN) - see SPECIAL_BONUS_SERVICE_TYPE_IDS. */
+  is_bonus_service: boolean;
 }
 
 export interface AnualidadYearLine {
@@ -96,8 +103,9 @@ export interface AnualidadYearLine {
   /** How many service-type Anualidad lines (SCU/TCU/ADN/etc.) exist for this año - informational
    * only, since the $100 bonus is paid once per year regardless of this count. */
   count: number;
-  /** Always ANUALIDAD_BONUS_PER_YEAR (one flat bonus for the year, not count * that amount). */
-  monto: number;
+  /** Always ANUALIDAD_BONUS_PER_YEAR (one flat bonus for the year, not count * that amount). Null
+   * when the caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
+  monto: number | null;
 }
 
 export interface ContractCommission {
@@ -112,21 +120,29 @@ export interface ContractCommission {
   /** custrecord_cryo_contratosistemaanterior - the legacy CryoCell folio, when this contract has one. */
   folio_sistema_anterior: string | null;
   services: ServiceCommissionLine[];
-  /** Sum of every active service's precio_procesamiento on this contract, Placenta included - the
-   * base both the tiered commission and the Placenta bonus are computed from. */
-  total_servicios: number;
-  has_placenta: boolean;
+  /** Sum of every active service's precio_procesamiento on this contract, Placenta/ADN included -
+   * the base both the tiered commission and the special bonus are computed from. Null when the
+   * caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
+  total_servicios: number | null;
+  /** True when the contract has a Placenta and/or ADN service - see SPECIAL_BONUS_SERVICE_TYPE_IDS.
+   * Never redacted - this is a status flag, not a dollar amount. */
+  has_bonus_service: boolean;
   /** Whether this contract's paperwork is complete in the legacy system (always true outside the
    * Mexico subsidiaries, which have no such gate). Display-only - it does NOT affect any of the
-   * commission figures below, which are always computed the same regardless of this flag. */
+   * commission figures below, which are always computed the same regardless of this flag. Never
+   * redacted - the whole point of the 'commissions' (no 'commissions_amounts') grant is to let
+   * someone see and act on this flag without seeing dollar amounts. */
   docs_completos: boolean;
-  /** total_servicios * 3%, only when has_placenta - 0 otherwise. */
-  placenta_bonus: number;
-  /** total_servicios * the vendedor's resolved tier_percentage_contratos / 100. */
-  tier_commission: number;
+  /** total_servicios * 3%, only when has_bonus_service - 0 otherwise. Paid once even when the
+   * contract has both Placenta and ADN, never doubled. Null when redacted (see total_servicios). */
+  placenta_adn_bonus: number | null;
+  /** total_servicios * the vendedor's resolved tier_percentage_contratos / 100. Null when redacted. */
+  tier_commission: number | null;
   anualidades: AnualidadYearLine[];
-  anualidad_bonus_total: number;
-  total_commission: number;
+  /** Null when redacted (see total_servicios). */
+  anualidad_bonus_total: number | null;
+  /** Null when redacted (see total_servicios). */
+  total_commission: number | null;
 }
 
 /** An "Otros Contratos" sale (sample-collection record, not a regular contract) - its linked
@@ -137,10 +153,11 @@ export interface OtrosContratoCommission {
   name: string | null;
   fecha: string | null;
   servicio_nombre: string | null;
-  monto: number;
+  /** Null when the caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
+  monto: number | null;
   moneda: string | null;
-  /** monto * the vendedor's resolved tier_percentage_otros_contratos / 100. */
-  tier_commission: number;
+  /** monto * the vendedor's resolved tier_percentage_otros_contratos / 100. Null when redacted. */
+  tier_commission: number | null;
 }
 
 export interface VendedorCommissionGroup {
@@ -151,8 +168,9 @@ export interface VendedorCommissionGroup {
   /** This vendedor's TOTAL contracts-services sum for the period, across every one of their
    * contracts and subsidiaries (Placenta included) - NOT limited by any subsidiary/currency filter
    * on this request, since the commission tier reflects true total volume, not one filtered slice
-   * of it. Otros Contratos sales are NOT included here - the two don't sum together. */
-  total_ventas_contratos_periodo: number;
+   * of it. Otros Contratos sales are NOT included here - the two don't sum together. Null when the
+   * caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
+  total_ventas_contratos_periodo: number | null;
   /** The tiered rate resolved from total_ventas_contratos_periodo under nivel_contratos - applied
    * uniformly to every one of this vendedor's contracts below. Null if the vendedor has no
    * nivel_contratos, or that nivel has no tier covering this amount. */
@@ -161,8 +179,8 @@ export interface VendedorCommissionGroup {
   nivel_otros_contratos: string | null;
   /** This vendedor's TOTAL otros-contratos sales sum for the period, across every subsidiary - NOT
    * limited by any subsidiary/currency filter on this request, and NOT combined with
-   * total_ventas_contratos_periodo. */
-  total_ventas_otros_contratos_periodo: number;
+   * total_ventas_contratos_periodo. Null when redacted (see total_ventas_contratos_periodo). */
+  total_ventas_otros_contratos_periodo: number | null;
   /** The tiered rate resolved from total_ventas_otros_contratos_periodo under
    * nivel_otros_contratos - applied uniformly to every one of this vendedor's otros-contratos
    * below. Null if the vendedor has no nivel_otros_contratos, or that nivel has no tier covering
@@ -172,14 +190,49 @@ export interface VendedorCommissionGroup {
   contracts_count: number;
   /** Sum of every contract's total_commission - paid as its own transaction, separate from
    * otros_contratos_commission (per the "pay in two transactions" instruction - contracts and
-   * otros-contratos are two distinct payouts, on two independent tiers). */
-  contracts_commission: number;
+   * otros-contratos are two distinct payouts, on two independent tiers). Null when redacted. */
+  contracts_commission: number | null;
   otros_contratos: OtrosContratoCommission[];
   otros_contratos_count: number;
-  /** Sum of every otros-contrato's tier_commission - its own separate transaction from contracts_commission. */
-  otros_contratos_commission: number;
-  /** contracts_commission + otros_contratos_commission - shown for convenience, not itself a payout. */
-  total_commission: number;
+  /** Sum of every otros-contrato's tier_commission - its own separate transaction from
+   * contracts_commission. Null when redacted. */
+  otros_contratos_commission: number | null;
+  /** contracts_commission + otros_contratos_commission - shown for convenience, not itself a
+   * payout. Null when redacted (see total_ventas_contratos_periodo). */
+  total_commission: number | null;
+}
+
+/**
+ * Nulls out every dollar figure in the commissions grid, for a caller who's allowed to see which
+ * vendedores/contracts exist and act on their Docs Completos status (e.g. someone reviewing and
+ * marking DocsCompletos in the legacy system) but is NOT granted 'commissions_amounts' (see
+ * isCommissionsAmountsAllowed/loadCommissionsData in contractReportsController.ts) - a deliberate
+ * separation-of-duties control, requested explicitly: the person approving paperwork completeness
+ * shouldn't see (or be influenced by) the money involved. Never applied to a self-vendedor's own
+ * results - they always see their own real amounts, this redaction only ever applies to the
+ * "see every vendedor" full-access path. Structural fields (names, dates, status, docs_completos,
+ * has_bonus_service, tier_percentage_*, counts) are left untouched - only money is hidden.
+ */
+export function redactCommissionAmounts(groups: VendedorCommissionGroup[]): VendedorCommissionGroup[] {
+  return groups.map((group) => ({
+    ...group,
+    total_ventas_contratos_periodo: null,
+    total_ventas_otros_contratos_periodo: null,
+    contracts_commission: null,
+    otros_contratos_commission: null,
+    total_commission: null,
+    contracts: group.contracts.map((contract) => ({
+      ...contract,
+      services: contract.services.map((service) => ({ ...service, precio_procesamiento: null })),
+      total_servicios: null,
+      placenta_adn_bonus: null,
+      tier_commission: null,
+      anualidades: contract.anualidades.map((anualidad) => ({ ...anualidad, monto: null })),
+      anualidad_bonus_total: null,
+      total_commission: null,
+    })),
+    otros_contratos: group.otros_contratos.map((otros) => ({ ...otros, monto: null, tier_commission: null })),
+  }));
 }
 
 const SUBSIDIARY_COLUMN = 'C.custrecord_cryo_subsidiariacontrato';
@@ -375,13 +428,13 @@ function buildContractCommission(
     netsuite_id: s.netsuite_id,
     tipo: s.custrecord_cryo_tipodeserv,
     precio_procesamiento: Number(s.custrecord_cryo_precioprocesamiento ?? 0),
-    is_placenta: s.custrecord_cryo_tipodeserv === PLACENTA_SERVICE_TYPE_ID,
+    is_bonus_service: s.custrecord_cryo_tipodeserv !== null && SPECIAL_BONUS_SERVICE_TYPE_IDS.has(s.custrecord_cryo_tipodeserv),
   }));
 
   const totalServicios = totalForServices(services);
-  const hasPlacenta = serviceLines.some((s) => s.is_placenta);
+  const hasBonusService = serviceLines.some((s) => s.is_bonus_service);
   // docsComplete is display-only (see the file-level comment) - it never zeroes out any of these.
-  const placentaBonus = hasPlacenta ? (totalServicios * PLACENTA_BONUS_RATE) / 100 : 0;
+  const placentaAdnBonus = hasBonusService ? (totalServicios * SPECIAL_BONUS_RATE) / 100 : 0;
   const tierCommission = tierPercentage !== null ? (totalServicios * tierPercentage) / 100 : 0;
 
   const anualidadByYear = new Map<string, number>();
@@ -409,13 +462,13 @@ function buildContractCommission(
     folio_sistema_anterior: contract.folio_sistema_anterior,
     services: serviceLines,
     total_servicios: totalServicios,
-    has_placenta: hasPlacenta,
+    has_bonus_service: hasBonusService,
     docs_completos: docsComplete,
-    placenta_bonus: placentaBonus,
+    placenta_adn_bonus: placentaAdnBonus,
     tier_commission: tierCommission,
     anualidades,
     anualidad_bonus_total: anualidadBonusTotal,
-    total_commission: placentaBonus + tierCommission + anualidadBonusTotal,
+    total_commission: placentaAdnBonus + tierCommission + anualidadBonusTotal,
   };
 }
 
@@ -634,8 +687,11 @@ export async function getCommissionsByVendedor(
     const group = getOrCreateGroup(groups, contract.vendedor_id, contract.vendedor_nombre, ctx);
     group.contracts.push(contractCommission);
     group.contracts_count += 1;
-    group.contracts_commission += contractCommission.total_commission;
-    group.total_commission += contractCommission.total_commission;
+    // Never null here - buildContractCommission always computes real numbers; redaction (see
+    // redactCommissionAmounts) only ever happens later, as a controller-layer post-process on the
+    // fully-built result, not during this accumulation.
+    group.contracts_commission = (group.contracts_commission ?? 0) + contractCommission.total_commission!;
+    group.total_commission = (group.total_commission ?? 0) + contractCommission.total_commission!;
   }
 
   for (const otros of displayOtros) {
@@ -645,8 +701,9 @@ export async function getCommissionsByVendedor(
     const group = getOrCreateGroup(groups, otros.vendedor_id, otros.vendedor_nombre, ctx);
     group.otros_contratos.push(otrosCommission);
     group.otros_contratos_count += 1;
-    group.otros_contratos_commission += otrosCommission.tier_commission;
-    group.total_commission += otrosCommission.tier_commission;
+    // Never null here - see the comment above the contracts loop.
+    group.otros_contratos_commission = (group.otros_contratos_commission ?? 0) + otrosCommission.tier_commission!;
+    group.total_commission = (group.total_commission ?? 0) + otrosCommission.tier_commission!;
   }
 
   return Array.from(groups.values()).sort((a, b) => (a.vendedor_nombre ?? '').localeCompare(b.vendedor_nombre ?? ''));

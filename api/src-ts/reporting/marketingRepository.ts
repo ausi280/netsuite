@@ -96,6 +96,22 @@ interface RawSalesByMonthRow {
 }
 
 /**
+ * Manual correction for months where Cryo.dbo.Contrato.ID_TipoCanal misclassified some real online
+ * sales as offline - requested explicitly (2026-09-30) with the FINAL online value each of these
+ * months should show, not a delta. Offline absorbs whatever difference is needed so the month's
+ * total is unchanged (total is never touched by this map). Key is "YYYY-M" (no leading zero on
+ * month), same convention as the byKey map below.
+ */
+const ONLINE_SALES_OVERRIDES: Record<string, number> = {
+  '2026-2': 8,
+  '2026-4': 8,
+  '2026-5': 17,
+  '2026-6': 9,
+  '2026-7': 17,
+  '2026-8': 9,
+};
+
+/**
  * Sales per year/month, split online/offline, bucketed by the CONTRACT's own sale date
  * (Contrato.FechaVenta) - the date a sale actually happened.
  *
@@ -132,6 +148,13 @@ export async function getSalesByMonth(legacyDb: Knex, fechaInicial: string, fech
     byKey.set(key, existing);
   }
 
+  for (const [key, targetOnline] of Object.entries(ONLINE_SALES_OVERRIDES)) {
+    const row = byKey.get(key);
+    if (!row) continue; // no sales that month at all - nothing to correct
+    row.online = targetOnline;
+    row.offline = row.total - targetOnline;
+  }
+
   return Array.from(byKey.values()).sort((a, b) => (a.anio - b.anio) || (a.mes - b.mes));
 }
 
@@ -142,11 +165,14 @@ export interface ProspectoQualificationSummary {
   total: number;
 }
 
-/** One (year, month) bucket of the qualification chart, by Prospecto.FechaCaptura - same
- * year/month bucketing convention as SalesByMonthRow. */
+/** One (year, month, canal) bucket of the qualification chart, by Prospecto.FechaCaptura - same
+ * year/month bucketing convention as SalesByMonthRow, further split online/offline the same way
+ * (Prospecto.ID_TipoCanal, same ONLINE_TIPO_CANAL_IDS) so the chart can show one series per
+ * channel instead of only a channel-blind total. */
 export interface QualificationByMonthRow extends ProspectoQualificationSummary {
   anio: number;
   mes: number;
+  canal: 'online' | 'offline';
 }
 
 /** One row per distinct (year, month, empresa, motivo) actually present in the date range - shown
@@ -175,6 +201,7 @@ interface RawMotivoRow {
   id_empresa: number;
   id_noventa: number | null;
   motivo: string | null;
+  es_online: number;
   cantidad: number | string;
 }
 
@@ -203,13 +230,16 @@ export async function getProspectoQualification(
     .whereIn('p.ID_Empresa', MARKETING_EMPRESA_IDS)
     .where('p.FechaCaptura', '>=', fechaInicial)
     .andWhere('p.FechaCaptura', '<', exclusiveUpperBound(fechaFinal))
-    .groupByRaw('YEAR(p.FechaCaptura), MONTH(p.FechaCaptura), p.ID_Empresa, p.ID_NoVenta, noventa.Nombre')
+    .groupByRaw(
+      `YEAR(p.FechaCaptura), MONTH(p.FechaCaptura), p.ID_Empresa, p.ID_NoVenta, noventa.Nombre, IIF(p.ID_TipoCanal IN (${ONLINE_TIPO_CANAL_IDS.join(',')}), 1, 0)`,
+    )
     .select(
       legacyDb.raw('YEAR(p.FechaCaptura) as anio'),
       legacyDb.raw('MONTH(p.FechaCaptura) as mes'),
       'p.ID_Empresa as id_empresa',
       'p.ID_NoVenta as id_noventa',
       'noventa.Nombre as motivo',
+      legacyDb.raw(`IIF(p.ID_TipoCanal IN (${ONLINE_TIPO_CANAL_IDS.join(',')}), 1, 0) as es_online`),
       legacyDb.raw('COUNT(*) as cantidad'),
     )) as unknown as RawMotivoRow[];
 
@@ -220,11 +250,12 @@ export async function getProspectoQualification(
   for (const row of rows) {
     const cantidad = Number(row.cantidad);
     const categoria = categorizeNoVenta(row.id_noventa);
+    const canal: 'online' | 'offline' = row.es_online ? 'online' : 'offline';
 
     addToSummary(summary, categoria, cantidad);
 
-    const monthKey = `${row.anio}-${row.mes}`;
-    const monthBucket = byMonth.get(monthKey) ?? { anio: row.anio, mes: row.mes, ...emptySummary() };
+    const monthKey = `${row.anio}-${row.mes}-${canal}`;
+    const monthBucket = byMonth.get(monthKey) ?? { anio: row.anio, mes: row.mes, canal, ...emptySummary() };
     addToSummary(monthBucket, categoria, cantidad);
     byMonth.set(monthKey, monthBucket);
 
@@ -239,7 +270,7 @@ export async function getProspectoQualification(
     });
   }
 
-  const sortedByMonth = Array.from(byMonth.values()).sort((a, b) => a.anio - b.anio || a.mes - b.mes);
+  const sortedByMonth = Array.from(byMonth.values()).sort((a, b) => a.anio - b.anio || a.mes - b.mes || a.canal.localeCompare(b.canal));
   motivos.sort((a, b) => (a.anio - b.anio) || (a.mes - b.mes) || (b.cantidad - a.cantidad));
 
   return { summary, byMonth: sortedByMonth, motivos };

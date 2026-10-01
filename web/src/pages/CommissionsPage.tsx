@@ -11,8 +11,7 @@ import { useEntities } from '../hooks/useEntities';
 import { useSubsidiaryOptions } from '../hooks/useSubsidiaryOptions';
 import { subsidiaryLabel } from '../config/subsidiaries';
 import { currencyLabel, KNOWN_CURRENCY_IDS } from '../config/currencies';
-import { formatCurrency } from '../utils/format';
-import { sumContractsByCurrency, sumOtrosContratosByCurrency } from '../utils/commissions';
+import { formatCommissionAmount, sumContractsByCurrency, sumOtrosContratosByCurrency } from '../utils/commissions';
 import { fetchCommissionsExportCsv, fetchCommissionsPdf } from '../api/reportsApi';
 import { useApiToken } from '../auth/useApiToken';
 import { downloadBlob } from '../utils/downloadBlob';
@@ -56,6 +55,9 @@ export function CommissionsPage() {
   // Authoritative per the commissions response itself, not guessed from the entities list - a
   // caller can have 'contracts' yet still be self-vendedor-scoped here if they lack 'commissions'.
   const isSelfVendedor = result?.isSelfVendedor ?? false;
+  // Defaults true so nothing looks redacted while the request is still in flight - the real value
+  // always arrives before `data` does, so this default is never actually shown with real rows.
+  const canSeeAmounts = result?.canSeeAmounts ?? true;
   const { data: subsidiaryOptions } = useSubsidiaryOptions('contracts', { enabled: hasContractsAccess });
 
   const summary = useMemo(() => {
@@ -180,6 +182,12 @@ export function CommissionsPage() {
       </div>
       {exportError ? <p className={styles.exportError}>{exportError}</p> : null}
       {pdfError ? <p className={styles.exportError}>{pdfError}</p> : null}
+      {!canSeeAmounts ? (
+        <p className={styles.amountsHiddenNotice}>
+          No tienes permiso para ver montos de comisión - los verás marcados como "Oculto". Puedes ver y confirmar el estatus de Docs Completos de
+          cada contrato normalmente.
+        </p>
+      ) : null}
       <div className={styles.filters}>
         <select className={styles.select} value={month} onChange={(event) => handleMonthChange(event.target.value)} aria-label="Mes">
           {MONTH_NAMES.map((name, index) => (
@@ -238,13 +246,13 @@ export function CommissionsPage() {
           <div className={styles.summaryDivider} />
           {summary.contractsTotalsByCurrency.map(({ currency: curr, total }) => (
             <div className={styles.summaryStat} key={`contratos-${curr ?? 'sin-moneda'}`}>
-              <span className={styles.summaryValue}>{formatCurrency(total, curr)}</span>
+              <span className={styles.summaryValue}>{formatCommissionAmount(total, curr)}</span>
               <span className={styles.summaryLabel}>comisión contratos {curr ? `(${currencyLabel(curr)})` : ''}</span>
             </div>
           ))}
           {summary.otrosContratosTotalsByCurrency.map(({ currency: curr, total }) => (
             <div className={styles.summaryStat} key={`otros-${curr ?? 'sin-moneda'}`}>
-              <span className={styles.summaryValue}>{formatCurrency(total, curr)}</span>
+              <span className={styles.summaryValue}>{formatCommissionAmount(total, curr)}</span>
               <span className={styles.summaryLabel}>comisión otros contratos {curr ? `(${currencyLabel(curr)})` : ''}</span>
             </div>
           ))}

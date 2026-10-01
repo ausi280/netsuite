@@ -25,6 +25,7 @@ const PartidaAnalyticsPage = lazy(() =>
 );
 const HrReportPage = lazy(() => import('./pages/HrReportPage').then((m) => ({ default: m.HrReportPage })));
 const MarketingReportPage = lazy(() => import('./pages/MarketingReportPage').then((m) => ({ default: m.MarketingReportPage })));
+const LogisticaTicketPage = lazy(() => import('./pages/LogisticaTicketPage').then((m) => ({ default: m.LogisticaTicketPage })));
 
 export function App() {
   const location = useLocation();
@@ -151,6 +152,18 @@ export function App() {
               <PageTransition>
                 <Suspense fallback={<LoadingState label="Cargando HR Report..." />}>
                   <HrReportPage />
+                </Suspense>
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/logistica"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <Suspense fallback={<LoadingState label="Cargando..." />}>
+                  <LogisticaTicketPage />
                 </Suspense>
               </PageTransition>
             </RequireAuth>

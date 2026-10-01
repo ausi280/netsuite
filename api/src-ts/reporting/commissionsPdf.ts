@@ -30,8 +30,17 @@ const MONTH_NAMES = [
 const PAGE_MARGIN = 50;
 const FOOTER_HEIGHT = 40;
 
-function money(value: number): string {
-  return value.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** 'Oculto' (not blank/'0.00') for a redacted amount (see redactCommissionAmounts) - explicit about
+ * WHY the cell is empty, so it never reads as "this contract pays nothing". */
+function money(value: number | null): string {
+  return value === null ? 'Oculto' : value.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Sums a list of possibly-redacted amounts, returning null (not 0) the instant any item is null -
+ * `null + 5` evaluates to 5 in JS (null coerces to 0), so a naive reduce would silently turn a
+ * fully-redacted group's total into a real-looking "0.00" instead of "Oculto". */
+function sumOrNull(values: Array<number | null>): number | null {
+  return values.some((v) => v === null) ? null : (values as number[]).reduce((sum, v) => sum + v, 0);
 }
 
 function currencyLabel(id: string | null): string {
@@ -163,7 +172,7 @@ const CONTRACTS_COLUMNS: TableColumn[] = [
   { label: 'CONTRATO', width: 110 },
   { label: 'TOTAL SERVICIOS', width: 70, align: 'right' },
   { label: 'COMISIÓN NIVEL', width: 70, align: 'right' },
-  { label: 'BONO PLACENTA', width: 65, align: 'right' },
+  { label: 'BONO 3%', width: 65, align: 'right' },
   { label: 'BONO ANUALIDAD', width: 65, align: 'right' },
   { label: 'TOTAL', width: 72, align: 'right' },
 ];
@@ -219,7 +228,7 @@ export async function generateCommissionsPdf(groups: VendedorCommissionGroup[], 
     doc.moveTo(PAGE_MARGIN, y).lineTo(doc.page.width - PAGE_MARGIN, y).lineWidth(0.75).strokeColor(BRAND.rule).stroke();
     y += 18;
 
-    const contractsBonusTotal = group.contracts.reduce((sum, c) => sum + c.placenta_bonus + c.anualidad_bonus_total, 0);
+    const contractsBonusTotal = sumOrNull(group.contracts.flatMap((c) => [c.placenta_adn_bonus, c.anualidad_bonus_total]));
     y = drawStatsBlock(
       doc,
       y,
@@ -227,7 +236,7 @@ export async function generateCommissionsPdf(groups: VendedorCommissionGroup[], 
         ['No. de Contratos', String(group.contracts_count)],
         ['Nivel Contratos', group.nivel_contratos ?? 'Sin asignar'],
         ['Comisión Contratos', money(group.contracts_commission)],
-        ['Bonos (Placenta + Anualidad)', money(contractsBonusTotal)],
+        ['Bonos (Placenta/ADN + Anualidad)', money(contractsBonusTotal)],
       ],
       [
         ['No. de Otros Contratos', String(group.otros_contratos_count)],
@@ -273,7 +282,7 @@ export async function generateCommissionsPdf(groups: VendedorCommissionGroup[], 
             contract.name ?? '',
             money(contract.total_servicios),
             money(contract.tier_commission),
-            money(contract.placenta_bonus),
+            money(contract.placenta_adn_bonus),
             money(contract.anualidad_bonus_total),
             money(contract.total_commission),
           ],
@@ -285,10 +294,10 @@ export async function generateCommissionsPdf(groups: VendedorCommissionGroup[], 
       y = drawTableTotalRow(doc, y, CONTRACTS_COLUMNS, [
         '',
         'Total',
-        money(group.contracts.reduce((sum, c) => sum + c.total_servicios, 0)),
-        money(group.contracts.reduce((sum, c) => sum + c.tier_commission, 0)),
-        money(group.contracts.reduce((sum, c) => sum + c.placenta_bonus, 0)),
-        money(group.contracts.reduce((sum, c) => sum + c.anualidad_bonus_total, 0)),
+        money(sumOrNull(group.contracts.map((c) => c.total_servicios))),
+        money(sumOrNull(group.contracts.map((c) => c.tier_commission))),
+        money(sumOrNull(group.contracts.map((c) => c.placenta_adn_bonus))),
+        money(sumOrNull(group.contracts.map((c) => c.anualidad_bonus_total))),
         money(group.contracts_commission),
       ]);
       y += 24;
@@ -323,7 +332,7 @@ export async function generateCommissionsPdf(groups: VendedorCommissionGroup[], 
         '',
         'Total',
         '',
-        money(group.otros_contratos.reduce((sum, o) => sum + o.monto, 0)),
+        money(sumOrNull(group.otros_contratos.map((o) => o.monto))),
         money(group.otros_contratos_commission),
       ]);
     }

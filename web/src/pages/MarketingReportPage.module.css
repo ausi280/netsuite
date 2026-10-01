@@ -93,6 +93,22 @@
   color: var(--color-secondary);
 }
 
+.splitGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.splitTitle {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+
 .motivosNote {
   font-size: 12px;
   color: var(--color-secondary);

@@ -5,30 +5,36 @@ import type { AppConfig, EntitySyncConfig, ErpSyncConfig, SyncEntityName } from 
 // same source instead of introducing a parallel dotenv-based config system.
 const legacyConfig = require('../../config') as { env: Record<string, any> };
 
-// One staggered nightly batch, 10 minutes apart, starting 06:00 UTC.
+// 6 staggered batches a day (every 4h: 00/04/08/12/16/20, 01/05/09/13/17/21, 02/06/10/14/18/22,
+// 03/07/11/15/19/23 UTC per group below) - same 10-minutes-apart-within-a-batch stagger the
+// original once-nightly schedule used, just repeated every 4 hours instead of once. First
+// expanded from nightly to every 6h on 2026-09-30, then to every 4h on 2026-10-01, both per
+// explicit instruction. Keep this in sync with config.json's SERVICES.ERP.SYNC.<ENTITY>.CRON,
+// which is what actually governs the deployed schedule - this map is only the fallback for an
+// entity config.json doesn't list.
 const DEFAULT_CRON: Record<SyncEntityName, string> = {
-  customer: '0 6 * * *',
-  contract: '10 6 * * *',
-  familyMember: '20 6 * * *',
-  invoice: '30 6 * * *',
-  payment: '40 6 * * *',
-  employee: '50 6 * * *',
-  receivable: '0 7 * * *',
-  hospital: '10 7 * * *',
-  partida: '20 7 * * *',
-  service: '30 7 * * *',
-  serviceType: '40 7 * * *',
-  servicePackage: '50 7 * * *',
-  serialNumber: '0 8 * * *',
-  medico: '10 8 * * *',
-  medicoColombia: '20 8 * * *',
-  vendor: '30 8 * * *',
-  vendorTransaction: '40 8 * * *',
-  vendorBillPayment: '50 8 * * *',
-  peServicio: '55 8 * * *',
-  otrosContrato: '0 9 * * *',
-  fcellsContrato: '5 9 * * *',
-  customerAddress: '10 9 * * *',
+  customer: '0 0,4,8,12,16,20 * * *',
+  contract: '10 0,4,8,12,16,20 * * *',
+  familyMember: '20 0,4,8,12,16,20 * * *',
+  invoice: '30 0,4,8,12,16,20 * * *',
+  payment: '40 0,4,8,12,16,20 * * *',
+  employee: '50 0,4,8,12,16,20 * * *',
+  receivable: '0 1,5,9,13,17,21 * * *',
+  hospital: '10 1,5,9,13,17,21 * * *',
+  partida: '20 1,5,9,13,17,21 * * *',
+  service: '30 1,5,9,13,17,21 * * *',
+  serviceType: '40 1,5,9,13,17,21 * * *',
+  servicePackage: '50 1,5,9,13,17,21 * * *',
+  serialNumber: '0 2,6,10,14,18,22 * * *',
+  medico: '10 2,6,10,14,18,22 * * *',
+  medicoColombia: '20 2,6,10,14,18,22 * * *',
+  vendor: '30 2,6,10,14,18,22 * * *',
+  vendorTransaction: '40 2,6,10,14,18,22 * * *',
+  vendorBillPayment: '50 2,6,10,14,18,22 * * *',
+  peServicio: '55 2,6,10,14,18,22 * * *',
+  otrosContrato: '0 3,7,11,15,19,23 * * *',
+  fcellsContrato: '5 3,7,11,15,19,23 * * *',
+  customerAddress: '10 3,7,11,15,19,23 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -209,6 +215,35 @@ export function getHrDbConfig(): HrDbConfig {
     user: raw.USER,
     password: raw.PASSWORD,
   };
+}
+
+export interface ZammadConfig {
+  relayUrl: string;
+  relaySecret: string;
+  group: string;
+}
+
+/**
+ * Reads ZAMMAD from config/env.json (GROUP is a non-secret default from config.json; RELAY_URL/
+ * RELAY_SECRET are the gitignored secret overlay). This API does NOT call Zammad directly - the
+ * shared GoDaddy cPanel host in front of tickets.cryoholdco.com (Imunify360/CSF) rejects requests
+ * from this app's Azure App Service outbound IP, confirmed live (identical request succeeds from
+ * a different network, fails from the deployed app). Instead this POSTs the built ticket JSON to
+ * a small PHP relay (logistica-tickets-relay/zammad-relay.php) deployed on the SAME server the
+ * original submit.ticket.php already ran on - that server's IP has always been trusted - which
+ * holds the actual Zammad token and forwards the request. RELAY_SECRET authenticates this app to
+ * that relay; it is NOT the Zammad token itself, so a leak here can't be replayed anywhere except
+ * through that one relay. GROUP is "Operaciones::Logística", confirmed against the live
+ * instance's /api/v1/groups list. Lazily read (not part of loadConfig/getConfig) since only the
+ * Logística ticket route needs it.
+ */
+export function getZammadConfig(): ZammadConfig {
+  const raw = legacyConfig.env && legacyConfig.env.ZAMMAD;
+  if (!raw || !raw.RELAY_URL || !raw.RELAY_SECRET || !raw.GROUP) {
+    throw new Error('Missing ZAMMAD configuration (RELAY_URL/RELAY_SECRET/GROUP) in config/env.json.');
+  }
+
+  return { relayUrl: raw.RELAY_URL, relaySecret: raw.RELAY_SECRET, group: raw.GROUP };
 }
 
 export * from './types';

@@ -7,7 +7,7 @@ import { getEntityConfig } from './entityRegistry';
 import { getContractDossier } from './contractDossierRepository';
 import { getEstadoCuenta } from './estadoCuentaRepository';
 import { generateEstadoCuentaPdf } from './estadoCuentaPdf';
-import { getCommissionsByVendedor, resolveSelfVendedorId } from './commissionsRepository';
+import { getCommissionsByVendedor, redactCommissionAmounts, resolveSelfVendedorId } from './commissionsRepository';
 import type { VendedorCommissionGroup } from './commissionsRepository';
 import { buildCommissionsCsv } from './commissionsExport';
 import { generateCommissionsPdf } from './commissionsPdf';
@@ -39,6 +39,18 @@ export function subsidiaryRestrictionFor(permissions: UserPermissions): Set<stri
  */
 function isCommissionsFullAccessAllowed(permissions?: UserPermissions): boolean {
   return Boolean(permissions?.isAdmin || (permissions?.allowedEntities.has('contracts') && permissions?.allowedEntities.has('commissions')));
+}
+
+/**
+ * Whether a full-access caller also sees dollar amounts in the commissions grid, as opposed to
+ * every figure nulled out (see redactCommissionAmounts) - a further gate on top of
+ * isCommissionsFullAccessAllowed, for someone who needs to see/act on every contract's Docs
+ * Completos status without seeing commission amounts. Irrelevant for a self-vendedor (never
+ * redacted) and irrelevant without full access (there's nothing to redact - that caller either
+ * sees their own real numbers via the self-vendedor path, or sees nothing at all).
+ */
+function isCommissionsAmountsAllowed(permissions?: UserPermissions): boolean {
+  return Boolean(permissions?.isAdmin || permissions?.allowedEntities.has('commissions_amounts'));
 }
 
 /** GET /api/reports/contracts/:id/dossier — rich single-contract view (resolved names, services, annuities). */
@@ -93,6 +105,9 @@ interface CommissionsDataResult {
   month: number;
   year: number;
   isSelfVendedor: boolean;
+  /** False only for a full-access caller without 'commissions_amounts' - see
+   * isCommissionsAmountsAllowed. Always true for a self-vendedor. */
+  canSeeAmounts: boolean;
 }
 
 interface CommissionsDataError {
@@ -128,8 +143,14 @@ async function loadCommissionsData(req: Request): Promise<CommissionsDataResult 
 
   const currency = typeof req.query.currency === 'string' ? req.query.currency.trim() : undefined;
   const restrictSubsidiaries = fullAccess ? subsidiaryRestrictionFor(permissions!) : null;
-  const data = await getCommissionsByVendedor(knex, getLegacyDb(), month, year, restrictSubsidiaries, req.query.subsidiary, currency, selfVendedorId);
-  return { ok: true, data, month, year, isSelfVendedor: Boolean(selfVendedorId) };
+  const rawData = await getCommissionsByVendedor(knex, getLegacyDb(), month, year, restrictSubsidiaries, req.query.subsidiary, currency, selfVendedorId);
+
+  // A self-vendedor always sees their own real amounts - this gate only ever applies to the "see
+  // every vendedor" full-access path (see isCommissionsAmountsAllowed's own comment).
+  const canSeeAmounts = !fullAccess || isCommissionsAmountsAllowed(permissions);
+  const data = canSeeAmounts ? rawData : redactCommissionAmounts(rawData);
+
+  return { ok: true, data, month, year, isSelfVendedor: Boolean(selfVendedorId), canSeeAmounts };
 }
 
 /** GET /api/reports/contracts/commissions?month=1-12&year=YYYY — new-contract salesperson commissions grid. */
@@ -140,7 +161,14 @@ export async function getCommissionsReportRoute(req: Request, res: Response): Pr
     return;
   }
 
-  res.status(200).json({ success: true, data: result.data, month: result.month, year: result.year, isSelfVendedor: result.isSelfVendedor });
+  res.status(200).json({
+    success: true,
+    data: result.data,
+    month: result.month,
+    year: result.year,
+    isSelfVendedor: result.isSelfVendedor,
+    canSeeAmounts: result.canSeeAmounts,
+  });
 }
 
 /** GET /api/reports/contracts/commissions/export?month=1-12&year=YYYY — the same commissions grid

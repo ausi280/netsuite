@@ -11,15 +11,17 @@ const COLUMNS = [
   'Subsidiaria',
   'Moneda',
   'Total Servicios / Monto',
-  'Bono Placenta',
+  'Bono Placenta/ADN',
   'Comisión Nivel',
   'Bono Anualidad',
   'Docs Completos',
   'Total Comisión',
 ];
 
-function money(value: number): string {
-  return value.toFixed(2);
+/** 'Oculto' (not blank/'0.00') for a redacted amount (see redactCommissionAmounts) - explicit about
+ * WHY the cell is empty, so it never reads as "this contract pays nothing". */
+function money(value: number | null): string {
+  return value === null ? 'Oculto' : value.toFixed(2);
 }
 
 function subsidiaryLabel(id: string | null): string {
@@ -57,7 +59,7 @@ export function buildCommissionsCsv(groups: VendedorCommissionGroup[]): string {
         subsidiaryLabel(contract.subsidiaria_id),
         currencyLabel(contract.moneda),
         money(contract.total_servicios),
-        money(contract.placenta_bonus),
+        money(contract.placenta_adn_bonus),
         money(contract.tier_commission),
         money(contract.anualidad_bonus_total),
         contract.docs_completos ? 'Sí' : 'No',

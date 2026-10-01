@@ -60,6 +60,15 @@
   margin-bottom: 16px;
 }
 
+.amountsHiddenNotice {
+  color: var(--status-warning);
+  background: rgba(250, 178, 25, 0.12);
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+
 .title {
   font-size: 24px;
 }

@@ -2,7 +2,8 @@ import { Link } from 'react-router-dom';
 import type { ContractCommission } from '../../api/types';
 import { contractStatusLabel, serviceTypeLabel } from '../../config/labels';
 import { subsidiaryLabel } from '../../config/subsidiaries';
-import { formatCurrency, formatDate } from '../../utils/format';
+import { formatDate } from '../../utils/format';
+import { formatCommissionAmount } from '../../utils/commissions';
 import styles from './ContractCommissionCard.module.css';
 
 interface ContractCommissionCardProps {
@@ -43,7 +44,7 @@ export function ContractCommissionCard({ contract, nivel, tierPercentage }: Cont
             </span>
           )}
           <span className={styles.statusBadge}>{contractStatusLabel(contract.estatus)}</span>
-          <span className={styles.contractTotal}>{formatCurrency(contract.total_commission, currency)}</span>
+          <span className={styles.contractTotal}>{formatCommissionAmount(contract.total_commission, currency)}</span>
         </div>
       </div>
 
@@ -55,25 +56,27 @@ export function ContractCommissionCard({ contract, nivel, tierPercentage }: Cont
                 Comisión por nivel · Nivel {nivel ?? 'sin asignar'} ({tierPercentage !== null ? `${tierPercentage}%` : 'sin tier'})
               </span>
               <span className={styles.lineDetail}>
-                {contract.services.map((s) => `${serviceTypeLabel(s.tipo)} ${formatCurrency(s.precio_procesamiento, currency)}`).join(' + ')}
+                {contract.services.map((s) => `${serviceTypeLabel(s.tipo)} ${formatCommissionAmount(s.precio_procesamiento, currency)}`).join(' + ')}
                 {' = '}
-                {formatCurrency(contract.total_servicios, currency)}
+                {formatCommissionAmount(contract.total_servicios, currency)}
                 {tierPercentage !== null ? ` × ${tierPercentage}%` : ''}
               </span>
             </div>
-            <span className={styles.lineAmount}>{formatCurrency(contract.tier_commission, currency)}</span>
+            <span className={styles.lineAmount}>{formatCommissionAmount(contract.tier_commission, currency)}</span>
           </div>
         ) : null}
 
-        {contract.has_placenta ? (
+        {contract.has_bonus_service ? (
           <div className={styles.line}>
             <div className={styles.lineLabel}>
-              <span className={styles.tag}>Bono Placenta · 3% fijo</span>
+              <span className={styles.tag}>
+                Bono {contract.services.filter((s) => s.is_bonus_service).map((s) => serviceTypeLabel(s.tipo)).join(' + ')} · 3% fijo
+              </span>
               <span className={styles.lineDetail}>
-                {formatCurrency(contract.total_servicios, currency)} (total de servicios) × 3%
+                {formatCommissionAmount(contract.total_servicios, currency)} (total de servicios) × 3%
               </span>
             </div>
-            <span className={styles.lineAmount}>{formatCurrency(contract.placenta_bonus, currency)}</span>
+            <span className={styles.lineAmount}>{formatCommissionAmount(contract.placenta_adn_bonus, currency)}</span>
           </div>
         ) : null}
 
@@ -82,11 +85,11 @@ export function ContractCommissionCard({ contract, nivel, tierPercentage }: Cont
             <div className={styles.lineLabel}>
               <span className={styles.tag}>Bono de anualidades · $100 c/u</span>
               <span className={styles.lineDetail}>
-                {contract.anualidades.length} × $100 = {formatCurrency(contract.anualidad_bonus_total, currency)} · Años:{' '}
+                {contract.anualidades.length} × $100 = {formatCommissionAmount(contract.anualidad_bonus_total, currency)} · Años:{' '}
                 {contract.anualidades.map((a) => a.anio).join(', ')}
               </span>
             </div>
-            <span className={styles.lineAmount}>{formatCurrency(contract.anualidad_bonus_total, currency)}</span>
+            <span className={styles.lineAmount}>{formatCommissionAmount(contract.anualidad_bonus_total, currency)}</span>
           </div>
         ) : null}
 

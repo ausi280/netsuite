@@ -7,6 +7,7 @@ import { Tile } from './Tile';
 import { HrTile } from './HrTile';
 import { CommissionsTile } from './CommissionsTile';
 import { ProspectosTile } from './ProspectosTile';
+import { LogisticaTile } from './LogisticaTile';
 import styles from './TileGrid.module.css';
 
 const containerVariants: Variants = {
@@ -71,6 +72,7 @@ export function TileGrid({ entities, canAccessHr, canAccessCommissions, canAcces
       {canAccessHr ? <HrTile activeCount={hrSummaryQuery.data?.active} reduceMotion={reduceMotion} /> : null}
       {showCommissionsTile ? <CommissionsTile reduceMotion={reduceMotion} /> : null}
       {canAccessProspectos ? <ProspectosTile reduceMotion={reduceMotion} /> : null}
+      <LogisticaTile reduceMotion={reduceMotion} />
     </motion.div>
   );
 }

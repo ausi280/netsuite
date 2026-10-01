@@ -2,7 +2,6 @@ import { AppShell } from '../components/layout/AppShell';
 import { TileGrid } from '../components/tiles/TileGrid';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
-import { EmptyState } from '../components/common/EmptyState';
 import { useEntities } from '../hooks/useEntities';
 import styles from './DashboardPage.module.css';
 
@@ -27,16 +26,14 @@ export function DashboardPage() {
         />
       ) : null}
       {!isLoading && !isError && entities ? (
-        entities.length > 0 || canAccessHr || canAccessCommissions || canAccessProspectos ? (
-          <TileGrid
-            entities={entities}
-            canAccessHr={canAccessHr}
-            canAccessCommissions={canAccessCommissions}
-            canAccessProspectos={canAccessProspectos}
-          />
-        ) : (
-          <EmptyState message="No hay entidades disponibles." />
-        )
+        // The Logística tile is always shown (no allowedEntities gate), so TileGrid always has at
+        // least one tile - no "no entidades" empty state to fall back to any more.
+        <TileGrid
+          entities={entities}
+          canAccessHr={canAccessHr}
+          canAccessCommissions={canAccessCommissions}
+          canAccessProspectos={canAccessProspectos}
+        />
       ) : null}
     </AppShell>
   );

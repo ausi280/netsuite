@@ -17,6 +17,7 @@ import type {
   HrSummary,
   HrSummaryResponse,
   ContractNetSuiteNotesResponse,
+  LogisticaTicketResponse,
   MarketingReportResponse,
   NetSuiteNote,
   NotaCobranza,
@@ -152,6 +153,19 @@ export async function fetchHrAnalytics(token: string | null, dimension: HrDimens
   return result.data;
 }
 
+/** Creates a Zammad ticket for one Logística request - `formData` carries marca, tipoSolicitud,
+ * campos (JSON-stringified dynamic subform values), comentarios and attachment[] files. No
+ * Content-Type header is set here on purpose - the browser fills in the multipart boundary itself
+ * when the body is a FormData instance. */
+export async function submitLogisticaTicket(token: string | null, formData: FormData): Promise<{ ticket: string; message: string }> {
+  const result = await apiFetch<LogisticaTicketResponse>('/reports/logistica/ticket', {
+    token,
+    method: 'POST',
+    body: formData,
+  });
+  return { ticket: result.ticket, message: result.message };
+}
+
 /** Admin-only: every registered user (auto-provisioned on first login) and their current access. 403s for a non-admin caller. */
 export async function fetchAdminUsers(token: string | null): Promise<AdminUserSummary[]> {
   const result = await apiFetch<ApiSuccess<AdminUserSummary[]>>('/reports/admin/users', { token });
@@ -196,6 +210,9 @@ export interface CommissionsResult {
   /** True when the caller is a "self-vendedor" (see EntitiesResult.canAccessCommissions) - the
    * response is scoped to their own sales only, never every vendedor's. */
   isSelfVendedor: boolean;
+  /** False only for a full-access caller without 'commissions_amounts' - every dollar figure in
+   * `groups` is then null. Always true for a self-vendedor. */
+  canSeeAmounts: boolean;
 }
 
 /** CSV of the same commissions grid fetchCommissions returns, flattened to one row per
@@ -249,7 +266,7 @@ export async function fetchCommissions(
   if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
   if (currency) query.set('currency', currency);
   const result = await apiFetch<CommissionsResponse>(`/reports/contracts/commissions?${query.toString()}`, { token });
-  return { groups: result.data, isSelfVendedor: result.isSelfVendedor };
+  return { groups: result.data, isSelfVendedor: result.isSelfVendedor, canSeeAmounts: result.canSeeAmounts };
 }
 
 /** Collection-call notes from the pre-NetSuite CryoCell system (NotasCobranza), keyed off the

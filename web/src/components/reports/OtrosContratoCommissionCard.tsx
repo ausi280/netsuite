@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { OtrosContratoCommission } from '../../api/types';
-import { formatCurrency, formatDate } from '../../utils/format';
+import { formatDate } from '../../utils/format';
+import { formatCommissionAmount } from '../../utils/commissions';
 import styles from './ContractCommissionCard.module.css';
 
 interface OtrosContratoCommissionCardProps {
@@ -30,7 +31,7 @@ export function OtrosContratoCommissionCard({ otrosContrato, nivel, tierPercenta
           </p>
         </div>
         <div className={styles.headerRight}>
-          <span className={styles.contractTotal}>{formatCurrency(otrosContrato.tier_commission, currency)}</span>
+          <span className={styles.contractTotal}>{formatCommissionAmount(otrosContrato.tier_commission, currency)}</span>
         </div>
       </div>
 
@@ -41,11 +42,11 @@ export function OtrosContratoCommissionCard({ otrosContrato, nivel, tierPercenta
               Comisión por nivel · Nivel {nivel ?? 'sin asignar'} ({tierPercentage !== null ? `${tierPercentage}%` : 'sin tier'})
             </span>
             <span className={styles.lineDetail}>
-              {otrosContrato.servicio_nombre ?? 'Servicio'} {formatCurrency(otrosContrato.monto, currency)}
+              {otrosContrato.servicio_nombre ?? 'Servicio'} {formatCommissionAmount(otrosContrato.monto, currency)}
               {tierPercentage !== null ? ` × ${tierPercentage}%` : ''}
             </span>
           </div>
-          <span className={styles.lineAmount}>{formatCurrency(otrosContrato.tier_commission, currency)}</span>
+          <span className={styles.lineAmount}>{formatCommissionAmount(otrosContrato.tier_commission, currency)}</span>
         </div>
       </div>
     </div>

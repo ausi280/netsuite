@@ -33,8 +33,13 @@ export type ReportEntityKey =
  * 'contracts' - having 'contracts' alone no longer shows every vendedor's commissions, it only
  * does once 'commissions' is granted too (see isCommissionsFullAccessAllowed in
  * contractReportsController.ts). A 'commissions'-only grant with no 'contracts' does nothing.
+ * 'commissions_amounts' is a THIRD, further gate on top of both - without it, a full-access caller
+ * still sees every vendedor/contract/Docs Completos status, but every dollar figure is nulled out
+ * server-side (see redactCommissionAmounts in commissionsRepository.ts) - for someone reviewing/
+ * approving paperwork completeness who shouldn't see commission amounts. Never affects a
+ * self-vendedor viewing their own commissions - they always see their own real amounts.
  */
-export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions';
+export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts';
 
 export interface SortConfig {
   column: string;

@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { Router } from 'express';
 import { UnauthorizedError } from 'express-jwt';
+import { MulterError } from 'multer';
 import { buildEntraAuthMiddleware } from './auth/entraAuth';
 import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
 import { exportEntityRows, getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
@@ -24,6 +25,7 @@ import {
 } from './commissionLevelsController';
 import { chargeDomiciledRoute } from './paymentsChargeController';
 import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
+import { createLogisticaTicketRoute, logisticaUpload } from './logisticaTicketController';
 import { exportProspectosRoute, listProspectosRoute } from './prospectosController';
 import { getMarketingReportRoute } from './marketingController';
 import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
@@ -83,6 +85,9 @@ export function buildReportingRouter(): Router {
   // registered ReportEntityKey).
   router.get('/hr/summary', getHrSummaryRoute);
   router.get('/hr/analytics', getHrAnalyticsRoute);
+  // Logística ticket form (Zammad) - open to any signed-in user, no allowedEntities gate. Must be
+  // registered before /:entity/export, or that route would swallow "logistica" as an entity key.
+  router.post('/logistica/ticket', logisticaUpload.array('attachment', 10), createLogisticaTicketRoute);
   // Prospectos (legacy Cryo.dbo CRM lead funnel) is likewise bespoke, not a generic ENTITY_REGISTRY
   // entity - must be registered before /:entity/export, or that route would swallow "prospectos" as
   // an entity key and 404 (it isn't a registered ReportEntityKey).
@@ -118,6 +123,11 @@ export function buildReportingRouter(): Router {
   router.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (err instanceof UnauthorizedError) {
       res.status(401).json({ success: false, message: err.message || 'Invalid or missing access token.' });
+      return;
+    }
+    if (err instanceof MulterError) {
+      const message = err.code === 'LIMIT_FILE_SIZE' ? 'Cada archivo adjunto debe pesar 10 MB o menos.' : err.message;
+      res.status(400).json({ success: false, message });
       return;
     }
     next(err);

@@ -91,6 +91,14 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
               />
               Comisiones (todos los vendedores - requiere Contratos)
             </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
+                checked={entities.includes('commissions_amounts')}
+                onChange={() => setEntities((prev) => toggle(prev, 'commissions_amounts'))}
+              />
+              Comisiones - ver montos (requiere Comisiones; sin esto, ve todo excepto los montos)
+            </label>
           </div>
         </div>
         <div>
