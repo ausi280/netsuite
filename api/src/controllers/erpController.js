@@ -238,6 +238,104 @@ class ErpController {
     }
   }
 
+  /**
+   * Resolves a netsuite_contracts row from the already-synced local DB (NOT live NetSuite, unlike
+   * #resolveContractId above) - a pure read like "does this contract have debt" is both faster and
+   * safer to answer from the synced mirror than round-tripping to NetSuite's API, and it's the
+   * only place a folioSistemaAnterior lookup is even possible at all (that column isn't something
+   * #resolveContractId's live SuiteQL path looks up).
+   */
+  #resolveContractRow = async (contractId, contractName, folioSistemaAnterior) => {
+    const qb = db('netsuite_contracts').select('netsuite_id', 'name', 'custrecord_cryo_contratosistemaanterior as folio_sistema_anterior');
+
+    if (contractId !== undefined && contractId !== null && contractId !== '') {
+      qb.where('netsuite_id', String(contractId));
+    } else if (contractName !== undefined && contractName !== null && contractName !== '') {
+      qb.where('name', String(contractName));
+    } else {
+      qb.where('custrecord_cryo_contratosistemaanterior', String(folioSistemaAnterior));
+    }
+
+    const matches = await qb;
+
+    if (matches.length === 0) {
+      return { error: { status: 404, message: 'No contract found for the given identifier.' } };
+    }
+
+    if (matches.length > 1) {
+      return {
+        error: {
+          status: 409,
+          message: 'Multiple contracts found for the given identifier.',
+          candidateIds: matches.map((m) => m.netsuite_id),
+        },
+      };
+    }
+
+    return { row: matches[0] };
+  }
+
+  /**
+   * POST /erp/contracts/debt - answers "does this contract have outstanding debt", identified by
+   * exactly one of contractId (NetSuite internal id), contractName (NetSuite's own `name` field,
+   * e.g. "MX-CC-2026-000196-1"), or folioSistemaAnterior (the legacy CryoCell folio).
+   *
+   * Adeudo total = the sum of every "Vencido" (custrecord_cryo_estatuspartida = '4') partida on
+   * the contract whose own date has already passed - the SAME business rule already confirmed by
+   * the user and used in the Cuentas report (api/src-ts/reporting/cuentasRepository.ts), NOT
+   * Cryo.dbo.Contrato.TotalAdeudo (confirmed stale/wrong for this - see that file's comment).
+   */
+  getContractDebt = async (req, res) => {
+    try {
+      const { contractId, contractName, folioSistemaAnterior } = req.body;
+
+      const provided = [contractId, contractName, folioSistemaAnterior].filter(
+        (v) => v !== undefined && v !== null && v !== '',
+      );
+
+      if (provided.length !== 1) {
+        return res.status(400).json({
+          success: false,
+          message: 'Provide exactly one of "contractId", "contractName", or "folioSistemaAnterior".',
+        });
+      }
+
+      const resolved = await this.#resolveContractRow(contractId, contractName, folioSistemaAnterior);
+      if (resolved.error) {
+        return res.status(resolved.error.status).json({
+          success: false,
+          message: resolved.error.message,
+          ...(resolved.error.candidateIds ? { candidateIds: resolved.error.candidateIds } : {}),
+        });
+      }
+
+      const PARTIDA_ESTATUS_VENCIDO = '4';
+      const [row] = await db('netsuite_partidas')
+        .where('custrecord_cryo_numcontrato', resolved.row.netsuite_id)
+        .andWhere('isinactive', 'F')
+        .select(
+          db.raw(
+            `SUM(CASE WHEN custrecord_cryo_estatuspartida = ? AND TRY_CONVERT(date, custrecord_cryo_fechapartida, 103) < CAST(GETDATE() AS date) THEN TRY_CONVERT(decimal(18,2), custrecord_cryo_importepartida) END) as adeudo_total`,
+            [PARTIDA_ESTATUS_VENCIDO],
+          ),
+        );
+
+      const adeudoTotal = row && row.adeudo_total !== null ? Number(row.adeudo_total) : 0;
+
+      return res.status(200).json({
+        success: true,
+        contractId: resolved.row.netsuite_id,
+        contractName: resolved.row.name,
+        folioSistemaAnterior: resolved.row.folio_sistema_anterior,
+        tieneAdeudo: adeudoTotal > 0,
+        adeudoTotal,
+      });
+    } catch (error) {
+      console.error('Error checking contract debt:', error);
+      return res.status(500).json({ success: false, message: error.message || 'Failed to check contract debt.' });
+    }
+  }
+
   /** Retries a NetSuite record PATCH on the known "record has changed" conflict; aborts immediately on anything else. */
   #updateRecordWithRetry = async (recordType, id, body) => {
     return pRetry(async () => {

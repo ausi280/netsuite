@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { ContractCommission } from '../../api/types';
-import { contractStatusLabel, serviceTypeLabel } from '../../config/labels';
+import { contractStatusLabel, partidaStatusLabel, serviceTypeLabel } from '../../config/labels';
 import { subsidiaryLabel } from '../../config/subsidiaries';
 import { formatDate } from '../../utils/format';
 import { formatCommissionAmount } from '../../utils/commissions';
@@ -94,7 +94,14 @@ export function ContractCommissionCard({ contract, nivel, tierPercentage }: Cont
         ) : null}
 
         {contract.services.length === 0 && contract.anualidades.length === 0 ? (
-          <p className={styles.empty}>Este contrato no tiene servicios activos ni anualidades que generen comisión.</p>
+          contract.non_paid_service_statuses.length > 0 ? (
+            <p className={styles.empty}>
+              Este contrato tiene servicio(s) con estatus de pago {contract.non_paid_service_statuses.map((code) => partidaStatusLabel(code)).join(' / ')} -
+              no cuentan para comisión hasta que se marquen como Pagado.
+            </p>
+          ) : (
+            <p className={styles.empty}>Este contrato no tiene servicios activos ni anualidades que generen comisión.</p>
+          )
         ) : null}
       </div>
     </div>

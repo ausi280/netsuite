@@ -19,4 +19,8 @@ router.route('/contracts/fechas')
 router.route('/contracts/update')
             .patch(apiKeyAuth, erpController.updateContractFechas);
 
+// Body: exactly one of contractId, contractName, or folioSistemaAnterior.
+router.route('/contracts/debt')
+            .post(apiKeyAuth, erpController.getContractDebt);
+
 module.exports = router;

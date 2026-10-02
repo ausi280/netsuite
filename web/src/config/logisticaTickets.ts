@@ -1,11 +1,14 @@
-export type Marca = 'CRYOHOLDCO' | 'CRYO CELL' | 'NIPT/CLARIX' | 'BCU' | 'BSCU' | 'DENTCELL';
+export type Marca = 'CRYOHOLDCO' | 'CRYO CELL' | 'NIPT/CLARIX' | 'BCU' | 'BSCU' | 'DENTCELL' | 'FCELLS' | 'RENEW THERAPIES';
 
-export const MARCAS: Marca[] = ['CRYOHOLDCO', 'CRYO CELL', 'NIPT/CLARIX', 'BCU', 'BSCU', 'DENTCELL'];
+export const MARCAS: Marca[] = ['CRYOHOLDCO', 'CRYO CELL', 'NIPT/CLARIX', 'BCU', 'BSCU', 'DENTCELL', 'FCELLS', 'RENEW THERAPIES'];
 
 // Which "tipo de solicitud" options each marca offers - CRYO CELL gets an extra "Material /
 // Regalos" option the other collection brands don't, NIPT/CLARIX's flow is worded/shaped
-// differently throughout, and CRYOHOLDCO (the corporate brand, no sample collection of its own)
-// only ever deals in courier guides and gift shipments.
+// differently throughout, CRYOHOLDCO (the corporate brand, no sample collection of its own) only
+// ever deals in courier guides and gift shipments, FCELLS's collection flow is médico/paciente-
+// oriented rather than mamá/papá (hence its own "Envío de KIT Médico" wording, not "... Cliente"),
+// and RENEW THERAPIES has no envío-de-kit-a-cliente flow at all (added 2026-10-01, per explicit
+// instruction - both were missing from the original brand list).
 export const MARCA_TIPOS: Record<Marca, string[]> = {
   CRYOHOLDCO: ['Solicitud de guía', 'Material / Regalos'],
   'CRYO CELL': ['Recolección', 'Kit para stock', 'Envío de KIT Cliente', 'Material / Regalos'],
@@ -13,27 +16,36 @@ export const MARCA_TIPOS: Record<Marca, string[]> = {
   BCU: ['Recolección', 'Kit para stock', 'Envío de KIT Cliente'],
   BSCU: ['Recolección', 'Kit para stock', 'Envío de KIT Cliente'],
   DENTCELL: ['Recolección', 'Kit para stock', 'Envío de KIT Cliente'],
+  FCELLS: ['Recolección', 'Kit para stock', 'Envío de KIT Médico'],
+  'RENEW THERAPIES': ['Recolección', 'Kit para stock'],
 };
 
 export type SubformKey =
   | 'recoleccion'
   | 'recoleccion_nipt'
+  | 'recoleccion_medico'
   | 'kit_stock'
   | 'kit_stock_nipt'
   | 'envio_kit'
   | 'envio_kit_nipt'
+  | 'envio_kit_medico'
   | 'material_regalos'
   | 'solicitud_guia';
 
-/** Resolves which subform to show for a (marca, tipoSolicitud) pair - "Kit para stock" and "Envío
- * de KIT Cliente" read the same on every brand but need different fields for NIPT/CLARIX. */
+/** Resolves which subform to show for a (marca, tipoSolicitud) pair - "Kit para stock" reads the
+ * same on every brand but needs different fields for NIPT/CLARIX; "Recolección" reads the same on
+ * every brand but needs different (médico/paciente) fields for FCELLS/RENEW THERAPIES. "Envío de
+ * KIT Médico" is its own distinctly-worded tipo (only FCELLS offers it), so it maps directly with
+ * no extra marca check needed. */
 export function resolveSubformKey(marca: string, tipo: string): SubformKey | null {
   const nipt = marca === 'NIPT/CLARIX';
+  const medico = marca === 'FCELLS' || marca === 'RENEW THERAPIES';
 
   if (tipo === 'Recolección NIPT') return 'recoleccion_nipt';
-  if (tipo === 'Recolección') return 'recoleccion';
+  if (tipo === 'Recolección') return medico ? 'recoleccion_medico' : 'recoleccion';
   if (tipo === 'Kit para stock') return nipt ? 'kit_stock_nipt' : 'kit_stock';
   if (tipo === 'Envío de KIT Cliente') return nipt ? 'envio_kit_nipt' : 'envio_kit';
+  if (tipo === 'Envío de KIT Médico') return 'envio_kit_medico';
   if (tipo === 'Material / Regalos') return 'material_regalos';
   if (tipo === 'Solicitud de guía') return 'solicitud_guia';
 
@@ -90,6 +102,17 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
     ],
     note: 'La foto (opcional) se puede adjuntar en la sección de "Adjuntos" al final del formulario.',
   },
+  recoleccion_medico: {
+    title: 'Datos de recolección',
+    fields: [
+      { name: 'nombre_medico', label: 'Nombre Médico', type: 'text', required: true },
+      { name: 'nombre_paciente', label: 'Nombre Paciente', type: 'text', required: true },
+      { name: 'servicio_contratado', label: 'Servicio contratado', type: 'text', required: true },
+      { name: 'domicilio', label: 'Domicilio', type: 'text', required: true },
+      { name: 'horario_atencion', label: 'Horario de atención', type: 'text', required: true },
+      { name: 'notas', label: 'Notas', type: 'textarea' },
+    ],
+  },
   kit_stock: {
     title: 'Kit para stock',
     fields: [
@@ -125,6 +148,18 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
       { name: 'nombre_mama', label: 'Nombre de mamá y celular', type: 'text', required: true },
       { name: 'domicilio_entrega', label: 'Domicilio de entrega', type: 'text', required: true },
       { name: 'entre_calles', label: 'Entre calles', type: 'text', required: true },
+      { name: 'notas', label: 'Notas', type: 'textarea' },
+    ],
+  },
+  envio_kit_medico: {
+    title: 'Envío de kit al médico',
+    fields: [
+      { name: 'nombre_medico', label: 'Nombre de médico', type: 'text', required: true },
+      { name: 'telefono_contacto', label: 'Teléfono de contacto', type: 'text', required: true },
+      { name: 'cantidad', label: 'Cantidad', type: 'number', required: true },
+      { name: 'tipo_kit', label: 'Tipo de Kit', type: 'text', required: true },
+      { name: 'direccion_clinica', label: 'Dirección clínica/consultorio', type: 'text', required: true },
+      { name: 'horario_atencion', label: 'Horario de atención', type: 'text', required: true },
       { name: 'notas', label: 'Notas', type: 'textarea' },
     ],
   },

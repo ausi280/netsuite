@@ -119,7 +119,16 @@ export interface ContractCommission {
   titular_nombre: string | null;
   /** custrecord_cryo_contratosistemaanterior - the legacy CryoCell folio, when this contract has one. */
   folio_sistema_anterior: string | null;
+  /** Pagado services only (see custrecord_cryo_statuspagoserv) - an active service with any other
+   * payment status is excluded here (and from total_servicios), never shown as if it counted. */
   services: ServiceCommissionLine[];
+  /** Distinct custrecord_cryo_statuspagoserv codes (see PARTIDA_STATUS_LABELS on the frontend -
+   * same underlying NetSuite list) among this contract's ACTIVE services that are NOT Pagado, so
+   * excluded from `services`/total_servicios/the commission figures below. Lets the UI explain WHY
+   * a contract shows no services/commission when it actually has some, just unpaid - e.g. "Vencido"
+   * - instead of looking identical to a contract with zero services at all. Empty when every
+   * active service is Pagado, or the contract genuinely has no active services. */
+  non_paid_service_statuses: string[];
   /** Sum of every active service's precio_procesamiento on this contract, Placenta/ADN included -
    * the base both the tiered commission and the special bonus are computed from. Null when the
    * caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
@@ -265,6 +274,10 @@ interface ServiceRow {
   custrecord_cryo_idcontrato: string;
   custrecord_cryo_tipodeserv: string | null;
   custrecord_cryo_precioprocesamiento: string | number | null;
+  /** Estado del Pago (see SERVICE_PAYMENT_STATUS_PAGADO) - fetched for every active service now
+   * (not just Pagado ones), so buildContractCommission can report which non-Pagado statuses are
+   * present on a contract whose services are all excluded from the commission figures below. */
+  custrecord_cryo_statuspagoserv: string | null;
 }
 
 interface AnualidadPartidaRow {
@@ -353,8 +366,14 @@ export async function resolveSelfVendedorId(db: Knex, email: string | null): Pro
   return hasContract || hasOtrosContrato ? employee.netsuite_id : null;
 }
 
+/** Filters for Pagado internally (not at each call site) - `services` now always holds every
+ * active service regardless of payment status (see ServiceRow.custrecord_cryo_statuspagoserv), so
+ * this is the one place both callers (a contract's own total_servicios, and a vendedor's
+ * tier-resolution total at the bottom of this file) rely on to keep excluding unpaid amounts. */
 function totalForServices(services: ServiceRow[]): number {
-  return services.reduce((sum, s) => sum + Number(s.custrecord_cryo_precioprocesamiento ?? 0), 0);
+  return services
+    .filter((s) => s.custrecord_cryo_statuspagoserv === SERVICE_PAYMENT_STATUS_PAGADO)
+    .reduce((sum, s) => sum + Number(s.custrecord_cryo_precioprocesamiento ?? 0), 0);
 }
 
 // mssql/tedious caps the number of parameters per request (~2100) - chunk whereIn batches well
@@ -424,12 +443,30 @@ function buildContractCommission(
   tierPercentage: number | null,
   docsComplete: boolean,
 ): ContractCommission {
-  const serviceLines: ServiceCommissionLine[] = services.map((s) => ({
+  // `services` now holds every ACTIVE service regardless of payment status (see
+  // ServiceRow.custrecord_cryo_statuspagoserv) - the displayed breakdown (serviceLines) stays
+  // Pagado-only, same as before this changed, so the "Comisión por nivel" line's listed prices
+  // always still add up to total_servicios exactly as shown.
+  const paidServices = services.filter((s) => s.custrecord_cryo_statuspagoserv === SERVICE_PAYMENT_STATUS_PAGADO);
+
+  const serviceLines: ServiceCommissionLine[] = paidServices.map((s) => ({
     netsuite_id: s.netsuite_id,
     tipo: s.custrecord_cryo_tipodeserv,
     precio_procesamiento: Number(s.custrecord_cryo_precioprocesamiento ?? 0),
     is_bonus_service: s.custrecord_cryo_tipodeserv !== null && SPECIAL_BONUS_SERVICE_TYPE_IDS.has(s.custrecord_cryo_tipodeserv),
   }));
+
+  // Distinct non-Pagado statuses among this contract's active services - lets the UI explain WHY
+  // it shows no services/commission when the contract actually has some, just not Pagado yet
+  // (e.g. "Vencido"), instead of looking indistinguishable from having zero services at all.
+  const nonPaidServiceStatuses = Array.from(
+    new Set(
+      services
+        .filter((s) => s.custrecord_cryo_statuspagoserv !== SERVICE_PAYMENT_STATUS_PAGADO)
+        .map((s) => s.custrecord_cryo_statuspagoserv)
+        .filter((status): status is string => status !== null),
+    ),
+  );
 
   const totalServicios = totalForServices(services);
   const hasBonusService = serviceLines.some((s) => s.is_bonus_service);
@@ -461,6 +498,7 @@ function buildContractCommission(
     titular_nombre: contract.titular_nombre,
     folio_sistema_anterior: contract.folio_sistema_anterior,
     services: serviceLines,
+    non_paid_service_statuses: nonPaidServiceStatuses,
     total_servicios: totalServicios,
     has_bonus_service: hasBonusService,
     docs_completos: docsComplete,
@@ -605,11 +643,19 @@ export async function getCommissionsByVendedor(
   const allContractIds = Array.from(new Set([...allVendorContracts.map((c) => c.netsuite_id), ...displayContractIds]));
 
   const [services, anualidadPartidas, levels, tiers] = await Promise.all([
+    // No longer filtered to Pagado here (see ServiceRow.custrecord_cryo_statuspagoserv) -
+    // buildContractCommission filters for Pagado itself when computing serviceLines/total/bonus,
+    // but needs every active row (any status) to also report non_paid_service_statuses.
     db<ServiceRow>('netsuite_services')
       .whereIn('custrecord_cryo_idcontrato', allContractIds)
       .andWhere('isinactive', 'F')
-      .andWhere('custrecord_cryo_statuspagoserv', SERVICE_PAYMENT_STATUS_PAGADO)
-      .select('netsuite_id', 'custrecord_cryo_idcontrato', 'custrecord_cryo_tipodeserv', 'custrecord_cryo_precioprocesamiento'),
+      .select(
+        'netsuite_id',
+        'custrecord_cryo_idcontrato',
+        'custrecord_cryo_tipodeserv',
+        'custrecord_cryo_precioprocesamiento',
+        'custrecord_cryo_statuspagoserv',
+      ),
     db<AnualidadPartidaRow>('netsuite_partidas')
       .whereIn('custrecord_cryo_numcontrato', displayContractIds)
       .andWhere('isinactive', 'F')

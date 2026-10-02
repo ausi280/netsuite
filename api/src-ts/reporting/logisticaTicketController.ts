@@ -3,8 +3,9 @@ import axios from 'axios';
 import multer from 'multer';
 import { getZammadConfig } from '../config';
 
-// Same branching the Logística form's own UI enforces client-side - re-checked here so a crafted
-// request can't submit a (marca, tipoSolicitud) combination the UI would never have offered.
+// Same branching the Logística form's own UI enforces client-side (see MARCA_TIPOS in
+// web/src/config/logisticaTickets.ts - keep both in sync) - re-checked here so a crafted request
+// can't submit a (marca, tipoSolicitud) combination the UI would never have offered.
 const MARCA_TIPOS: Record<string, string[]> = {
   CRYOHOLDCO: ['Solicitud de guía', 'Material / Regalos'],
   'CRYO CELL': ['Recolección', 'Kit para stock', 'Envío de KIT Cliente', 'Material / Regalos'],
@@ -12,6 +13,8 @@ const MARCA_TIPOS: Record<string, string[]> = {
   BCU: ['Recolección', 'Kit para stock', 'Envío de KIT Cliente'],
   BSCU: ['Recolección', 'Kit para stock', 'Envío de KIT Cliente'],
   DENTCELL: ['Recolección', 'Kit para stock', 'Envío de KIT Cliente'],
+  FCELLS: ['Recolección', 'Kit para stock', 'Envío de KIT Médico'],
+  'RENEW THERAPIES': ['Recolección', 'Kit para stock'],
 };
 
 // Spanish labels for every dynamic subform field the form can submit - keyed by the field name the
@@ -51,6 +54,13 @@ const FIELD_LABELS: Record<string, string> = {
   requiere_seguro: '¿Requiere seguro?',
   monto: 'Monto del seguro',
   urgente: 'Urgencia de envío',
+  nombre_medico: 'Nombre médico',
+  nombre_paciente: 'Nombre paciente',
+  servicio_contratado: 'Servicio contratado',
+  domicilio: 'Domicilio',
+  horario_atencion: 'Horario de atención',
+  telefono_contacto: 'Teléfono de contacto',
+  direccion_clinica: 'Dirección clínica/consultorio',
 };
 
 const ALLOWED_MIME_TYPES = new Set([

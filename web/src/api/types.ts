@@ -231,7 +231,16 @@ export interface ContractCommission {
   titular_nombre: string | null;
   /** custrecord_cryo_contratosistemaanterior - the legacy CryoCell folio, when this contract has one. */
   folio_sistema_anterior: string | null;
+  /** Pagado services only - an active service with any other payment status is excluded here
+   * (and from total_servicios), never shown as if it counted. */
   services: ServiceCommissionLine[];
+  /** Distinct custrecord_cryo_statuspagoserv codes (same list as PARTIDA_STATUS_LABELS) among this
+   * contract's ACTIVE services that are NOT Pagado, so excluded from `services`/total_servicios/
+   * the commission figures below. Lets the UI explain why a contract shows no services/commission
+   * when it actually has some, just unpaid (e.g. "Vencido") - instead of looking identical to a
+   * contract with zero services at all. Empty when every active service is Pagado, or the
+   * contract genuinely has no active services. Never redacted (a status, not a dollar amount). */
+  non_paid_service_statuses: string[];
   /** Sum of every active service's precio_procesamiento on this contract, Placenta/ADN included -
    * the base both the tiered commission and the special bonus are computed from. Null when
    * redacted (see ServiceCommissionLine.precio_procesamiento). */
