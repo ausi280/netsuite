@@ -118,11 +118,14 @@ interface TableColumn {
   align?: 'left' | 'right';
 }
 
-/** Draws a table header row (only once, at the top of each new page a table's rows spill onto). */
-function drawTableHeader(doc: PDFKit.PDFDocument, y: number, columns: TableColumn[]): number {
+/** Draws a table header row (only once, at the top of each new page a table's rows spill onto).
+ * `startX` defaults to the page's left margin - overridden for a narrower table placed in one
+ * column of a multi-column layout (see the Niveles anexo). */
+function drawTableHeader(doc: PDFKit.PDFDocument, y: number, columns: TableColumn[], startX: number = PAGE_MARGIN): number {
   const rowHeight = 20;
-  let x = PAGE_MARGIN;
-  doc.rect(PAGE_MARGIN, y, doc.page.width - PAGE_MARGIN * 2, rowHeight).fill(BRAND.ink);
+  const totalWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  let x = startX;
+  doc.rect(startX, y, totalWidth, rowHeight).fill(BRAND.ink);
   for (const col of columns) {
     doc
       .font('Helvetica-Bold')
@@ -134,12 +137,13 @@ function drawTableHeader(doc: PDFKit.PDFDocument, y: number, columns: TableColum
   return y + rowHeight;
 }
 
-function drawTableRow(doc: PDFKit.PDFDocument, y: number, columns: TableColumn[], values: string[], striped: boolean): number {
+function drawTableRow(doc: PDFKit.PDFDocument, y: number, columns: TableColumn[], values: string[], striped: boolean, startX: number = PAGE_MARGIN): number {
   const rowHeight = 18;
+  const totalWidth = columns.reduce((sum, col) => sum + col.width, 0);
   if (striped) {
-    doc.rect(PAGE_MARGIN, y, doc.page.width - PAGE_MARGIN * 2, rowHeight).fill(BRAND.rowAlt);
+    doc.rect(startX, y, totalWidth, rowHeight).fill(BRAND.rowAlt);
   }
-  let x = PAGE_MARGIN;
+  let x = startX;
   for (let i = 0; i < columns.length; i += 1) {
     const col = columns[i];
     doc
@@ -186,12 +190,6 @@ const OTROS_COLUMNS: TableColumn[] = [
   { label: 'COMISIÓN NIVEL', width: 92, align: 'right' },
 ];
 
-const NIVELES_COLUMNS: TableColumn[] = [
-  { label: 'NIVEL', width: 150 },
-  { label: 'MONTO MÍNIMO', width: 180, align: 'right' },
-  { label: 'PORCENTAJE', width: 182, align: 'right' },
-];
-
 /**
  * Renders one "Estado de cuenta de Comisiones" page per vendedor - styled after the legacy
  * Estado de Cuenta report (logo top-right, title, Vendedor/Periodo, a two-column summary stats
@@ -201,9 +199,10 @@ const NIVELES_COLUMNS: TableColumn[] = [
  * Returns a Promise<Buffer> - pdfkit streams, so the buffer only resolves once doc.end() fires
  * the 'end' event with every chunk collected.
  *
- * `tiers` is printed as a final "Anexo - Niveles de Comisión" page (one shared table, since
- * commission_level_tiers has no Contratos/Otros Contratos split - a nivel name like "A" resolves
- * against the same rows for both). The caller (contractReportsController.ts) is responsible for
+ * `tiers` is printed as a final "Anexo - Niveles de Comisión" page - one small table per nivel
+ * (not one big combined table), laid out two per row, since commission_level_tiers has no
+ * Contratos/Otros Contratos split (a nivel name like "A" resolves against the same rows for both).
+ * The caller (contractReportsController.ts) is responsible for
  * scoping this list down to only the niveles relevant to a self-vendedor's own
  * nivel_contratos/nivel_otros_contratos before calling this - a full-access caller passes every
  * tier instead, per explicit instruction ("a vendedor can only see what is assigned to him, for a
@@ -367,24 +366,51 @@ export async function generateCommissionsPdf(
     doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted).text(`Periodo: ${periodo}`, PAGE_MARGIN, y);
     y = doc.y + 18;
 
-    function ensureAnexoSpace(needed: number): void {
-      if (y + needed > pageBottom) {
-        doc.addPage();
-        y = PAGE_MARGIN;
-      }
+    // One small table per nivel (not one big combined table), two per row - a nivel name like "A"
+    // is shared between Contratos and Otros Contratos (see the file-level comment), so this is
+    // still a single flat grouping by tier.nivel, not a Contratos/Otros split.
+    const tiersByNivel = new Map<string, CommissionLevelTierRow[]>();
+    for (const tier of tiers) {
+      const list = tiersByNivel.get(tier.nivel) ?? [];
+      list.push(tier);
+      tiersByNivel.set(tier.nivel, list);
     }
 
-    y = drawTableHeader(doc, y, NIVELES_COLUMNS);
-    tiers.forEach((tier, rowIndex) => {
-      ensureAnexoSpace(18);
-      if (y === PAGE_MARGIN) y = drawTableHeader(doc, y, NIVELES_COLUMNS);
-      y = drawTableRow(
-        doc,
-        y,
-        NIVELES_COLUMNS,
-        [tier.nivel, money(tier.min_amount), `${tier.percentage}%`],
-        rowIndex % 2 === 1,
-      );
+    const cardGap = 20;
+    const cardWidth = (contentWidth - cardGap) / 2;
+    const rightX = PAGE_MARGIN + cardWidth + cardGap;
+    const miniColumns: TableColumn[] = [
+      { label: 'MONTO MÍNIMO', width: cardWidth * 0.6, align: 'right' },
+      { label: 'PORCENTAJE', width: cardWidth * 0.4, align: 'right' },
+    ];
+
+    let yLeft = y;
+    let yRight = y;
+
+    Array.from(tiersByNivel.entries()).forEach(([nivel, nivelTiers], index) => {
+      const isLeft = index % 2 === 0;
+      const startX = isLeft ? PAGE_MARGIN : rightX;
+      const neededHeight = 18 + 20 + nivelTiers.length * 18 + 16;
+
+      // A new page resets BOTH columns, not just the one that overflowed - two columns are one
+      // physical page, so they can't be on different pages independently.
+      if ((isLeft ? yLeft : yRight) + neededHeight > pageBottom) {
+        doc.addPage();
+        yLeft = PAGE_MARGIN;
+        yRight = PAGE_MARGIN;
+      }
+
+      let colY = isLeft ? yLeft : yRight;
+      doc.font('Helvetica-Bold').fontSize(11).fillColor(BRAND.ink).text(`Nivel ${nivel}`, startX, colY, { width: cardWidth });
+      colY += 18;
+      colY = drawTableHeader(doc, colY, miniColumns, startX);
+      nivelTiers.forEach((tier, rowIndex) => {
+        colY = drawTableRow(doc, colY, miniColumns, [money(tier.min_amount), `${tier.percentage}%`], rowIndex % 2 === 1, startX);
+      });
+      colY += 16;
+
+      if (isLeft) yLeft = colY;
+      else yRight = colY;
     });
   }
 
