@@ -29,8 +29,11 @@ export type ReportEntityKey =
  * back null (see CommissionsResponse.canSeeAmounts) - for someone reviewing/approving paperwork
  * completeness who shouldn't see commission amounts. Never affects a self-vendedor viewing their
  * own commissions.
+ * 'tareas_vencidas' is its own standalone grant (same shape as 'hr'/'prospectos', NOT an
+ * additional gate on top of 'prospectos') for the Tareas Vencidas sub-report embedded in the
+ * Comercial page - see api/src-ts/reporting/tareasVencidasController.ts.
  */
-export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts';
+export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts' | 'tareas_vencidas';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -503,6 +506,108 @@ export interface MarketingReportResponse {
     byMonth: QualificationByMonthRow[];
     motivos: MarketingMotivoBreakdownRow[];
   };
+}
+
+/** Online (Internet TipoCanal) vs offline (everything else) - same split
+ * api/src-ts/reporting/marketingRepository.ts uses for the Marketing report. */
+export type ProspectoCanal = 'online' | 'offline';
+
+/** One (year, month, tareas count, activo state, canal, how many prospectos match) bucket - see
+ * api/src-ts/reporting/comercialRepository.ts. Year is included alongside month since the default
+ * date range already crosses a year boundary. `activo` and `canal` are both part of the grouping
+ * key (not separate aggregates) so the frontend's Activos/Todos switch and Online/Offline split
+ * can filter by summing only the rows matching the selected state. */
+export interface TareasCountRow {
+  anio: number;
+  mes: number;
+  tareas: number;
+  activo: boolean;
+  canal: ProspectoCanal;
+  cantidad: number;
+}
+
+/** Same bucket shape, split per vendedor - one row per (vendedor, año, mes, tareas, activo, canal)
+ * combination actually present in the period, not a full cross-product (a vendedor with no
+ * prospecto at some tareas count simply has no row for it, rather than a zero-cantidad row). */
+export interface TareasByVendedorRow extends TareasCountRow {
+  id_vendedor: number;
+  vendedor: string | null;
+}
+
+/** "Comercial" - how many Tarea (follow-up task) rows each prospecto accumulated, both overall
+ * and per vendedor, over a FechaCaptura date range - same Prospecto/Lead/Vendedor data as
+ * /reports/prospectos and /reports/marketing. */
+export interface ComercialReportResponse {
+  success: true;
+  global: TareasCountRow[];
+  porVendedor: TareasByVendedorRow[];
+}
+
+/**
+ * "Tareas Vencidas" - Cryo.dbo.Tarea rows that are overdue and were never properly closed on time
+ * (FechaFinal < today AND (FechaCierre IS NULL OR FechaCierre < FechaFinal)) - a Comercial
+ * sub-report, same Prospecto/Lead/Vendedor join every other Comercial/Prospectos/Marketing report
+ * uses. See api/src-ts/reporting/tareasVencidasRepository.ts.
+ */
+export interface TareaVencidaRow {
+  id_tarea: number;
+  tipo_tarea: string | null;
+  fecha_inicial: string | null;
+  /** The task's own deadline - always in the past for every row this report returns. */
+  fecha_final: string | null;
+  /** Null (never closed) or earlier than fecha_final. */
+  fecha_cierre: string | null;
+  nota: string | null;
+  activo: boolean;
+  id_vendedor: number;
+  vendedor: string | null;
+  id_prospecto: number;
+  madre_completo: string | null;
+  padre_completo: string | null;
+  telefonos: string | null;
+}
+
+export interface TareasVencidasResponse {
+  success: true;
+  data: TareaVencidaRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+/** Distinct (id_vendedor, vendedor) pairs for the Tareas Vencidas vendedor filter dropdown - same
+ * duplicate-prone raw Vendedor rows as the Comercial report's own dropdown, deduped the same way
+ * client-side (see web/src/utils/comercial.ts's normalizeVendedorName/listVendedores). */
+export interface TareaVendedorOption {
+  id_vendedor: number;
+  vendedor: string | null;
+}
+
+export interface TareaVencidaVendedoresResponse {
+  success: true;
+  data: TareaVendedorOption[];
+}
+
+/** One (año, mes, how many matching Tarea rows) bucket - see
+ * api/src-ts/reporting/tareasVencidasRepository.ts's getTareasVencidasByMonth. */
+export interface TareaVencidaMonthRow {
+  anio: number;
+  mes: number;
+  cantidad: number;
+}
+
+/** Same bucket shape, split per vendedor - one row per (vendedor, año, mes) combination actually
+ * present (a vendedor/month with zero matching tareas simply has no row). */
+export interface TareaVencidaByVendedorMonthRow extends TareaVencidaMonthRow {
+  id_vendedor: number;
+  vendedor: string | null;
+}
+
+export interface TareasVencidasByMonthResponse {
+  success: true;
+  global: TareaVencidaMonthRow[];
+  porVendedor: TareaVencidaByVendedorMonthRow[];
 }
 
 /**

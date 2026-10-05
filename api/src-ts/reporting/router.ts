@@ -28,6 +28,13 @@ import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
 import { createLogisticaTicketRoute, logisticaUpload } from './logisticaTicketController';
 import { exportProspectosRoute, listProspectosRoute } from './prospectosController';
 import { getMarketingReportRoute } from './marketingController';
+import { getComercialReportRoute } from './comercialController';
+import {
+  exportTareasVencidasRoute,
+  getTareasVencidasByMonthRoute,
+  listTareaVencidaVendedoresRoute,
+  listTareasVencidasRoute,
+} from './tareasVencidasController';
 import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
 import { exportNotesReportRoute, listNotesReportRoute } from './notesReportController';
 import { exportContratosReportRoute, listContratosReportRoute } from './contratosReportController';
@@ -97,6 +104,18 @@ export function buildReportingRouter(): Router {
   // built on the same Prospecto data as /prospectos) - likewise bespoke, must be registered before
   // /:entity/export, or that route would swallow "marketing" as an entity key and 404.
   router.get('/marketing', getMarketingReportRoute);
+  // Comercial (tareas-per-prospecto distribution, global and per vendedor) - built on the same
+  // Prospecto data as /prospectos - likewise bespoke, must be registered before /:entity/export,
+  // or that route would swallow "comercial" as an entity key and 404.
+  router.get('/comercial', getComercialReportRoute);
+  // Tareas Vencidas (overdue, never-properly-closed Tarea rows - FechaFinal < today AND
+  // (FechaCierre IS NULL OR FechaCierre < FechaFinal)) - a Comercial sub-report, same Prospecto/
+  // Lead/Vendedor join. Must be registered before /:entity/:id, or that route would swallow
+  // "comercial" as an entity key and "tareas-vencidas" as an id value.
+  router.get('/comercial/tareas-vencidas', listTareasVencidasRoute);
+  router.get('/comercial/tareas-vencidas/vendedores', listTareaVencidaVendedoresRoute);
+  router.get('/comercial/tareas-vencidas/export', exportTareasVencidasRoute);
+  router.get('/comercial/tareas-vencidas/by-month', getTareasVencidasByMonthRoute);
   // Cuentas (per-contract account/collections detail, reached from the Partidas report) is
   // likewise bespoke, not a generic ENTITY_REGISTRY entity - must be registered before
   // /:entity/export, or that route would swallow "cuentas" as an entity key and 404.

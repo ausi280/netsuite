@@ -1,0 +1,184 @@
+.heading {
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--color-secondary);
+  margin-top: 4px;
+}
+
+.dateFilters {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.metricToggle {
+  display: flex;
+  gap: 4px;
+  border: 1px solid var(--color-neutral-200);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  background: var(--color-white);
+}
+
+.metricButton {
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  color: var(--color-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-fluent), color var(--duration-fast) var(--ease-fluent);
+}
+
+.metricButtonActive {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.dateLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.dateInput {
+  padding: 9px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  background: var(--color-white);
+  font-size: 14px;
+  color: var(--color-neutral-900);
+}
+
+.dateInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.panels {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.panelTitle {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+}
+
+.panelSubtitle {
+  font-size: 12px;
+  color: var(--color-secondary);
+  margin-bottom: 16px;
+}
+
+.vendedorSelect {
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  background: var(--color-white);
+  font-size: 14px;
+  color: var(--color-neutral-900);
+  min-width: 220px;
+}
+
+.vendedorSelect:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.splitGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.splitTitle {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 8px;
+}
+
+.actionButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  background: var(--color-white);
+  color: var(--color-neutral-900);
+  font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-fluent), color var(--duration-fast) var(--ease-fluent);
+}
+
+.actionButton:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.actionButton:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.exportError {
+  color: var(--color-danger);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.note {
+  max-width: 260px;
+  white-space: normal;
+  font-size: 13px;
+  color: var(--color-secondary);
+}

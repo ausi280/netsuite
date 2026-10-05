@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import PDFDocument from 'pdfkit';
 import type { VendedorCommissionGroup } from './commissionsRepository';
+import type { CommissionLevelTierRow } from './commissionTiersRepository';
 import { CURRENCY_LABELS } from './csvExport';
 
 const ASSETS_DIR = path.join(__dirname, '../../assets');
@@ -185,6 +186,12 @@ const OTROS_COLUMNS: TableColumn[] = [
   { label: 'COMISIÓN NIVEL', width: 92, align: 'right' },
 ];
 
+const NIVELES_COLUMNS: TableColumn[] = [
+  { label: 'NIVEL', width: 150 },
+  { label: 'MONTO MÍNIMO', width: 180, align: 'right' },
+  { label: 'PORCENTAJE', width: 182, align: 'right' },
+];
+
 /**
  * Renders one "Estado de cuenta de Comisiones" page per vendedor - styled after the legacy
  * Estado de Cuenta report (logo top-right, title, Vendedor/Periodo, a two-column summary stats
@@ -193,8 +200,21 @@ const OTROS_COLUMNS: TableColumn[] = [
  * its own nivel/tier) instead of the legacy report's fixed Extras/Visitas/Gasolina categories.
  * Returns a Promise<Buffer> - pdfkit streams, so the buffer only resolves once doc.end() fires
  * the 'end' event with every chunk collected.
+ *
+ * `tiers` is printed as a final "Anexo - Niveles de Comisión" page (one shared table, since
+ * commission_level_tiers has no Contratos/Otros Contratos split - a nivel name like "A" resolves
+ * against the same rows for both). The caller (contractReportsController.ts) is responsible for
+ * scoping this list down to only the niveles relevant to a self-vendedor's own
+ * nivel_contratos/nivel_otros_contratos before calling this - a full-access caller passes every
+ * tier instead, per explicit instruction ("a vendedor can only see what is assigned to him, for a
+ * user that can see everyone I want to see all the related niveles").
  */
-export async function generateCommissionsPdf(groups: VendedorCommissionGroup[], month: number, year: number): Promise<Buffer> {
+export async function generateCommissionsPdf(
+  groups: VendedorCommissionGroup[],
+  month: number,
+  year: number,
+  tiers: CommissionLevelTierRow[],
+): Promise<Buffer> {
   // margin: 0, not PAGE_MARGIN - every position below is placed by hand using PAGE_MARGIN
   // offsets; leaving pdfkit's own margin set would make it auto-insert a page break as soon as
   // anything (including the footer, drawn last, after the page count is known) is placed inside
@@ -337,6 +357,36 @@ export async function generateCommissionsPdf(groups: VendedorCommissionGroup[], 
       ]);
     }
   });
+
+  if (tiers.length > 0) {
+    doc.addPage();
+    let y = PAGE_MARGIN + drawLogo(doc);
+
+    doc.font('Helvetica-Bold').fontSize(18).fillColor(BRAND.ink).text('Anexo - Niveles de Comisión', PAGE_MARGIN, PAGE_MARGIN, { width: contentWidth - 160 });
+    y = Math.max(y, doc.y + 8);
+    doc.font('Helvetica').fontSize(10).fillColor(BRAND.muted).text(`Periodo: ${periodo}`, PAGE_MARGIN, y);
+    y = doc.y + 18;
+
+    function ensureAnexoSpace(needed: number): void {
+      if (y + needed > pageBottom) {
+        doc.addPage();
+        y = PAGE_MARGIN;
+      }
+    }
+
+    y = drawTableHeader(doc, y, NIVELES_COLUMNS);
+    tiers.forEach((tier, rowIndex) => {
+      ensureAnexoSpace(18);
+      if (y === PAGE_MARGIN) y = drawTableHeader(doc, y, NIVELES_COLUMNS);
+      y = drawTableRow(
+        doc,
+        y,
+        NIVELES_COLUMNS,
+        [tier.nivel, money(tier.min_amount), `${tier.percentage}%`],
+        rowIndex % 2 === 1,
+      );
+    });
+  }
 
   // Footer drawn last, once per page, via bufferPages - can't draw it inline above since a
   // table's ensureSpace() may add pages after the footer would have already been written.

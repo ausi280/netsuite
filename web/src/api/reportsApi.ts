@@ -4,6 +4,7 @@ import type {
   ApiSuccess,
   ChargeDomiciledRequest,
   ChargeDomiciledResponse,
+  ComercialReportResponse,
   CommissionLevelTier,
   CommissionsResponse,
   ContractDossier,
@@ -30,6 +31,11 @@ import type {
   PaymentRow,
   ProspectoRow,
   ProspectosResponse,
+  TareaVencidaRow,
+  TareaVencidaVendedoresResponse,
+  TareaVendedorOption,
+  TareasVencidasByMonthResponse,
+  TareasVencidasResponse,
   CuentaRow,
   CuentasResponse,
   ContratoReportRow,
@@ -421,6 +427,75 @@ export async function fetchProspectosExportCsv(token: string | null, dateFrom: s
 export async function fetchMarketingReport(token: string | null, dateFrom: string, dateTo: string): Promise<MarketingReportResponse> {
   const query = new URLSearchParams({ dateFrom, dateTo });
   return apiFetch<MarketingReportResponse>(`/reports/marketing?${query.toString()}`, { token });
+}
+
+/** "Comercial" - tareas-per-prospecto distribution, global and per vendedor - see
+ * api/src-ts/reporting/comercialRepository.ts. */
+export async function fetchComercialReport(token: string | null, dateFrom: string, dateTo: string): Promise<ComercialReportResponse> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  return apiFetch<ComercialReportResponse>(`/reports/comercial?${query.toString()}`, { token });
+}
+
+export interface TareasVencidasParams {
+  dateFrom: string;
+  dateTo: string;
+  /** Underlying raw Vendedor ids a merged dropdown entry maps to - see
+   * web/src/utils/comercial.ts's normalizeVendedorName. Empty/omitted means every vendedor. */
+  vendedorIds: number[];
+  page: number;
+  pageSize: number;
+}
+
+export interface TareasVencidasResult {
+  data: TareaVencidaRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+function tareasVencidasQueryParams(params: Pick<TareasVencidasParams, 'dateFrom' | 'dateTo' | 'vendedorIds'>): URLSearchParams {
+  const query = new URLSearchParams({ dateFrom: params.dateFrom, dateTo: params.dateTo });
+  if (params.vendedorIds.length > 0) query.set('vendedorIds', params.vendedorIds.join(','));
+  return query;
+}
+
+/** "Tareas Vencidas" - overdue, never-properly-closed Tarea rows - see
+ * api/src-ts/reporting/tareasVencidasRepository.ts. */
+export async function fetchTareasVencidas(token: string | null, params: TareasVencidasParams): Promise<TareasVencidasResult> {
+  const query = tareasVencidasQueryParams(params);
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  const result = await apiFetch<TareasVencidasResponse>(`/reports/comercial/tareas-vencidas?${query.toString()}`, { token });
+  return { data: result.data, page: result.page, pageSize: result.pageSize, total: result.total, totalPages: result.totalPages };
+}
+
+/** Distinct (id_vendedor, vendedor) pairs for the Tareas Vencidas vendedor filter dropdown. */
+export async function fetchTareaVencidaVendedores(token: string | null, dateFrom: string, dateTo: string): Promise<TareaVendedorOption[]> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  const result = await apiFetch<TareaVencidaVendedoresResponse>(`/reports/comercial/tareas-vencidas/vendedores?${query.toString()}`, { token });
+  return result.data;
+}
+
+/** CSV of every matching Tarea in the filtered range (unpaginated), same convention as fetchProspectosExportCsv. */
+export async function fetchTareasVencidasExportCsv(
+  token: string | null,
+  params: Pick<TareasVencidasParams, 'dateFrom' | 'dateTo' | 'vendedorIds'>,
+): Promise<Blob> {
+  const query = tareasVencidasQueryParams(params);
+  return apiFetchBlob(`/reports/comercial/tareas-vencidas/export?${query.toString()}`, { token });
+}
+
+/** Counts grouped by (año, mes), globally and per vendedor, for the Tareas Vencidas global/por-
+ * vendedor charts - always unfiltered by vendedor, see getTareasVencidasByMonthRoute. */
+export async function fetchTareasVencidasByMonth(
+  token: string | null,
+  dateFrom: string,
+  dateTo: string,
+): Promise<Pick<TareasVencidasByMonthResponse, 'global' | 'porVendedor'>> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  const result = await apiFetch<TareasVencidasByMonthResponse>(`/reports/comercial/tareas-vencidas/by-month?${query.toString()}`, { token });
+  return { global: result.global, porVendedor: result.porVendedor };
 }
 
 export interface CuentasParams {

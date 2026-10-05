@@ -46,6 +46,7 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
     columns: [
       { key: 'name', header: 'Nombre' },
       { key: 'custrecord_cryo_numerocontrato', header: 'No. Contrato' },
+      { key: 'custrecord_cryo_contratosistemaanterior', header: 'Contrato Sistema Anterior' },
       { key: 'custrecord_cryo_titularcontrato', header: 'Titular' },
       { key: 'custrecord_cryo_estatus', header: 'Estatus', format: 'contract-status' },
       { key: 'custrecord_cryo_saldo_inicial', header: 'Saldo Inicial', format: 'currency', currencyColumn: 'custrecord_cryo_moneda' },

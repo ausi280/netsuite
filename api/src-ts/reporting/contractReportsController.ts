@@ -11,6 +11,7 @@ import { getCommissionsByVendedor, redactCommissionAmounts, resolveSelfVendedorI
 import type { VendedorCommissionGroup } from './commissionsRepository';
 import { buildCommissionsCsv } from './commissionsExport';
 import { generateCommissionsPdf } from './commissionsPdf';
+import { getAllLevelTiers } from './commissionTiersRepository';
 import { getNotasCobranza } from './notasCobranzaRepository';
 import { getNetSuiteNotesForContract } from './netsuiteNotesRepository';
 import { applySubsidiaryRestriction } from './reportingRepository';
@@ -189,9 +190,16 @@ export async function getCommissionsExportRoute(req: Request, res: Response): Pr
 }
 
 /** GET /api/reports/contracts/commissions/pdf?month=1-12&year=YYYY — "Estado de cuenta de
- * Comisiones" PDF, one page per vendedor (see commissionsPdf.ts). Same auth/scoping as
- * getCommissionsReportRoute - a self-vendedor's PDF has exactly their own single page, since
- * loadCommissionsData already narrowed `result.data` down to just them. */
+ * Comisiones" PDF, one page per vendedor plus a final "Anexo - Niveles de Comisión" page (see
+ * commissionsPdf.ts). Same auth/scoping as getCommissionsReportRoute - a self-vendedor's PDF has
+ * exactly their own single page, since loadCommissionsData already narrowed `result.data` down to
+ * just them.
+ *
+ * The anexo's tier list is scoped the same way, per explicit instruction: a self-vendedor only
+ * sees the niveles actually assigned to them (their own nivel_contratos/nivel_otros_contratos -
+ * result.data has exactly one group in that case), while a full-access caller (isSelfVendedor
+ * false) sees every nivel in commission_level_tiers, not just the ones appearing in this period's
+ * data. */
 export async function getCommissionsPdfRoute(req: Request, res: Response): Promise<void> {
   const result = await loadCommissionsData(req);
   if (!result.ok) {
@@ -204,8 +212,16 @@ export async function getCommissionsPdfRoute(req: Request, res: Response): Promi
     return;
   }
 
+  const allTiers = await getAllLevelTiers(knex);
+  const tiersForAnexo = result.isSelfVendedor
+    ? (() => {
+        const ownNiveles = new Set([result.data[0].nivel_contratos, result.data[0].nivel_otros_contratos].filter((n): n is string => n !== null));
+        return allTiers.filter((tier) => ownNiveles.has(tier.nivel));
+      })()
+    : allTiers;
+
   const filename = `estado-cuenta-comisiones-${result.year}-${String(result.month).padStart(2, '0')}.pdf`;
-  const pdf = await generateCommissionsPdf(result.data, result.month, result.year);
+  const pdf = await generateCommissionsPdf(result.data, result.month, result.year, tiersForAnexo);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.status(200).send(pdf);

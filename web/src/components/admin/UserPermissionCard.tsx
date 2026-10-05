@@ -99,6 +99,14 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
               />
               Comisiones - ver montos (requiere Comisiones; sin esto, ve todo excepto los montos)
             </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
+                checked={entities.includes('tareas_vencidas')}
+                onChange={() => setEntities((prev) => toggle(prev, 'tareas_vencidas'))}
+              />
+              Tareas Vencidas (sección del Reporte Comercial)
+            </label>
           </div>
         </div>
         <div>

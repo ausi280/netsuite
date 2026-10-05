@@ -22,6 +22,7 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
       'netsuite_id',
       'name',
       'custrecord_cryo_numerocontrato',
+      'custrecord_cryo_contratosistemaanterior',
       'custrecord_cryo_titularcontrato',
       'custrecord_cryo_estatus',
       'custrecord_cryo_saldo_inicial',

@@ -38,8 +38,11 @@ export type ReportEntityKey =
  * server-side (see redactCommissionAmounts in commissionsRepository.ts) - for someone reviewing/
  * approving paperwork completeness who shouldn't see commission amounts. Never affects a
  * self-vendedor viewing their own commissions - they always see their own real amounts.
+ * 'tareas_vencidas' is its own standalone grant (same shape as 'hr'/'prospectos', NOT an
+ * additional gate on top of 'prospectos') for the Tareas Vencidas sub-report embedded in the
+ * Comercial page - see tareasVencidasController.ts.
  */
-export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts';
+export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts' | 'tareas_vencidas';
 
 export interface SortConfig {
   column: string;

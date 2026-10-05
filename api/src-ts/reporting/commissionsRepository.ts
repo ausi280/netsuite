@@ -57,11 +57,13 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * primary match alone would always treat as incomplete even when DocsCompletos is genuinely
  * already 1.
  *
- * IMPORTANT: as of this session, "Docs Completos" is display-only - it no longer gates anything.
- * Every contract's Placenta/ADN/tier/anualidad bonuses, and its contribution to the vendedor's tier
- * total, are computed the same regardless of this flag (per explicit instruction: the label should
- * stay visible, but must never zero out or restrict a real commission calculation). Kept in
- * ContractCommission purely so the UI can still show the badge.
+ * "Docs Completos" gates actual payout (reapplied per explicit instruction: "only pay a contract
+ * when docscompletos = 1") - a contract with incomplete docs still shows its real total_servicios
+ * (so staff can see what it WOULD pay once docs are complete), but placenta_adn_bonus,
+ * tier_commission and anualidad_bonus_total are all zeroed, and the contract is excluded entirely
+ * from the vendedor's tier-resolution total (totalContratosByVendor) - it contributes nothing
+ * toward which nivel/percentage the vendedor resolves to, same as if it didn't exist for that
+ * purpose. Otros Contratos have no equivalent legacy record/flag, so this never applies to them.
  */
 
 // custrecord_cryo_statuspagoserv (Estado del Pago) on customrecord_cryo_servicios - confirmed live
@@ -286,6 +288,28 @@ interface AnualidadPartidaRow {
   custrecord_cryo_importepartida: string | number | null;
 }
 
+/**
+ * A service's own custrecord_cryo_statuspagoserv is sometimes stale in NetSuite - confirmed live
+ * for contracts MX-BS-2026-011818-1/011819-1/011820-2: every service row shows Vencido/Pendiente
+ * (statuspagoserv '4'/'3'), while each one's own matching "Procesamiento" partida (same contract,
+ * same custrecord_cryo_servtipo = the service's custrecord_cryo_tipodeserv - confirmed live these
+ * reference the same NetSuite list, and the partida's own importe matches the service's
+ * precioprocesamiento exactly) shows custrecord_cryo_estatuspartida = '1' Pagado. The partida is
+ * the one actually tied to real payment collection, so a service now also counts as Pagado when
+ * ITS OWN matching Procesamiento partida says Pagado, even if the service record's own field
+ * hasn't been updated to match - see isServicePagado below. Only '1' Pagado counts here, same as
+ * SERVICE_PAYMENT_STATUS_PAGADO - a Partidamente Pagado ('2') partida does NOT count as a fallback.
+ */
+interface ProcesamientoPartidaRow {
+  custrecord_cryo_numcontrato: string;
+  custrecord_cryo_servtipo: string | null;
+  custrecord_cryo_estatuspartida: string | null;
+}
+
+function procesamientoPartidaKey(idContrato: string, tipoServ: string | null): string {
+  return `${idContrato}-${tipoServ ?? ''}`;
+}
+
 interface OtrosContratoRow {
   netsuite_id: string;
   name: string | null;
@@ -366,13 +390,22 @@ export async function resolveSelfVendedorId(db: Knex, email: string | null): Pro
   return hasContract || hasOtrosContrato ? employee.netsuite_id : null;
 }
 
+/** A service counts as Pagado when either its own statuspagoserv says so, or its matching
+ * Procesamiento partida does (see ProcesamientoPartidaRow for why the partida is also checked). */
+function isServicePagado(service: ServiceRow, paidProcesamientoKeys: Set<string>): boolean {
+  return (
+    service.custrecord_cryo_statuspagoserv === SERVICE_PAYMENT_STATUS_PAGADO ||
+    paidProcesamientoKeys.has(procesamientoPartidaKey(service.custrecord_cryo_idcontrato, service.custrecord_cryo_tipodeserv))
+  );
+}
+
 /** Filters for Pagado internally (not at each call site) - `services` now always holds every
  * active service regardless of payment status (see ServiceRow.custrecord_cryo_statuspagoserv), so
  * this is the one place both callers (a contract's own total_servicios, and a vendedor's
  * tier-resolution total at the bottom of this file) rely on to keep excluding unpaid amounts. */
-function totalForServices(services: ServiceRow[]): number {
+function totalForServices(services: ServiceRow[], paidProcesamientoKeys: Set<string>): number {
   return services
-    .filter((s) => s.custrecord_cryo_statuspagoserv === SERVICE_PAYMENT_STATUS_PAGADO)
+    .filter((s) => isServicePagado(s, paidProcesamientoKeys))
     .reduce((sum, s) => sum + Number(s.custrecord_cryo_precioprocesamiento ?? 0), 0);
 }
 
@@ -440,14 +473,16 @@ function buildContractCommission(
   contract: ContractRow,
   services: ServiceRow[],
   anualidadPartidas: AnualidadPartidaRow[],
+  paidProcesamientoKeys: Set<string>,
   tierPercentage: number | null,
   docsComplete: boolean,
 ): ContractCommission {
   // `services` now holds every ACTIVE service regardless of payment status (see
   // ServiceRow.custrecord_cryo_statuspagoserv) - the displayed breakdown (serviceLines) stays
-  // Pagado-only, same as before this changed, so the "Comisión por nivel" line's listed prices
-  // always still add up to total_servicios exactly as shown.
-  const paidServices = services.filter((s) => s.custrecord_cryo_statuspagoserv === SERVICE_PAYMENT_STATUS_PAGADO);
+  // Pagado-only (now also via the partida fallback - see isServicePagado), same as before this
+  // changed, so the "Comisión por nivel" line's listed prices always still add up to
+  // total_servicios exactly as shown.
+  const paidServices = services.filter((s) => isServicePagado(s, paidProcesamientoKeys));
 
   const serviceLines: ServiceCommissionLine[] = paidServices.map((s) => ({
     netsuite_id: s.netsuite_id,
@@ -456,23 +491,26 @@ function buildContractCommission(
     is_bonus_service: s.custrecord_cryo_tipodeserv !== null && SPECIAL_BONUS_SERVICE_TYPE_IDS.has(s.custrecord_cryo_tipodeserv),
   }));
 
-  // Distinct non-Pagado statuses among this contract's active services - lets the UI explain WHY
-  // it shows no services/commission when the contract actually has some, just not Pagado yet
-  // (e.g. "Vencido"), instead of looking indistinguishable from having zero services at all.
+  // Distinct non-Pagado statuses among this contract's active services that the partida fallback
+  // ALSO didn't rescue - lets the UI explain WHY it shows no services/commission when the contract
+  // actually has some, just not Pagado yet (e.g. "Vencido"), instead of looking indistinguishable
+  // from having zero services at all. A service whose own status says unpaid but whose partida
+  // says Pagado is NOT listed here (see paidServices above - it's treated as paid, full stop).
   const nonPaidServiceStatuses = Array.from(
     new Set(
       services
-        .filter((s) => s.custrecord_cryo_statuspagoserv !== SERVICE_PAYMENT_STATUS_PAGADO)
+        .filter((s) => !isServicePagado(s, paidProcesamientoKeys))
         .map((s) => s.custrecord_cryo_statuspagoserv)
         .filter((status): status is string => status !== null),
     ),
   );
 
-  const totalServicios = totalForServices(services);
+  const totalServicios = totalForServices(services, paidProcesamientoKeys);
   const hasBonusService = serviceLines.some((s) => s.is_bonus_service);
-  // docsComplete is display-only (see the file-level comment) - it never zeroes out any of these.
-  const placentaAdnBonus = hasBonusService ? (totalServicios * SPECIAL_BONUS_RATE) / 100 : 0;
-  const tierCommission = tierPercentage !== null ? (totalServicios * tierPercentage) / 100 : 0;
+  // Gated by docsComplete - see the file-level comment. total_servicios above is NOT gated (still
+  // shows the real Pagado total regardless of docs), only these actual payout amounts are zeroed.
+  const placentaAdnBonus = docsComplete && hasBonusService ? (totalServicios * SPECIAL_BONUS_RATE) / 100 : 0;
+  const tierCommission = docsComplete && tierPercentage !== null ? (totalServicios * tierPercentage) / 100 : 0;
 
   const anualidadByYear = new Map<string, number>();
   for (const partida of anualidadPartidas) {
@@ -485,7 +523,7 @@ function buildContractCommission(
     .filter(([, count]) => count > 1)
     .map(([anio, count]) => ({ anio, count, monto: ANUALIDAD_BONUS_PER_YEAR }))
     .sort((a, b) => a.anio.localeCompare(b.anio));
-  const anualidadBonusTotal = anualidades.length * ANUALIDAD_BONUS_PER_YEAR;
+  const anualidadBonusTotal = docsComplete ? anualidades.length * ANUALIDAD_BONUS_PER_YEAR : 0;
 
   return {
     netsuite_id: contract.netsuite_id,
@@ -630,8 +668,6 @@ export async function getCommissionsByVendedor(
     totalsOtrosQb as Promise<OtrosContratoRow[]>,
   ]);
 
-  // Docs-completos is resolved purely for display now (see the file-level comment) - it no
-  // longer excludes a contract from the vendedor's tier total or from its own bonuses.
   const mexicoContracts = [...displayContracts, ...allVendorContracts].filter(
     (c) => c.subsidiaria_id !== null && MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id),
   );
@@ -642,7 +678,7 @@ export async function getCommissionsByVendedor(
   const displayContractIds = displayContracts.map((c) => c.netsuite_id);
   const allContractIds = Array.from(new Set([...allVendorContracts.map((c) => c.netsuite_id), ...displayContractIds]));
 
-  const [services, anualidadPartidas, levels, tiers] = await Promise.all([
+  const [services, anualidadPartidas, procesamientoPartidas, levels, tiers] = await Promise.all([
     // No longer filtered to Pagado here (see ServiceRow.custrecord_cryo_statuspagoserv) -
     // buildContractCommission filters for Pagado itself when computing serviceLines/total/bonus,
     // but needs every active row (any status) to also report non_paid_service_statuses.
@@ -662,9 +698,23 @@ export async function getCommissionsByVendedor(
       .whereRaw("UPPER(custrecord_cryo_concepto) LIKE '%ANUALIDAD%'")
       .whereRaw("UPPER(custrecord_cryo_concepto) NOT LIKE '%PROCESAMIENTO%'")
       .select('custrecord_cryo_numcontrato', 'custrecord_cryo_aniopartida', 'custrecord_cryo_importepartida'),
+    // Scoped to allContractIds (every contract in the vendor's period), not just displayContractIds
+    // - totalForServices also runs over allVendorContracts below, so the fallback must cover those
+    // too, not only the currently-displayed/filtered ones. See ProcesamientoPartidaRow.
+    db<ProcesamientoPartidaRow>('netsuite_partidas')
+      .whereIn('custrecord_cryo_numcontrato', allContractIds)
+      .andWhere('isinactive', 'F')
+      .whereRaw("UPPER(custrecord_cryo_concepto) LIKE '%PROCESAMIENTO%'")
+      .select('custrecord_cryo_numcontrato', 'custrecord_cryo_servtipo', 'custrecord_cryo_estatuspartida'),
     getEmployeeLevelsMap(db),
     getAllLevelTiers(db),
   ]);
+
+  const paidProcesamientoKeys = new Set(
+    procesamientoPartidas
+      .filter((p) => p.custrecord_cryo_estatuspartida === SERVICE_PAYMENT_STATUS_PAGADO)
+      .map((p) => procesamientoPartidaKey(p.custrecord_cryo_numcontrato, p.custrecord_cryo_servtipo)),
+  );
 
   const servicesByContract = new Map<string, ServiceRow[]>();
   for (const service of services) {
@@ -682,11 +732,13 @@ export async function getCommissionsByVendedor(
 
   // Vendedor-level totals, across EVERY contract they sold this period (the "allVendorContracts"
   // set), not just the ones passing the requested filters - this is what determines the Contratos
-  // tier. Kept entirely separate from the Otros Contratos total below. Not filtered by
-  // docs-completos - see the file-level comment.
+  // tier. Kept entirely separate from the Otros Contratos total below. Skips any contract with
+  // incomplete docs (see the file-level comment) - it contributes nothing toward which nivel the
+  // vendedor resolves to, same as buildContractCommission zeroing that contract's own payout.
   const totalContratosByVendor = new Map<string, number>();
   for (const contract of allVendorContracts) {
-    const total = totalForServices(servicesByContract.get(contract.netsuite_id) ?? []);
+    if (!hasCompleteDocs(contract)) continue;
+    const total = totalForServices(servicesByContract.get(contract.netsuite_id) ?? [], paidProcesamientoKeys);
     totalContratosByVendor.set(contract.vendedor_id, (totalContratosByVendor.get(contract.vendedor_id) ?? 0) + total);
   }
   const totalOtrosByVendor = new Map<string, number>();
@@ -726,6 +778,7 @@ export async function getCommissionsByVendedor(
       contract,
       servicesByContract.get(contract.netsuite_id) ?? [],
       anualidadesByContract.get(contract.netsuite_id) ?? [],
+      paidProcesamientoKeys,
       tierPercentage,
       hasCompleteDocs(contract),
     );
