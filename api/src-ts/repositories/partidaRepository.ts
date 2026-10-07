@@ -18,6 +18,11 @@ export interface PartidaRow {
   custrecord_cryo_articulopartida: string | null;
   custrecord_cryo_concepto: string | null;
   custrecord_cryo_estatuspartida: string | null;
+  /** NetSuite Invoice internal id this partida was billed on - the "Factura Relacionada"
+   * field from NetSuite's own Partidas subtab/report. */
+  custrecord_cryo_facturarelacionada: string | null;
+  custrecord_cryo_num_consecutivo: string | null;
+  custrecord_cryo_importepagado: string | null;
   custrecord_cryo_fechalimitepago: string | null;
   custrecord_cryo_fechapartida: string | null;
   custrecord_cryo_finvigencia: string | null;

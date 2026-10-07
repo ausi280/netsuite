@@ -32,6 +32,8 @@ const SELECT_COLUMNS = [
   'P.lastmodifieddate_dt',
   'CONTRACT.name as contract_name',
   'EMP.entityid as dueno_nombre',
+  'P.custrecord_cryo_facturarelacionada',
+  'INVOICE.tranid as factura_relacionada_tranid',
 ];
 
 // Request-supplied sortBy is only ever resolved against this allow-list, exactly like
@@ -62,7 +64,8 @@ function buildBaseQuery(
 ): Knex.QueryBuilder {
   const qb = db(TABLE)
     .leftJoin('netsuite_contracts as CONTRACT', 'CONTRACT.netsuite_id', 'P.custrecord_cryo_numcontrato')
-    .leftJoin('netsuite_employees as EMP', 'EMP.netsuite_id', 'CONTRACT.custrecord_cryo_duenio');
+    .leftJoin('netsuite_employees as EMP', 'EMP.netsuite_id', 'CONTRACT.custrecord_cryo_duenio')
+    .leftJoin('netsuite_invoices as INVOICE', 'INVOICE.netsuite_id', 'P.custrecord_cryo_facturarelacionada');
 
   if (search) {
     qb.where((builder) => {
@@ -71,7 +74,8 @@ function buildBaseQuery(
         .orWhere('P.custrecord_cryo_concepto', 'like', `%${search}%`)
         .orWhere('P.custrecord_cryo_numcontrato', 'like', `%${search}%`)
         .orWhere('CONTRACT.name', 'like', `%${search}%`)
-        .orWhere('EMP.entityid', 'like', `%${search}%`);
+        .orWhere('EMP.entityid', 'like', `%${search}%`)
+        .orWhere('INVOICE.tranid', 'like', `%${search}%`);
     });
   }
 
@@ -159,4 +163,6 @@ export const PARTIDA_LIST_EXPORT_COLUMNS = [
   'custrecord_cryo_subsidiaria_partida',
   'isinactive',
   'lastmodifieddate_dt',
+  'custrecord_cryo_facturarelacionada',
+  'factura_relacionada_tranid',
 ];

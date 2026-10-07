@@ -117,6 +117,7 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'custrecord_cryo_numcontrato', header: 'No. Contrato' },
       { key: 'contract_name', header: 'Contrato' },
       { key: 'dueno_nombre', header: 'Dueño' },
+      { key: 'factura_relacionada_tranid', header: 'Factura Relacionada' },
       { key: 'custrecord_cryo_subsidiaria_partida', header: 'Subsidiaria', format: 'subsidiary' },
       { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
       { key: 'lastmodifieddate_dt', header: 'Última Modificación', format: 'datetime', sortable: true },

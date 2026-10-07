@@ -67,6 +67,7 @@ export function ReportPage() {
   // in controller.ts), so the "Ver comisiones" link below only shows when it's actually reachable.
   const { data: entitiesResult } = useEntities();
   const canAccessCommissions = Boolean(entitiesResult?.canAccessCommissions);
+  const canAccessCobranzaCommissions = Boolean(entitiesResult?.canAccessCobranzaCommissions);
   const { getAccessToken } = useApiToken();
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -181,6 +182,15 @@ export function ReportPage() {
               <line x1="8" y1="15" x2="12" y2="15" />
             </svg>
             Ver cuentas
+          </Link>
+        ) : null}
+        {entityKey === 'partidas' && canAccessCobranzaCommissions ? (
+          <Link to="/reports/cobranza-comisiones" className={styles.graphsLink}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <line x1="12" y1="1" x2="12" y2="23" />
+              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+            </svg>
+            Ver comisiones de cobranza
           </Link>
         ) : null}
         {entityKey === 'contracts' && canAccessCommissions ? (

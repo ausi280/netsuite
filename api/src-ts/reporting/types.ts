@@ -41,8 +41,11 @@ export type ReportEntityKey =
  * 'tareas_vencidas' is its own standalone grant (same shape as 'hr'/'prospectos', NOT an
  * additional gate on top of 'prospectos') for the Tareas Vencidas sub-report embedded in the
  * Comercial page - see tareasVencidasController.ts.
+ * 'cobranza_commissions' is likewise its own standalone grant (same shape as 'hr'/'prospectos'/
+ * 'tareas_vencidas', NOT an additional gate on top of 'partidas') for the Cobranza Commissions
+ * sub-report reached from the Partidas report - see cobranzaCommissionsController.ts.
  */
-export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts' | 'tareas_vencidas';
+export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts' | 'tareas_vencidas' | 'cobranza_commissions';
 
 export interface SortConfig {
   column: string;

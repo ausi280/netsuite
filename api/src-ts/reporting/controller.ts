@@ -14,6 +14,7 @@ import type { EntityConfig } from './types';
 import { csvRow, formatExportValue, humanizeColumnName } from './csvExport';
 import { isHrAllowed } from './hrController';
 import { isProspectosAllowed } from './prospectosController';
+import { isCobranzaCommissionsAllowed } from './cobranzaCommissionsController';
 import { resolveSelfVendedorId } from './commissionsRepository';
 
 /** Express 5's ParamsDictionary types named params as `string | string[]` to account for wildcard segments; our routes only ever use simple `:name` segments, which are always plain strings at runtime. */
@@ -60,6 +61,7 @@ export async function listEntitySummaries(req: Request, res: Response): Promise<
     canAccessHr: isHrAllowed(permissions),
     canAccessCommissions,
     canAccessProspectos: isProspectosAllowed(permissions),
+    canAccessCobranzaCommissions: isCobranzaCommissionsAllowed(permissions),
   });
 }
 

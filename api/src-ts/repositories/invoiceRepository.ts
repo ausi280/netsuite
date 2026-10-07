@@ -12,6 +12,12 @@ export interface InvoiceRow {
   total: number | null;
   amountremaining: number | null;
   lastmodifieddate: Date | null;
+  /** NetSuite Contract internal id (customrecord1184) - confirmed live this invoice's own link
+   * back to the contract it bills, for the cobranza commissions report. */
+  custbody_cryo_numcontrato: string | null;
+  /** NetSuite employee internal id - the collector assigned directly on this invoice. */
+  custbody_cryo_cobrador: string | null;
+  custbody_cryo_fecha_emision: Date | null;
   raw_data: string;
 }
 

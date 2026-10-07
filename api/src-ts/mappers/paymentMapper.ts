@@ -11,6 +11,7 @@ export function mapPayment(raw: Record<string, any>): PaymentRow {
     status: toStringOrNull(raw.status),
     currency: toStringOrNull(raw.currency),
     lastmodifieddate: parseNetSuiteDate(raw.lastmodifieddate),
+    custbody_cryo_associated_invoices_item: toStringOrNull(raw.custbody_cryo_associated_invoices_item),
     raw_data: JSON.stringify(raw),
   };
 }

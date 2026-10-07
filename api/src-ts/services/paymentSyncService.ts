@@ -10,7 +10,7 @@ export class PaymentSyncService extends BaseSyncService<RawNetSuiteRecord, Payme
 
   protected buildQuery(watermark: Date | null, tieBreakId?: string | null): string {
     return SuiteQlQueryBuilder.from('transaction')
-      .select('id', 'tranid', 'entity', 'trandate', 'total', 'status', 'currency', 'lastmodifieddate')
+      .select('id', 'tranid', 'entity', 'trandate', 'total', 'status', 'currency', 'lastmodifieddate', 'custbody_cryo_associated_invoices_item')
       .where(`type = 'CustPymt'`)
       .whereWatermark('lastmodifieddate', watermark, tieBreakId)
       .orderBy('lastmodifieddate', 'ASC')

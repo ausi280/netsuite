@@ -1,0 +1,68 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.tile {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bolsaTile {
+  background: rgba(250, 178, 25, 0.1);
+  box-shadow: none;
+  border: 1px solid rgba(250, 178, 25, 0.35);
+}
+
+.paqueteInicialTile {
+  background: var(--color-neutral-100);
+  box-shadow: none;
+  border: 1px solid var(--color-neutral-200);
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--color-secondary);
+}
+
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+}
+
+.totalRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.totalAmount {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-neutral-900);
+}
+
+.totalCurrency {
+  font-size: 11px;
+  color: var(--color-secondary);
+}

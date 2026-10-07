@@ -36,6 +36,7 @@ import {
   listTareasVencidasRoute,
 } from './tareasVencidasController';
 import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
+import { exportCobranzaCommissionsRoute, getCobranzaCommissionsRoute } from './cobranzaCommissionsController';
 import { exportNotesReportRoute, listNotesReportRoute } from './notesReportController';
 import { exportContratosReportRoute, listContratosReportRoute } from './contratosReportController';
 
@@ -121,6 +122,12 @@ export function buildReportingRouter(): Router {
   // /:entity/export, or that route would swallow "cuentas" as an entity key and 404.
   router.get('/cuentas', listCuentasRoute);
   router.get('/cuentas/export', exportCuentasRoute);
+  // Cobranza Commissions (which partidas got paid this month, grouped by contract/año - reached
+  // from the Partidas report) is likewise bespoke, not a generic ENTITY_REGISTRY entity - must be
+  // registered before /:entity/export, or that route would swallow "cobranza-comisiones" as an
+  // entity key and 404.
+  router.get('/cobranza-comisiones', getCobranzaCommissionsRoute);
+  router.get('/cobranza-comisiones/export', exportCobranzaCommissionsRoute);
   // Reporte de Notas (NetSuite-native Notes across every contract, date-filtered) is likewise
   // bespoke, not a generic ENTITY_REGISTRY entity - must be registered before /:entity/export, or
   // that route would swallow "notas" as an entity key and 404.

@@ -12,6 +12,7 @@ import { AdminUsersPage } from './pages/AdminUsersPage';
 import { CommissionsPage } from './pages/CommissionsPage';
 import { ProspectosPage } from './pages/ProspectosPage';
 import { CuentasPage } from './pages/CuentasPage';
+import { CobranzaCommissionsPage } from './pages/CobranzaCommissionsPage';
 import { NotasReportPage } from './pages/NotasReportPage';
 import { ContratosReportPage } from './pages/ContratosReportPage';
 import { CommissionLevelsPage } from './pages/CommissionLevelsPage';
@@ -110,6 +111,16 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CuentasPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/cobranza-comisiones"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <CobranzaCommissionsPage />
               </PageTransition>
             </RequireAuth>
           }

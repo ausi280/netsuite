@@ -5,6 +5,8 @@ import type {
   ChargeDomiciledRequest,
   ChargeDomiciledResponse,
   ComercialReportResponse,
+  CobranzaCommissionContractGroup,
+  CobranzaCommissionsResponse,
   CommissionLevelTier,
   CommissionsResponse,
   ContractDossier,
@@ -55,6 +57,7 @@ export interface EntitiesResult {
   canAccessHr: boolean;
   canAccessCommissions: boolean;
   canAccessProspectos: boolean;
+  canAccessCobranzaCommissions: boolean;
 }
 
 export interface EntityRowsParams {
@@ -79,6 +82,7 @@ export async function fetchEntities(token: string | null): Promise<EntitiesResul
     canAccessHr: result.canAccessHr,
     canAccessCommissions: result.canAccessCommissions,
     canAccessProspectos: result.canAccessProspectos,
+    canAccessCobranzaCommissions: result.canAccessCobranzaCommissions,
   };
 }
 
@@ -542,6 +546,42 @@ export async function fetchCuentas(token: string | null, params: CuentasParams):
 export async function fetchCuentasExportCsv(token: string | null, params: Pick<CuentasParams, 'search' | 'subsidiary'>): Promise<Blob> {
   const query = buildCuentasQuery(params);
   return apiFetchBlob(`/reports/cuentas/export?${query.toString()}`, { token });
+}
+
+function buildCobranzaCommissionsQuery(month: number, year: number, subsidiary?: string[]): URLSearchParams {
+  const query = new URLSearchParams({ month: String(month), year: String(year) });
+  if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
+  return query;
+}
+
+export interface CobranzaCommissionsResult {
+  data: CobranzaCommissionContractGroup[];
+  month: number;
+  year: number;
+}
+
+/** Cobranza Commissions - which partidas got paid this month, grouped by contract/año - reached
+ * from the Partidas report, see api/src-ts/reporting/cobranzaCommissionsRepository.ts. */
+export async function fetchCobranzaCommissions(
+  token: string | null,
+  month: number,
+  year: number,
+  subsidiary?: string[]
+): Promise<CobranzaCommissionsResult> {
+  const query = buildCobranzaCommissionsQuery(month, year, subsidiary);
+  const result = await apiFetch<CobranzaCommissionsResponse>(`/reports/cobranza-comisiones?${query.toString()}`, { token });
+  return { data: result.data, month: result.month, year: result.year };
+}
+
+/** CSV of the same cobranza commissions data fetchCobranzaCommissions returns, one row per partida. */
+export async function fetchCobranzaCommissionsExportCsv(
+  token: string | null,
+  month: number,
+  year: number,
+  subsidiary?: string[]
+): Promise<Blob> {
+  const query = buildCobranzaCommissionsQuery(month, year, subsidiary);
+  return apiFetchBlob(`/reports/cobranza-comisiones/export?${query.toString()}`, { token });
 }
 
 export interface NotesReportResult {

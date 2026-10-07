@@ -107,6 +107,14 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
               />
               Tareas Vencidas (sección del Reporte Comercial)
             </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
+                checked={entities.includes('cobranza_commissions')}
+                onChange={() => setEntities((prev) => toggle(prev, 'cobranza_commissions'))}
+              />
+              Comisiones de Cobranza (sección del Reporte Partidas)
+            </label>
           </div>
         </div>
         <div>

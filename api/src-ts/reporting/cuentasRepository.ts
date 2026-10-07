@@ -343,7 +343,9 @@ const PARTIDAS_CROSS_APPLY_BINDINGS = [PARTIDA_ESTATUS_VENCIDO, PARTIDA_ESTATUS_
  * and only for the current page's 25-100 rows.
  */
 function baseCuentasQuery(db: Knex, search: string): Knex.QueryBuilder {
-  const qb = db(TABLE);
+  // Inactive contracts are excluded from Cuentas entirely (per explicit instruction) - this report
+  // is a collections worksheet, and a cancelled/inactive contract has nothing left to collect on.
+  const qb = db(TABLE).where('C.isinactive', 'F');
 
   if (search) {
     qb.leftJoin('netsuite_customers as TITULAR', 'TITULAR.netsuite_id', 'C.custrecord_cryo_titularcontrato');

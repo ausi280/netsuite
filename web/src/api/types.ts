@@ -32,8 +32,18 @@ export type ReportEntityKey =
  * 'tareas_vencidas' is its own standalone grant (same shape as 'hr'/'prospectos', NOT an
  * additional gate on top of 'prospectos') for the Tareas Vencidas sub-report embedded in the
  * Comercial page - see api/src-ts/reporting/tareasVencidasController.ts.
+ * 'cobranza_commissions' is likewise its own standalone grant (NOT an additional gate on top of
+ * 'partidas') for the Cobranza Commissions sub-report reached from the Partidas report - see
+ * api/src-ts/reporting/cobranzaCommissionsController.ts.
  */
-export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts' | 'tareas_vencidas';
+export type PermissionKey =
+  | ReportEntityKey
+  | 'hr'
+  | 'prospectos'
+  | 'commissions'
+  | 'commissions_amounts'
+  | 'tareas_vencidas'
+  | 'cobranza_commissions';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -95,6 +105,7 @@ export interface EntitiesResponse {
    * (enforced server-side), never the full contracts entity. */
   canAccessCommissions: boolean;
   canAccessProspectos: boolean;
+  canAccessCobranzaCommissions: boolean;
 }
 
 // HR Report - backed by the Peopleforce/Sesame HR data warehouse (DwhCryoholdcoLatam_Prod), a
@@ -358,6 +369,64 @@ export interface CommissionsResponse {
    * `data` is then null (see redactCommissionAmounts on the backend). Always true for a
    * self-vendedor - this never hides someone's own commissions. */
   canSeeAmounts: boolean;
+}
+
+// Cobranza Commissions - which partidas got paid this month, grouped by contract and, within each
+// contract, by año - see api/src-ts/reporting/cobranzaCommissionsRepository.ts. A first pass: lists
+// which partidas were paid and by/for whom, no commission amount/rate computed yet.
+export interface CobranzaCommissionPartidaRow {
+  netsuite_id: string;
+  concepto: string | null;
+  servtipo: string | null;
+  anio: string | null;
+  importe: string | null;
+  moneda: string | null;
+  estatus: string | null;
+  iniciovigencia: string | null;
+  finvigencia: string | null;
+  fecha_limite_pago: string | null;
+  invoice_tranid: string | null;
+  /** custrecord_cryo_importepagado - the invoice's own paid total (tax included), repeated across
+   * every partida that invoice covers - NOT per-partida, so summing this across partidas requires
+   * deduping by `invoice_tranid` first (one count per distinct invoice). Null for partidas synced
+   * before this field was captured. */
+  importe_pagado: string | null;
+  /** True when this contract also has a procesamiento (enrollment/processing fee) partida paid in
+   * the same month - this partida was part of the contract's initial billing package, not an
+   * ongoing renewal. Excluded from accumulated sums, but still shown, labeled "Paquete Inicial de
+   * Anualidades". */
+  es_paquete_inicial: boolean;
+}
+
+export interface CobranzaCommissionYearGroup {
+  anio: string;
+  partidas: CobranzaCommissionPartidaRow[];
+}
+
+export type AsignacionTipo = 'dueno' | 'cobrador' | 'bolsa' | 'paquete_inicial';
+
+export interface CobranzaCommissionContractGroup {
+  contract_id: string;
+  contract_name: string | null;
+  folio_sistema_anterior: string | null;
+  subsidiaria_id: string | null;
+  dueno_nombre: string | null;
+  cobrador_nombre: string | null;
+  /** The resolved assignee's display name (a Dueño's or Cobrador's name), or the literal "Bolsa" /
+   * "Paquete inicial de anualidades" label - see
+   * api/src-ts/reporting/cobranzaCommissionsRepository.ts. Use `asignado_tipo` to tell these apart
+   * programmatically rather than matching this string. */
+  asignado_a: string;
+  asignado_tipo: AsignacionTipo;
+  years: CobranzaCommissionYearGroup[];
+  partidas_count: number;
+}
+
+export interface CobranzaCommissionsResponse {
+  success: true;
+  data: CobranzaCommissionContractGroup[];
+  month: number;
+  year: number;
 }
 
 /** A collection-call note from the pre-NetSuite CryoCell system (table NotasCobranza). */
