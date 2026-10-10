@@ -24,6 +24,15 @@ const ASIGNADO_BADGE_CLASS: Record<AsignacionTipo, string> = {
 export function CobranzaContractGroupCard({ group, defaultExpanded = false }: CobranzaContractGroupCardProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
+  // Almost always exactly one (confirmed live: a contract only rarely has more than one distinct
+  // invoice paid in the same month), but a contract CAN have several - shown comma-separated rather
+  // than picking just one, so nothing is silently hidden from the collapsed header.
+  const invoiceTranids = Array.from(
+    new Set(
+      group.years.flatMap((yearGroup) => yearGroup.partidas.map((p) => p.invoice_tranid).filter((t): t is string => Boolean(t))),
+    ),
+  ).sort();
+
   return (
     <div className={styles.card}>
       <button type="button" className={styles.header} onClick={() => setIsExpanded((prev) => !prev)} aria-expanded={isExpanded}>
@@ -49,6 +58,7 @@ export function CobranzaContractGroupCard({ group, defaultExpanded = false }: Co
           </Link>
           <p className={styles.meta}>
             {group.folio_sistema_anterior ? `Sistema anterior: ${group.folio_sistema_anterior} · ` : ''}
+            {invoiceTranids.length > 0 ? `${invoiceTranids.length > 1 ? 'Facturas' : 'Factura'}: ${invoiceTranids.join(', ')} · ` : ''}
             Dueño: {group.dueno_nombre ?? 'Sin asignar'} · Cobrador: {group.cobrador_nombre ?? 'Sin asignar'}
             {group.subsidiaria_id ? ` · ${subsidiaryLabel(group.subsidiaria_id)}` : ''}
           </p>

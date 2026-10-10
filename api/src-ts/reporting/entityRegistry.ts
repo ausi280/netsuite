@@ -324,6 +324,35 @@ export const ENTITY_REGISTRY: Record<ReportEntityKey, EntityConfig> = {
     defaultSort: { column: 'lastmodifieddate_dt', dir: 'desc' },
     subsidiaryColumn: 'custrecord_cryo_subsidiariafcells',
   },
+  'zammad-tickets': {
+    key: 'zammad-tickets',
+    table: 'zammad_tickets',
+    idColumn: 'id',
+    syncEntityName: 'zammadTicket',
+    // Not NetSuite-sourced - Zammad helpdesk tickets (https://tickets.cryoholdco.com), pulled every
+    // 15 minutes via zammadTicketSyncService.ts, across every group. See postventaController.ts for
+    // the separate, bespoke status-tiles report scoped to just the "Postventa" group.
+    label: 'Tickets Zammad',
+    listColumns: [
+      'id',
+      'number',
+      'title',
+      'asunto',
+      'group_name',
+      'state_name',
+      'priority_name',
+      'owner_name',
+      'customer_email',
+      'foliocontrato',
+      'created_at_zammad',
+      'first_response_at_zammad',
+      'close_at_zammad',
+      'updated_at_zammad',
+    ],
+    sortableColumns: ['created_at_zammad', 'first_response_at_zammad', 'close_at_zammad', 'updated_at_zammad'],
+    searchableColumns: ['number', 'title', 'asunto', 'customer_email', 'foliocontrato', 'telefono', 'empresa'],
+    defaultSort: { column: 'updated_at_zammad', dir: 'desc' },
+  },
 };
 
 const ENTITY_ORDER: ReportEntityKey[] = [
@@ -343,6 +372,7 @@ const ENTITY_ORDER: ReportEntityKey[] = [
   'vendor-transactions',
   'otros-contratos',
   'fcells-contratos',
+  'zammad-tickets',
 ];
 
 export function getEntityConfig(key: string): EntityConfig | undefined {

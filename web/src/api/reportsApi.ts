@@ -31,8 +31,30 @@ import type {
   PartidaBreakdownRow,
   PartidaDimension,
   PaymentRow,
+  PostventaAsuntoRow,
+  PostventaByAsuntoResponse,
+  PostventaByMonthResponse,
+  PostventaMonthRow,
+  PostventaOwnerOption,
+  PostventaOwnersResponse,
+  PostventaResueltoMonthRow,
+  PostventaResueltosByMonthResponse,
+  PostventaSummary,
+  PostventaSummaryResponse,
+  PostventaTicketRow,
+  PostventaTicketsResponse,
   ProspectoRow,
   ProspectosResponse,
+  ReembolsoByCausaResponse,
+  ReembolsoByMonthResponse,
+  ReembolsoCausaRow,
+  ReembolsoCerradosByMonthResponse,
+  ReembolsoCierreMonthRow,
+  ReembolsoEmpresaOption,
+  ReembolsoEmpresasResponse,
+  ReembolsoMonthRow,
+  ReembolsoRow,
+  ReembolsosResponse,
   TareaVencidaRow,
   TareaVencidaVendedoresResponse,
   TareaVendedorOption,
@@ -49,6 +71,8 @@ import type {
   UserPermissionUpdate,
   VendedorCommissionGroup,
   VendedorOption,
+  ZammadTicketsByMonthResponse,
+  ZammadTicketsMonthRow,
 } from './types';
 
 export interface EntitiesResult {
@@ -58,6 +82,7 @@ export interface EntitiesResult {
   canAccessCommissions: boolean;
   canAccessProspectos: boolean;
   canAccessCobranzaCommissions: boolean;
+  canAccessPostventa: boolean;
 }
 
 export interface EntityRowsParams {
@@ -83,7 +108,171 @@ export async function fetchEntities(token: string | null): Promise<EntitiesResul
     canAccessCommissions: result.canAccessCommissions,
     canAccessProspectos: result.canAccessProspectos,
     canAccessCobranzaCommissions: result.canAccessCobranzaCommissions,
+    canAccessPostventa: result.canAccessPostventa,
   };
+}
+
+export interface PostventaFiltersParams {
+  dateFrom?: string;
+  dateTo?: string;
+  ownerId?: string;
+}
+
+function postventaQueryParams(params: PostventaFiltersParams): URLSearchParams {
+  const query = new URLSearchParams();
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
+  if (params.ownerId) query.set('ownerId', params.ownerId);
+  return query;
+}
+
+/** Postventa status tiles (new/en proceso/cerrado/resuelto) - see
+ * api/src-ts/reporting/postventaRepository.ts. */
+export async function fetchPostventaSummary(token: string | null, params: PostventaFiltersParams): Promise<PostventaSummary> {
+  const query = postventaQueryParams(params);
+  const result = await apiFetch<PostventaSummaryResponse>(`/reports/postventa/summary?${query.toString()}`, { token });
+  return result.data;
+}
+
+/** Distinct real owners (never the unassigned sentinel) for the Postventa owner filter dropdown. */
+export async function fetchPostventaOwners(token: string | null): Promise<PostventaOwnerOption[]> {
+  const result = await apiFetch<PostventaOwnersResponse>('/reports/postventa/owners', { token });
+  return result.data;
+}
+
+/** The four counts per (año, mes) of created_at_zammad, for the Postventa status-by-month chart. */
+export async function fetchPostventaByMonth(token: string | null, params: PostventaFiltersParams): Promise<PostventaMonthRow[]> {
+  const query = postventaQueryParams(params);
+  const result = await apiFetch<PostventaByMonthResponse>(`/reports/postventa/by-month?${query.toString()}`, { token });
+  return result.data;
+}
+
+/** Ticket counts per normalized asunto across the filtered range, for the Postventa by-asunto chart. */
+export async function fetchPostventaByAsunto(token: string | null, params: PostventaFiltersParams): Promise<PostventaAsuntoRow[]> {
+  const query = postventaQueryParams(params);
+  const result = await apiFetch<PostventaByAsuntoResponse>(`/reports/postventa/by-asunto?${query.toString()}`, { token });
+  return result.data;
+}
+
+/** Resuelto-state ticket counts per (año, mes) of their own "fecha resuelto" (close_at_zammad), for
+ * the Postventa resolution-volume chart. */
+export async function fetchPostventaResueltosByMonth(token: string | null, params: PostventaFiltersParams): Promise<PostventaResueltoMonthRow[]> {
+  const query = postventaQueryParams(params);
+  const result = await apiFetch<PostventaResueltosByMonthResponse>(`/reports/postventa/resueltos-by-month?${query.toString()}`, { token });
+  return result.data;
+}
+
+export interface PostventaTicketsParams extends PostventaFiltersParams {
+  page: number;
+  pageSize: number;
+}
+
+export interface PostventaTicketsResult {
+  data: PostventaTicketRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+/** The Postventa detail table - see api/src-ts/reporting/postventaRepository.ts. */
+export async function fetchPostventaTickets(token: string | null, params: PostventaTicketsParams): Promise<PostventaTicketsResult> {
+  const query = postventaQueryParams(params);
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  const result = await apiFetch<PostventaTicketsResponse>(`/reports/postventa/tickets?${query.toString()}`, { token });
+  return { data: result.data, page: result.page, pageSize: result.pageSize, total: result.total, totalPages: result.totalPages };
+}
+
+/** CSV of every matching Postventa ticket in the filtered range (unpaginated), same convention as
+ * fetchTareasVencidasExportCsv. */
+export async function fetchPostventaExportCsv(token: string | null, params: PostventaFiltersParams): Promise<Blob> {
+  const query = postventaQueryParams(params);
+  return apiFetchBlob(`/reports/postventa/export?${query.toString()}`, { token });
+}
+
+export interface ReembolsoFiltersParams {
+  anio: number;
+  empresaId?: string;
+}
+
+function reembolsoQueryParams(params: ReembolsoFiltersParams): URLSearchParams {
+  const query = new URLSearchParams({ anio: String(params.anio) });
+  if (params.empresaId) query.set('empresaId', params.empresaId);
+  return query;
+}
+
+/** Every empresa with at least one Reembolso on file, for the Reembolsos filter dropdown - see
+ * api/src-ts/reporting/reembolsosRepository.ts. */
+export async function fetchReembolsoEmpresas(token: string | null): Promise<ReembolsoEmpresaOption[]> {
+  const result = await apiFetch<ReembolsoEmpresasResponse>('/reports/postventa/reembolsos/empresas', { token });
+  return result.data;
+}
+
+/** Monto per (mes, bucket) for the Reembolsos by-month chart. */
+export async function fetchReembolsosByMonth(token: string | null, params: ReembolsoFiltersParams): Promise<ReembolsoMonthRow[]> {
+  const query = reembolsoQueryParams(params);
+  const result = await apiFetch<ReembolsoByMonthResponse>(`/reports/postventa/reembolsos/by-month?${query.toString()}`, { token });
+  return result.data;
+}
+
+/** Monto per causa de reembolso for the Reembolsos by-causa chart. */
+export async function fetchReembolsosByCausa(token: string | null, params: ReembolsoFiltersParams): Promise<ReembolsoCausaRow[]> {
+  const query = reembolsoQueryParams(params);
+  const result = await apiFetch<ReembolsoByCausaResponse>(`/reports/postventa/reembolsos/by-causa?${query.toString()}`, { token });
+  return result.data;
+}
+
+/** Count + monto of closed reembolsos per (año, mes) of their own fecha cierre, for the Reembolsos
+ * Cerrados por Mes chart. */
+export async function fetchReembolsosCerradosByMonth(token: string | null, params: ReembolsoFiltersParams): Promise<ReembolsoCierreMonthRow[]> {
+  const query = reembolsoQueryParams(params);
+  const result = await apiFetch<ReembolsoCerradosByMonthResponse>(`/reports/postventa/reembolsos/cerrados-by-month?${query.toString()}`, { token });
+  return result.data;
+}
+
+export interface ReembolsosParams extends ReembolsoFiltersParams {
+  page: number;
+  pageSize: number;
+}
+
+export interface ReembolsosResult {
+  data: ReembolsoRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+/** The Reembolsos detail table - see api/src-ts/reporting/reembolsosRepository.ts. */
+export async function fetchReembolsos(token: string | null, params: ReembolsosParams): Promise<ReembolsosResult> {
+  const query = reembolsoQueryParams(params);
+  query.set('page', String(params.page));
+  query.set('pageSize', String(params.pageSize));
+  const result = await apiFetch<ReembolsosResponse>(`/reports/postventa/reembolsos?${query.toString()}`, { token });
+  return { data: result.data, page: result.page, pageSize: result.pageSize, total: result.total, totalPages: result.totalPages };
+}
+
+/** CSV of every matching Reembolso in the filtered año (unpaginated), same convention as
+ * fetchPostventaExportCsv. */
+export async function fetchReembolsosExportCsv(token: string | null, params: ReembolsoFiltersParams): Promise<Blob> {
+  const query = reembolsoQueryParams(params);
+  return apiFetchBlob(`/reports/postventa/reembolsos/export?${query.toString()}`, { token });
+}
+
+export interface ZammadTicketsFiltersParams {
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+/** Zammad Tickets by-month chart (all groups) - creados/primeraAtencion/cerrados counts per
+ * (año, mes). See api/src-ts/reporting/zammadTicketsAnalyticsRepository.ts. */
+export async function fetchZammadTicketsByMonth(token: string | null, params: ZammadTicketsFiltersParams): Promise<ZammadTicketsMonthRow[]> {
+  const query = new URLSearchParams();
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
+  const result = await apiFetch<ZammadTicketsByMonthResponse>(`/reports/zammad-tickets/by-month?${query.toString()}`, { token });
+  return result.data;
 }
 
 export async function fetchEntityRows(
@@ -233,11 +422,13 @@ export async function fetchCommissionsExportCsv(
   month: number,
   year: number,
   subsidiary?: string[],
-  currency?: string
+  currency?: string,
+  vendedor?: string
 ): Promise<Blob> {
   const query = new URLSearchParams({ month: String(month), year: String(year) });
   if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
   if (currency) query.set('currency', currency);
+  if (vendedor) query.set('vendedor', vendedor);
   return apiFetchBlob(`/reports/contracts/commissions/export?${query.toString()}`, { token });
 }
 
@@ -249,11 +440,13 @@ export async function fetchCommissionsPdf(
   month: number,
   year: number,
   subsidiary?: string[],
-  currency?: string
+  currency?: string,
+  vendedor?: string
 ): Promise<Blob> {
   const query = new URLSearchParams({ month: String(month), year: String(year) });
   if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
   if (currency) query.set('currency', currency);
+  if (vendedor) query.set('vendedor', vendedor);
   return apiFetchBlob(`/reports/contracts/commissions/pdf?${query.toString()}`, { token });
 }
 
@@ -264,17 +457,20 @@ export async function fetchEstadoCuentaPdf(token: string | null, contractId: str
 }
 
 /** New-contract salesperson commissions grid for one calendar month, optionally narrowed to one or
- * more subsidiaries and/or a currency. */
+ * more subsidiaries, a currency, and/or (full-access callers only - ignored for a self-vendedor,
+ * who's already scoped to just themselves) one vendedor. */
 export async function fetchCommissions(
   token: string | null,
   month: number,
   year: number,
   subsidiary?: string[],
-  currency?: string
+  currency?: string,
+  vendedor?: string
 ): Promise<CommissionsResult> {
   const query = new URLSearchParams({ month: String(month), year: String(year) });
   if (subsidiary && subsidiary.length > 0) query.set('subsidiary', subsidiary.join(','));
   if (currency) query.set('currency', currency);
+  if (vendedor) query.set('vendedor', vendedor);
   const result = await apiFetch<CommissionsResponse>(`/reports/contracts/commissions?${query.toString()}`, { token });
   return { groups: result.data, isSelfVendedor: result.isSelfVendedor, canSeeAmounts: result.canSeeAmounts };
 }
@@ -448,6 +644,8 @@ export interface TareasVencidasParams {
   vendedorIds: number[];
   page: number;
   pageSize: number;
+  /** The Comercial page's Activos/Todos switch, applied here too - filters to Tarea.Activo = true. */
+  activoOnly: boolean;
 }
 
 export interface TareasVencidasResult {
@@ -458,9 +656,12 @@ export interface TareasVencidasResult {
   totalPages: number;
 }
 
-function tareasVencidasQueryParams(params: Pick<TareasVencidasParams, 'dateFrom' | 'dateTo' | 'vendedorIds'>): URLSearchParams {
+function tareasVencidasQueryParams(
+  params: Pick<TareasVencidasParams, 'dateFrom' | 'dateTo' | 'vendedorIds' | 'activoOnly'>,
+): URLSearchParams {
   const query = new URLSearchParams({ dateFrom: params.dateFrom, dateTo: params.dateTo });
   if (params.vendedorIds.length > 0) query.set('vendedorIds', params.vendedorIds.join(','));
+  if (params.activoOnly) query.set('activo', '1');
   return query;
 }
 
@@ -484,7 +685,7 @@ export async function fetchTareaVencidaVendedores(token: string | null, dateFrom
 /** CSV of every matching Tarea in the filtered range (unpaginated), same convention as fetchProspectosExportCsv. */
 export async function fetchTareasVencidasExportCsv(
   token: string | null,
-  params: Pick<TareasVencidasParams, 'dateFrom' | 'dateTo' | 'vendedorIds'>,
+  params: Pick<TareasVencidasParams, 'dateFrom' | 'dateTo' | 'vendedorIds' | 'activoOnly'>,
 ): Promise<Blob> {
   const query = tareasVencidasQueryParams(params);
   return apiFetchBlob(`/reports/comercial/tareas-vencidas/export?${query.toString()}`, { token });
@@ -496,8 +697,10 @@ export async function fetchTareasVencidasByMonth(
   token: string | null,
   dateFrom: string,
   dateTo: string,
+  activoOnly: boolean,
 ): Promise<Pick<TareasVencidasByMonthResponse, 'global' | 'porVendedor'>> {
   const query = new URLSearchParams({ dateFrom, dateTo });
+  if (activoOnly) query.set('activo', '1');
   const result = await apiFetch<TareasVencidasByMonthResponse>(`/reports/comercial/tareas-vencidas/by-month?${query.toString()}`, { token });
   return { global: result.global, porVendedor: result.porVendedor };
 }

@@ -11,6 +11,8 @@ export function DashboardPage() {
   const canAccessHr = data?.canAccessHr;
   const canAccessCommissions = data?.canAccessCommissions;
   const canAccessProspectos = data?.canAccessProspectos;
+  const canAccessPostventa = data?.canAccessPostventa;
+  const canAccessCobranzaCommissions = data?.canAccessCobranzaCommissions;
 
   return (
     <AppShell>
@@ -33,6 +35,8 @@ export function DashboardPage() {
           canAccessHr={canAccessHr}
           canAccessCommissions={canAccessCommissions}
           canAccessProspectos={canAccessProspectos}
+          canAccessPostventa={canAccessPostventa}
+          canAccessCobranzaCommissions={canAccessCobranzaCommissions}
         />
       ) : null}
     </AppShell>

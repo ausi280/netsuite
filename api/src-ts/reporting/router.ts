@@ -39,6 +39,24 @@ import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
 import { exportCobranzaCommissionsRoute, getCobranzaCommissionsRoute } from './cobranzaCommissionsController';
 import { exportNotesReportRoute, listNotesReportRoute } from './notesReportController';
 import { exportContratosReportRoute, listContratosReportRoute } from './contratosReportController';
+import {
+  exportPostventaRoute,
+  getPostventaByAsuntoRoute,
+  getPostventaByMonthRoute,
+  getPostventaResueltosByMonthRoute,
+  getPostventaSummaryRoute,
+  listPostventaOwnersRoute,
+  listPostventaTicketsRoute,
+} from './postventaController';
+import { getZammadTicketsByMonthRoute } from './zammadTicketsAnalyticsController';
+import {
+  exportReembolsosRoute,
+  getReembolsosByCausaRoute,
+  getReembolsosByMonthRoute,
+  getReembolsosCerradosByMonthRoute,
+  listReembolsoEmpresasRoute,
+  listReembolsosRoute,
+} from './reembolsosController';
 
 /**
  * Assembles the read-only reporting API router: Entra ID access-token auth
@@ -109,8 +127,8 @@ export function buildReportingRouter(): Router {
   // Prospecto data as /prospectos - likewise bespoke, must be registered before /:entity/export,
   // or that route would swallow "comercial" as an entity key and 404.
   router.get('/comercial', getComercialReportRoute);
-  // Tareas Vencidas (overdue, never-properly-closed Tarea rows - FechaFinal < today AND
-  // (FechaCierre IS NULL OR FechaCierre < FechaFinal)) - a Comercial sub-report, same Prospecto/
+  // Tareas Vencidas (overdue, never-properly-closed Tarea rows - FechaInicial < today AND
+  // (FechaCierre IS NULL OR FechaCierre < FechaInicial)) - a Comercial sub-report, same Prospecto/
   // Lead/Vendedor join. Must be registered before /:entity/:id, or that route would swallow
   // "comercial" as an entity key and "tareas-vencidas" as an id value.
   router.get('/comercial/tareas-vencidas', listTareasVencidasRoute);
@@ -138,6 +156,29 @@ export function buildReportingRouter(): Router {
   // /:entity/export, or that route would swallow "contratos-report" as an entity key and 404.
   router.get('/contratos-report', listContratosReportRoute);
   router.get('/contratos-report/export', exportContratosReportRoute);
+  // Postventa status tiles (zammad_tickets, "Postventa" group only) is likewise bespoke, not a
+  // generic ENTITY_REGISTRY entity - must be registered before /:entity/export, or that route
+  // would swallow "postventa" as an entity key and 404.
+  router.get('/postventa/summary', getPostventaSummaryRoute);
+  router.get('/postventa/owners', listPostventaOwnersRoute);
+  router.get('/postventa/by-month', getPostventaByMonthRoute);
+  router.get('/postventa/by-asunto', getPostventaByAsuntoRoute);
+  router.get('/postventa/resueltos-by-month', getPostventaResueltosByMonthRoute);
+  // Reembolsos (Cryo.dbo.ControlReembolsos cash-refund workflow) lives under the Postventa page
+  // too, same 'postventa' grant - must be registered before /:entity/:id, or that route would
+  // swallow "postventa" as an entity key and "reembolsos" as an id value.
+  router.get('/postventa/reembolsos/empresas', listReembolsoEmpresasRoute);
+  router.get('/postventa/reembolsos/by-month', getReembolsosByMonthRoute);
+  router.get('/postventa/reembolsos/by-causa', getReembolsosByCausaRoute);
+  router.get('/postventa/reembolsos/cerrados-by-month', getReembolsosCerradosByMonthRoute);
+  router.get('/postventa/reembolsos/export', exportReembolsosRoute);
+  router.get('/postventa/reembolsos', listReembolsosRoute);
+  router.get('/postventa/tickets', listPostventaTicketsRoute);
+  router.get('/postventa/export', exportPostventaRoute);
+  // Zammad Tickets by-month chart (all groups - the generic entity's own "Ver gráficos" view, see
+  // ReportPage.tsx) - must be registered before /:entity/:id, or that route would swallow
+  // "zammad-tickets" as an entity key and "by-month" as an id value.
+  router.get('/zammad-tickets/by-month', getZammadTicketsByMonthRoute);
   // Must be registered before /:entity/:id, or that route would swallow "subsidiaries"/"analytics"/"export" as an id value.
   router.get('/:entity/subsidiaries', listSubsidiaryOptions);
   router.get('/:entity/analytics', getPartidaAnalytics);

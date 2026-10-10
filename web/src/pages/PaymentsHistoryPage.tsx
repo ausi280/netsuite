@@ -155,6 +155,11 @@ export function PaymentsHistoryPage() {
   const [chargingRow, setChargingRow] = useState<PaymentRow | null>(null);
 
   const { data, isLoading, isError, error, refetch } = usePaymentsList({ page, pageSize, search, subsidiary, dateFrom, dateTo });
+  // Defaults true so the column doesn't flash empty while the real value is still in flight - the
+  // real value always arrives before `data` does, so this default is never actually shown with real
+  // rows. False only for a self cobrador/dueño who can see the list but not charge - see
+  // controller.ts's isEntityViewAllowed/canCharge.
+  const canCharge = data?.canCharge ?? true;
 
   function handleSearchChange(value: string) {
     setSearch(value);
@@ -194,7 +199,7 @@ export function PaymentsHistoryPage() {
       key: 'action',
       header: 'Acción',
       render: (r) =>
-        canChargeDomiciled(r) ? (
+        canCharge && canChargeDomiciled(r) ? (
           <button
             type="button"
             className={styles.rowChargeButton}

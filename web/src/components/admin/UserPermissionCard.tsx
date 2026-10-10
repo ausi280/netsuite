@@ -115,6 +115,14 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
               />
               Comisiones de Cobranza (sección del Reporte Partidas)
             </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
+                checked={entities.includes('postventa')}
+                onChange={() => setEntities((prev) => toggle(prev, 'postventa'))}
+              />
+              Postventa (reporte de tickets por estatus)
+            </label>
           </div>
         </div>
         <div>

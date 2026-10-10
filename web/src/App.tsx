@@ -13,6 +13,7 @@ import { CommissionsPage } from './pages/CommissionsPage';
 import { ProspectosPage } from './pages/ProspectosPage';
 import { CuentasPage } from './pages/CuentasPage';
 import { CobranzaCommissionsPage } from './pages/CobranzaCommissionsPage';
+import { PostventaReportPage } from './pages/PostventaReportPage';
 import { NotasReportPage } from './pages/NotasReportPage';
 import { ContratosReportPage } from './pages/ContratosReportPage';
 import { CommissionLevelsPage } from './pages/CommissionLevelsPage';
@@ -23,6 +24,9 @@ import { NotFoundPage } from './pages/NotFoundPage';
 // rest of the app's initial bundle lean for everyone who never opens them.
 const PartidaAnalyticsPage = lazy(() =>
   import('./pages/PartidaAnalyticsPage').then((m) => ({ default: m.PartidaAnalyticsPage }))
+);
+const ZammadTicketsAnalyticsPage = lazy(() =>
+  import('./pages/ZammadTicketsAnalyticsPage').then((m) => ({ default: m.ZammadTicketsAnalyticsPage }))
 );
 const HrReportPage = lazy(() => import('./pages/HrReportPage').then((m) => ({ default: m.HrReportPage })));
 const MarketingReportPage = lazy(() => import('./pages/MarketingReportPage').then((m) => ({ default: m.MarketingReportPage })));
@@ -76,6 +80,18 @@ export function App() {
           }
         />
         <Route
+          path="/reports/zammad-tickets/graphs"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <Suspense fallback={<LoadingState label="Cargando gráficos..." />}>
+                  <ZammadTicketsAnalyticsPage />
+                </Suspense>
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/reports/contracts/commissions"
           element={
             <RequireAuth>
@@ -121,6 +137,16 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CobranzaCommissionsPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/postventa"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <PostventaReportPage />
               </PageTransition>
             </RequireAuth>
           }

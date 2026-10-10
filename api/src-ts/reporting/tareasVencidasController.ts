@@ -53,6 +53,13 @@ function parseVendedorIds(req: Request): number[] | null {
   return ids.length > 0 ? ids : null;
 }
 
+/** `?activo=1` - the Comercial page's Activos/Todos switch, applied here too (per explicit
+ * instruction) to Tarea.Activo. Absent/anything else means "Todos" (unfiltered), same permissive
+ * default every other optional filter on this page uses. */
+function parseActivoOnly(req: Request): boolean {
+  return req.query.activo === '1';
+}
+
 /** GET /api/reports/comercial/tareas-vencidas?dateFrom=&dateTo=&vendedorIds=&page=&pageSize= -
  * gated by its own standalone 'tareas_vencidas' permission (see isTareasVencidasAllowed above),
  * not the Comercial page's 'prospectos' gate, even though it's embedded in that page. */
@@ -69,7 +76,16 @@ export async function listTareasVencidasRoute(req: Request, res: Response): Prom
   }
 
   const vendedorIds = parseVendedorIds(req);
-  const result = await getTareasVencidasPaged(getLegacyDb(), range.dateFrom, range.dateTo, vendedorIds, req.query.page, req.query.pageSize);
+  const activoOnly = parseActivoOnly(req);
+  const result = await getTareasVencidasPaged(
+    getLegacyDb(),
+    range.dateFrom,
+    range.dateTo,
+    vendedorIds,
+    req.query.page,
+    req.query.pageSize,
+    activoOnly,
+  );
   res.status(200).json({ success: true, ...result });
 }
 
@@ -91,8 +107,8 @@ export async function listTareaVencidaVendedoresRoute(req: Request, res: Respons
   res.status(200).json({ success: true, data });
 }
 
-/** GET /api/reports/comercial/tareas-vencidas/by-month?dateFrom=&dateTo= - counts grouped by
- * (año, mes) of FechaFinal, globally and per vendedor, for the global/por-vendedor charts.
+/** GET /api/reports/comercial/tareas-vencidas/by-month?dateFrom=&dateTo=&activo= - counts grouped
+ * by (año, mes) of FechaInicial, globally and per vendedor, for the global/por-vendedor charts.
  * Deliberately NOT filterable by vendedorIds (unlike the other two routes) - it always returns
  * every vendedor's breakdown in one response, and the frontend slices the selected vendedor's
  * rows out of `porVendedor` itself, same as every other per-vendedor chart on the Comercial page. */
@@ -108,15 +124,16 @@ export async function getTareasVencidasByMonthRoute(req: Request, res: Response)
     return;
   }
 
-  const result = await getTareasVencidasByMonth(getLegacyDb(), range.dateFrom, range.dateTo);
+  const activoOnly = parseActivoOnly(req);
+  const result = await getTareasVencidasByMonth(getLegacyDb(), range.dateFrom, range.dateTo, activoOnly);
   res.status(200).json({ success: true, ...result });
 }
 
 const EXPORT_COLUMNS: Array<{ key: keyof TareaVencidaRow; header: string }> = [
   { key: 'id_tarea', header: 'ID Tarea' },
   { key: 'tipo_tarea', header: 'Tipo' },
-  { key: 'fecha_inicial', header: 'Fecha Inicial' },
-  { key: 'fecha_final', header: 'Fecha Final (vencida)' },
+  { key: 'fecha_inicial', header: 'Fecha Inicial (vencida)' },
+  { key: 'fecha_final', header: 'Fecha Final' },
   { key: 'fecha_cierre', header: 'Fecha Cierre' },
   { key: 'activo', header: 'Activo' },
   { key: 'nota', header: 'Nota' },
@@ -143,7 +160,8 @@ export async function exportTareasVencidasRoute(req: Request, res: Response): Pr
   }
 
   const vendedorIds = parseVendedorIds(req);
-  const rows = await getTareasVencidasForExport(getLegacyDb(), range.dateFrom, range.dateTo, vendedorIds);
+  const activoOnly = parseActivoOnly(req);
+  const rows = await getTareasVencidasForExport(getLegacyDb(), range.dateFrom, range.dateTo, vendedorIds, activoOnly);
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="tareas-vencidas-${range.dateFrom}-a-${range.dateTo}.csv"`);

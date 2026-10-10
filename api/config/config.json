@@ -81,7 +81,9 @@
                 "OTROS_CONTRATO": { "ENABLED": true, "CRON": "0 3,7,11,15,19,23 * * *" },
                 "PE_SERVICIO": { "ENABLED": true, "CRON": "55 2,6,10,14,18,22 * * *" },
                 "FCELLS_CONTRATO": { "ENABLED": true, "CRON": "5 3,7,11,15,19,23 * * *" },
-                "CUSTOMER_ADDRESS": { "ENABLED": true, "CRON": "10 3,7,11,15,19,23 * * *" }
+                "CUSTOMER_ADDRESS": { "ENABLED": true, "CRON": "10 3,7,11,15,19,23 * * *" },
+                "ZAMMAD_TICKET": { "ENABLED": true, "CRON": "*/15 * * * *" },
+                "PAYMENT_INVOICE_LINK": { "ENABLED": true, "CRON": "*/30 * * * *" }
             }
         },
         "META" : {

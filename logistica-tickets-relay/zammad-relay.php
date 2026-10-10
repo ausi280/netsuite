@@ -3,17 +3,18 @@
 /**
  * Thin, generic Zammad ticket relay - exists ONLY because tickets.cryoholdco.com's server-side
  * firewall (GoDaddy shared cPanel host, Imunify360/CSF) rejects requests from the Azure App
- * Service that now builds these tickets (api/src-ts/reporting/logisticaTicketController.ts),
- * while this server's own outbound IP has always been trusted (it's what the original
- * submit.ticket.php ran on). This script does NOT know anything about "logistica" or any other
- * specific ticket type - it just forwards whatever ticket JSON it's given straight to Zammad's
- * API, using the one Zammad token that used to live in submit.ticket.php. All ticket-building
- * logic (title, customer, article body, sender/from, attachments) stays in the Node backend;
- * this only exists to make the final hop to Zammad from a trusted IP.
+ * Service that builds/reads these tickets (api/src-ts/reporting/logisticaTicketController.ts,
+ * api/src-ts/services/zammadTicketSyncService.ts), while this server's own outbound IP has always
+ * been trusted (it's what the original submit.ticket.php ran on). This script does NOT know
+ * anything about "logistica", "postventa", or any other specific ticket type - it just forwards
+ * whatever it's given straight to Zammad's API (ticket creation on POST, ticket search on GET),
+ * using the one Zammad token that used to live in submit.ticket.php. All ticket-building/
+ * interpreting logic stays in the Node backend; this only exists to make the final hop to Zammad
+ * from a trusted IP.
  *
  * Auth: a long random shared secret in the X-Relay-Secret header - NOT the Zammad token itself,
  * so a leak of this endpoint's secret can't be replayed anywhere except through this one relay
- * (which only ever talks to tickets.cryoholdco.com/api/v1/tickets).
+ * (which only ever talks to tickets.cryoholdco.com/api/v1/tickets and .../tickets/search).
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -25,20 +26,56 @@ $ZAMMAD_TOKEN = '_qVXFZ3i4DdSg5KCLEsfqcBlEod_cFUF4K7K8qpaidKTvCTu-kThRWpc9I8Xj3Q
 $ZAMMAD_URL = 'https://tickets.cryoholdco.com';
 
 // Long random secret - the Azure app sends this in X-Relay-Secret. Rotate by changing both this
-// value and ZAMMAD_RELAY.SECRET in api/config/env.json, then redeploying the API.
+// value and ZAMMAD.RELAY_SECRET in api/config/env.json, then redeploying the API.
 $RELAY_SECRET = '9827d472c88095d51aa9ceb9d8e454409de6953463eec14518e338f57e9cc6a3';
-
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['success' => false, 'message' => 'Method not allowed.']);
-    exit;
-}
 
 $providedSecret = $_SERVER['HTTP_X_RELAY_SECRET'] ?? '';
 
 if (!hash_equals($RELAY_SECRET, $providedSecret)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'Invalid relay secret.']);
+    exit;
+}
+
+/**
+ * GET - ticket search/listing, for the Node-side periodic sync (zammadTicketSyncService.ts).
+ * The incoming query string is forwarded AS-IS to Zammad's /api/v1/tickets/search - all search
+ * syntax (query, sort_by, order_by, page, per_page, expand) is built on the Node side; this stays
+ * a dumb pipe, same as the POST branch below only ever talking to /api/v1/tickets.
+ */
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    $queryString = $_SERVER['QUERY_STRING'] ?? '';
+    $url = "$ZAMMAD_URL/api/v1/tickets/search" . ($queryString !== '' ? "?$queryString" : '');
+
+    $ch = curl_init($url);
+
+    curl_setopt_array($ch, [
+        CURLOPT_HTTPGET => true,
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Token token=$ZAMMAD_TOKEN",
+        ],
+        CURLOPT_RETURNTRANSFER => true,
+    ]);
+
+    $response = curl_exec($ch);
+    $httpStatus = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    curl_close($ch);
+
+    if ($response === false) {
+        http_response_code(502);
+        echo json_encode(['success' => false, 'message' => "Relay could not reach Zammad: $curlError"]);
+        exit;
+    }
+
+    http_response_code($httpStatus);
+    echo $response;
+    exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    http_response_code(405);
+    echo json_encode(['success' => false, 'message' => 'Method not allowed.']);
     exit;
 }
 

@@ -15,6 +15,7 @@ export function mapInvoice(raw: Record<string, any>): InvoiceRow {
     lastmodifieddate: parseNetSuiteDate(raw.lastmodifieddate),
     custbody_cryo_numcontrato: toStringOrNull(raw.custbody_cryo_numcontrato),
     custbody_cryo_cobrador: toStringOrNull(raw.custbody_cryo_cobrador),
+    custbody_cryo_duenio: toStringOrNull(raw.custbody_cryo_duenio),
     custbody_cryo_fecha_emision: parseNetSuiteDate(raw.custbody_cryo_fecha_emision),
     raw_data: JSON.stringify(raw),
   };

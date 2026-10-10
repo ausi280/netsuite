@@ -21,7 +21,8 @@ export type ReportEntityKey =
   | 'vendors'
   | 'vendor-transactions'
   | 'otros-contratos'
-  | 'fcells-contratos';
+  | 'fcells-contratos'
+  | 'zammad-tickets';
 
 /**
  * Every key grantable via the per-user allowedEntities permission list: every ReportEntityKey
@@ -44,8 +45,20 @@ export type ReportEntityKey =
  * 'cobranza_commissions' is likewise its own standalone grant (same shape as 'hr'/'prospectos'/
  * 'tareas_vencidas', NOT an additional gate on top of 'partidas') for the Cobranza Commissions
  * sub-report reached from the Partidas report - see cobranzaCommissionsController.ts.
+ * 'postventa' is likewise its own standalone grant for the bespoke Postventa status-tiles report
+ * (new/en proceso/cerrado/resuelto counts over zammad_tickets, group "Postventa" only) - NOT an
+ * additional gate on top of 'zammad-tickets', which is the separate, generic Zammad Tickets table
+ * view (every group) - see postventaController.ts.
  */
-export type PermissionKey = ReportEntityKey | 'hr' | 'prospectos' | 'commissions' | 'commissions_amounts' | 'tareas_vencidas' | 'cobranza_commissions';
+export type PermissionKey =
+  | ReportEntityKey
+  | 'hr'
+  | 'prospectos'
+  | 'commissions'
+  | 'commissions_amounts'
+  | 'tareas_vencidas'
+  | 'cobranza_commissions'
+  | 'postventa';
 
 export interface SortConfig {
   column: string;

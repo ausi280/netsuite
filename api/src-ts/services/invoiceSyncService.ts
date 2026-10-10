@@ -28,6 +28,7 @@ export class InvoiceSyncService extends BaseSyncService<RawNetSuiteRecord, Invoi
         'lastmodifieddate',
         'custbody_cryo_numcontrato',
         'custbody_cryo_cobrador',
+        'custbody_cryo_duenio',
         'custbody_cryo_fecha_emision',
       )
       .where(`type = 'CustInvc'`)

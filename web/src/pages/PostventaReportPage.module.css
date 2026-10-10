@@ -1,0 +1,72 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.chartStack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tile {
+  background: var(--color-white);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-tile);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.value {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--color-neutral-900);
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.nuevo {
+  background: var(--color-primary-soft);
+}
+
+.nuevo .value {
+  color: var(--color-primary-text);
+}
+
+.enProceso {
+  background: rgba(250, 178, 25, 0.12);
+}
+
+.enProceso .value {
+  color: var(--status-warning);
+}
+
+.cerrado {
+  background: var(--color-neutral-100);
+}
+
+.cerrado .value {
+  color: var(--color-secondary);
+}
+
+.resuelto {
+  background: rgba(12, 163, 12, 0.12);
+}
+
+.resuelto .value {
+  color: var(--status-good);
+}

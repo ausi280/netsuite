@@ -1,21 +1,21 @@
 import type { AsignacionTipo, CobranzaCommissionContractGroup } from '../api/types';
 
-// Mexico's IVA rate - custrecord_cryo_importepagado includes tax, per explicit instruction to
-// accumulate the net-of-tax figure instead. Confirmed live only for Mexico-subsidiary records;
-// NOT verified for other subsidiaries/currencies, which may use a different VAT rate (e.g.
-// Argentina's IVA is 21%, not 16%) - applied uniformly here regardless, since no confirmed
-// per-subsidiary rate exists yet.
+// Mexico's IVA rate - the invoice's own `total` (importe_pagado) includes tax, per explicit
+// instruction to accumulate the net-of-tax figure instead. Confirmed live only for Mexico-
+// subsidiary records; NOT verified for other subsidiaries/currencies, which may use a different
+// VAT rate (e.g. Argentina's IVA is 21%, not 16%) - applied uniformly here regardless, since no
+// confirmed per-subsidiary rate exists yet.
 const IVA_RATE = 0.16;
-// custrecord_cryo_importepagado's own currency never matches the partida's catalog `moneda`
-// (confirmed live: a partida priced at 65 USD showed importe_pagado 75.4 - exactly ×1.16, meaning
-// that case truly was USD too, but other invoices show importe_pagado at a wildly different scale
-// than their partida's nominal USD price, consistent with pesos) - bucketed under this fixed MXN
-// id instead of `moneda`, per the user's explicit framing of this figure as "pesos". Not verified
-// for non-Mexico subsidiaries, which may actually be ARS/COP/etc. instead.
+// The invoice total's own currency never matches the partida's catalog `moneda` (confirmed live: a
+// partida priced at 65 USD showed an invoice total of 75.4 - exactly ×1.16, meaning that case truly
+// was USD too, but other invoices show their total at a wildly different scale than their partida's
+// nominal USD price, consistent with pesos) - bucketed under this fixed MXN id instead of `moneda`,
+// per the user's explicit framing of this figure as "pesos". Not verified for non-Mexico
+// subsidiaries, which may actually be ARS/COP/etc. instead.
 export const IMPORTE_PAGADO_CURRENCY = '1';
 
-/** custrecord_cryo_importepagado, net of IVA_RATE - null when the raw value is missing/unparseable. */
-export function importePagadoNeto(importePagado: string | null): number | null {
+/** The invoice's own total, net of IVA_RATE - null when the raw value is missing/unparseable. */
+export function importePagadoNeto(importePagado: string | number | null): number | null {
   if (importePagado === null || importePagado === '') return null;
   const raw = Number(importePagado);
   return Number.isFinite(raw) ? raw / (1 + IVA_RATE) : null;

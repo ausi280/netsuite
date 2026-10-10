@@ -17,6 +17,11 @@ export interface InvoiceRow {
   custbody_cryo_numcontrato: string | null;
   /** NetSuite employee internal id - the collector assigned directly on this invoice. */
   custbody_cryo_cobrador: string | null;
+  /** NetSuite employee internal id - the dueño assigned directly on this invoice, which can differ
+   * from the parent Contract's own custrecord_cryo_duenio when the contract's dueño was reassigned
+   * after this invoice was issued - see cobranzaCommissionsRepository.ts, which reads this instead of
+   * the contract's. */
+  custbody_cryo_duenio: string | null;
   custbody_cryo_fecha_emision: Date | null;
   raw_data: string;
 }

@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 import { applySubsidiaryRestriction } from './reportingRepository';
+import { parseNetSuiteDate } from '../mappers/utils';
 
 /**
  * "Estado de Cuenta" - customer-facing account statement for a single contract, styled after the
@@ -29,13 +30,15 @@ import { applySubsidiaryRestriction } from './reportingRepository';
  *  - "Cobertura por Servicio" (one row per active service - Sangre/Tejido/ADN/etc, confirmed live
  *    via the same custrecord_cryo_tipodeserv id scheme contratosReportRepository.ts/
  *    cuentasRepository.ts already use) - per-service "Fecha de Procesamiento" is
- *    netsuite_services.custrecord_cryo_fecha_procesoserv directly. Per-service "Cubierto Hasta"
- *    is netsuite_services.custrecord_cryo_pagadohasta directly, per explicit instruction - a
- *    deliberate reversal of an earlier version that instead computed MAX(finvigencia) among a
- *    service's own PAID partidas. custrecord_cryo_pagadohasta is confirmed live to hold only a
- *    bare year ("2026", "2036", never a month - sampled 2000 active services account-wide, ~4%
- *    blank, every non-blank value a clean 4-digit year), so it's shown as a bare year, not the
- *    "mes de año" phrasing an earlier version used.
+ *    netsuite_services.custrecord_cryo_fecha_procesoserv directly. Per-service "Cubierto Hasta" is
+ *    computed as the year of MAX(custrecord_cryo_finvigencia) among that service's own PAID
+ *    (estatuspartida='1') partidas, per explicit instruction - custrecord_cryo_pagadohasta cannot be
+ *    trusted (confirmed live on MX-CC-2026-061345-1: its lone paid Anualidad partida's own vigencia
+ *    runs through 17/09/2027, but custrecord_cryo_pagadohasta still read "2026" - it tracks the
+ *    partida's año/billing-cycle label, not the actual paid-through coverage date). Only falls back
+ *    to custrecord_cryo_pagadohasta when the service has no paid partida to compute from at all
+ *    (e.g. coverage entirely from pre-2026 legacy history with no netsuite_partidas equivalent) -
+ *    better than showing nothing, even though that fallback value is the same unreliable field.
  *  - "Últimos Cargos" total (total_cargos) = SUM of custrecord_cryo_importepartida across every
  *    visible cargo, per explicit instruction - a deliberate reversal of an earlier version that
  *    trusted NetSuite's own custrecord_cryo_total_adeudos rollup instead (that rollup could
@@ -231,6 +234,30 @@ interface RawServiceRow {
   custrecord_cryo_pagadohasta: string | null;
 }
 
+interface RawPaidPartidaVigenciaRow {
+  custrecord_cryo_servtipo: string | null;
+  custrecord_cryo_finvigencia: string | null;
+}
+
+const PARTIDA_ESTATUS_PAGADO = '1';
+
+/** The year of the furthest custrecord_cryo_finvigencia among a servtipo's own PAID partidas,
+ * across ALL of this contract's partidas - deliberately NOT restricted to the "visible cargos" list
+ * (which hides far-future pre-generated annuities per FUTURE_CARGO_VISIBILITY_MONTHS), since
+ * coverage shouldn't be capped by that display-only rule. */
+function buildCubiertoHastaByServtipo(rows: RawPaidPartidaVigenciaRow[]): Map<string, string> {
+  const byServtipo = new Map<string, number>();
+  for (const row of rows) {
+    if (!row.custrecord_cryo_servtipo) continue;
+    const finvigencia = parseNetSuiteDate(row.custrecord_cryo_finvigencia);
+    if (!finvigencia) continue;
+    const year = finvigencia.getFullYear();
+    const current = byServtipo.get(row.custrecord_cryo_servtipo);
+    if (current === undefined || year > current) byServtipo.set(row.custrecord_cryo_servtipo, year);
+  }
+  return new Map(Array.from(byServtipo.entries()).map(([servtipo, year]) => [servtipo, String(year)]));
+}
+
 interface RawPartidaRow {
   netsuite_id: string;
   custrecord_cryo_aniopartida: string | null;
@@ -294,7 +321,7 @@ export async function getEstadoCuenta(
 
   const esMexico = Boolean(contract.subsidiaria_id && MEXICO_SUBSIDIARY_IDS.has(contract.subsidiaria_id));
 
-  const [cargoRows, direccion, serviceRows] = await Promise.all([
+  const [cargoRows, direccion, serviceRows, paidVigenciaRows] = await Promise.all([
     db<RawPartidaRow>('netsuite_partidas')
       .where('custrecord_cryo_numcontrato', netsuiteId)
       .andWhere((builder) => {
@@ -323,7 +350,14 @@ export async function getEstadoCuenta(
       .where('custrecord_cryo_idcontrato', netsuiteId)
       .andWhere('isinactive', 'F')
       .select('custrecord_cryo_tipodeserv', 'custrecord_cryo_fecha_procesoserv', 'custrecord_cryo_pagadohasta'),
+    db<RawPaidPartidaVigenciaRow>('netsuite_partidas')
+      .where('custrecord_cryo_numcontrato', netsuiteId)
+      .andWhere('isinactive', 'F')
+      .andWhere('custrecord_cryo_estatuspartida', PARTIDA_ESTATUS_PAGADO)
+      .select('custrecord_cryo_servtipo', 'custrecord_cryo_finvigencia'),
   ]);
+
+  const cubiertoHastaByServtipo = buildCubiertoHastaByServtipo(paidVigenciaRows);
 
   const netsuiteCargos: EstadoCuentaCargo[] = cargoRows.map((row) => {
     const estatusId = row.custrecord_cryo_estatuspartida;
@@ -401,7 +435,8 @@ export async function getEstadoCuenta(
     tipo_id: row.custrecord_cryo_tipodeserv,
     tipo_label: (row.custrecord_cryo_tipodeserv && SERVICE_TYPE_LABELS[row.custrecord_cryo_tipodeserv]) || `Tipo ${row.custrecord_cryo_tipodeserv ?? '?'}`,
     fecha_procesamiento: row.custrecord_cryo_fecha_procesoserv,
-    cubierto_hasta: row.custrecord_cryo_pagadohasta || null,
+    cubierto_hasta:
+      (row.custrecord_cryo_tipodeserv && cubiertoHastaByServtipo.get(row.custrecord_cryo_tipodeserv)) || row.custrecord_cryo_pagadohasta || null,
   }));
 
   return {

@@ -41,6 +41,7 @@ export function CommissionsPage() {
   const year = Number(searchParams.get('year')) || now.getFullYear();
   const subsidiary = (searchParams.get('subsidiary') ?? '').split(',').filter(Boolean);
   const currency = searchParams.get('currency') ?? '';
+  const vendedor = searchParams.get('vendedor') ?? '';
 
   // Whether /reports/contracts (and its subsidiary-options/commission-levels routes) are reachable
   // at all - independent from whether commissions itself is scoped to everyone or just this caller
@@ -50,8 +51,22 @@ export function CommissionsPage() {
   const { data: entitiesResult } = useEntities();
   const hasContractsAccess = Boolean(entitiesResult?.entities.some((e) => e.key === 'contracts'));
 
-  const { data: result, isLoading, isError, error, refetch } = useCommissions(month, year, subsidiary, currency);
+  const { data: result, isLoading, isError, error, refetch } = useCommissions(month, year, subsidiary, currency, vendedor);
   const data = result?.groups;
+  // Unfiltered-by-vendedor sibling query, purely to source the vendedor dropdown's full option
+  // list for this same month/year/subsidiary/currency - react-query dedupes this against the main
+  // query above for free whenever vendedor is already '' (the common case), so there's no extra
+  // request until a vendedor filter is actually applied.
+  const { data: unfilteredResult } = useCommissions(month, year, subsidiary, currency);
+  const vendedorOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const group of unfilteredResult?.groups ?? []) {
+      if (!byId.has(group.vendedor_id)) byId.set(group.vendedor_id, group.vendedor_nombre ?? group.vendedor_id);
+    }
+    return Array.from(byId.entries())
+      .map(([id, nombre]) => ({ id, nombre }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [unfilteredResult]);
   // Authoritative per the commissions response itself, not guessed from the entities list - a
   // caller can have 'contracts' yet still be self-vendedor-scoped here if they lack 'commissions'.
   const isSelfVendedor = result?.isSelfVendedor ?? false;
@@ -105,12 +120,22 @@ export function CommissionsPage() {
     setSearchParams(next);
   }
 
+  function handleVendedorChange(value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value) {
+      next.set('vendedor', value);
+    } else {
+      next.delete('vendedor');
+    }
+    setSearchParams(next);
+  }
+
   async function handleExport() {
     setIsExporting(true);
     setExportError(null);
     try {
       const token = await getAccessToken();
-      const blob = await fetchCommissionsExportCsv(token, month, year, subsidiary, currency || undefined);
+      const blob = await fetchCommissionsExportCsv(token, month, year, subsidiary, currency || undefined, vendedor || undefined);
       downloadBlob(blob, `comisiones-${year}-${String(month).padStart(2, '0')}.csv`);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'No se pudo exportar el CSV.');
@@ -124,7 +149,7 @@ export function CommissionsPage() {
     setPdfError(null);
     try {
       const token = await getAccessToken();
-      const blob = await fetchCommissionsPdf(token, month, year, subsidiary, currency || undefined);
+      const blob = await fetchCommissionsPdf(token, month, year, subsidiary, currency || undefined, vendedor || undefined);
       downloadBlob(blob, `estado-cuenta-comisiones-${year}-${String(month).padStart(2, '0')}.pdf`);
     } catch (error) {
       setPdfError(error instanceof Error ? error.message : 'No se pudo generar el PDF.');
@@ -212,6 +237,21 @@ export function CommissionsPage() {
             placeholder="Todas las subsidiarias"
             ariaLabel="Filtrar por subsidiaria"
           />
+        ) : null}
+        {!isSelfVendedor ? (
+          <select
+            className={styles.select}
+            value={vendedor}
+            onChange={(event) => handleVendedorChange(event.target.value)}
+            aria-label="Filtrar por vendedor"
+          >
+            <option value="">Todos los vendedores</option>
+            {vendedorOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.nombre}
+              </option>
+            ))}
+          </select>
         ) : null}
         <select
           className={styles.select}

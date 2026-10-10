@@ -7,10 +7,24 @@ import { parseNetSuiteDate } from '../mappers/utils';
  * within each contract, by año - the data chain confirmed live against production NetSuite this
  * session: netsuite_partidas.custrecord_cryo_facturarelacionada -> netsuite_invoices (the invoice
  * that billed it) -> netsuite_payments.custbody_cryo_associated_invoices_item (a payment applied to
- * that invoice, dated within the selected month) is "this partida was paid this month". The invoice
- * also carries custbody_cryo_cobrador (the collector), while dueño and the legacy "sistema
- * anterior" folio come from the parent contract - same two joins partidaListRepository.ts already
- * uses to resolve contract_name/dueno_nombre for the Partidas grid.
+ * that invoice, dated within the selected month) is "this partida was paid this month".
+ *
+ * Dueño prefers the INVOICE's own custbody_cryo_duenio over the parent contract's
+ * custrecord_cryo_duenio, falling back to the contract's when the invoice's own field is null -
+ * confirmed live that 1,688 of 15,286 invoices with BOTH fields set (~11%) have an invoice dueño
+ * that diverges from their contract's CURRENT dueño, because the contract's dueño was reassigned
+ * sometime after the invoice was issued; reading only from the contract was silently crediting the
+ * WRONG (current, not historical) dueño for that invoice's collections - from the correct dueño's
+ * point of view, that invoice simply never showed up in their report. The fallback to the contract
+ * is NOT optional, though: custbody_cryo_duenio is a recent addition and is still null on the large
+ * majority of invoices (confirmed live: 224 of this month's 288 paid contracts have it null but DO
+ * have a contract-level dueño) - without the fallback, the invoice-first read alone would newly
+ * misclassify most of the report as "Bolsa", which is a worse regression than the bug it fixes.
+ * Cobrador has no such fallback and is unconditionally invoice-only (custbody_cryo_cobrador) - there
+ * is no cobrador field on the contract at all, so a null invoice cobrador simply falls through
+ * computeAsignacion's rules below, same as before. The legacy "sistema anterior" folio and
+ * subsidiaria still come from the parent contract (those aren't collections-assignment fields and
+ * don't have this problem).
  *
  * This is a first pass: it only lists which partidas were paid and by/for whom - it does not yet
  * compute a commission amount or rate (no tier/percentage logic exists for cobradores today, unlike
@@ -79,16 +93,17 @@ export interface CobranzaCommissionPartidaRow {
   finvigencia: string | null;
   fecha_limite_pago: string | null;
   invoice_tranid: string | null;
-  /** custrecord_cryo_importepagado - the TOTAL of the invoice this partida was billed on (tax
-   * included), copied onto every partida line that invoice covers - confirmed live against
-   * production: matches netsuite_invoices.total exactly, and for a single-line invoice is exactly
-   * the partida's own `importe` × 1.16. NOT a currency conversion - it's in the SAME currency as
-   * `moneda`, just the invoice's real total rather than one service's nominal catalog price.
-   * Since sibling partidas on the same invoice all repeat this same value, summing it naively
-   * double-counts - callers must dedupe by `invoice_tranid` first (see
-   * utils/cobranzaCommissions.ts on the frontend). Null for partidas synced before this field was
-   * captured. */
-  importe_pagado: string | null;
+  /** The invoice's own `total` (tax included) - NOT custrecord_cryo_importepagado, a partida-level
+   * custom field meant to carry this same figure but confirmed live to disagree with the invoice's
+   * real total on 1,164 of 1,691 October partidas (~69%) - e.g. FV-CRYOMEX-9328's real total is
+   * $2,362.15 (confirmed against the NetSuite record directly) while its partida's own
+   * custrecord_cryo_importepagado read $126.08, undercounting a Dueño's commission by over $2,200
+   * on that one invoice alone. Reading netsuite_invoices.total directly sidesteps that custom
+   * field's staleness entirely - it's the same standard NetSuite field for every line on an
+   * invoice, with no copying/stamping step that could fall out of sync. Still repeats identically
+   * across every partida on the same invoice (it's the same invoice), so dedupe by `invoice_tranid`
+   * is still required before summing (see utils/cobranzaCommissions.ts on the frontend). */
+  importe_pagado: string | number | null;
   /** True when this contract also has a procesamiento (enrollment/processing fee) partida paid in
    * the same month - meaning this partida was part of the contract's initial billing package, not
    * an ongoing renewal. Excluded from accumulated sums, but still shown. See the module doc
@@ -106,10 +121,11 @@ export interface CobranzaCommissionContractGroup {
   contract_name: string | null;
   folio_sistema_anterior: string | null;
   subsidiaria_id: string | null;
+  /** Taken from the first qualifying invoice encountered for this contract - in practice a contract
+   * only ever has one distinct invoice paid in a given month (confirmed live: 2 of 1,869 contracts
+   * had more than one over the last 12 months, and neither diverged), but nothing enforces that, so
+   * this is a representative value, not a verified-unique one. */
   dueno_nombre: string | null;
-  /** Taken from the first qualifying invoice encountered for this contract - in practice every
-   * partida paid together on the same contract in a given month comes off the same cobrador, but
-   * nothing enforces that, so this is a representative value, not a verified-unique one. */
   cobrador_nombre: string | null;
   /** The resolved assignee's display name (a Dueño's or Cobrador's name), or the literal "Bolsa" /
    * "Paquete inicial de anualidades" label - see computeAsignacion. Use `asignado_tipo` to tell
@@ -132,7 +148,8 @@ interface RawRow {
   finvigencia: string | null;
   fecha_limite_pago: string | null;
   invoice_tranid: string | null;
-  importe_pagado: string | null;
+  // netsuite_invoices.total is a decimal column - mssql returns it as a number, not a string.
+  importe_pagado: string | number | null;
   contract_id: string;
   contract_name: string | null;
   folio_sistema_anterior: string | null;
@@ -154,7 +171,7 @@ const SELECT_COLUMNS = [
   'P.custrecord_cryo_iniciovigencia as iniciovigencia',
   'P.custrecord_cryo_finvigencia as finvigencia',
   'P.custrecord_cryo_fechalimitepago as fecha_limite_pago',
-  'P.custrecord_cryo_importepagado as importe_pagado',
+  'INVOICE.total as importe_pagado',
   'INVOICE.tranid as invoice_tranid',
   'CONTRACT.netsuite_id as contract_id',
   'CONTRACT.name as contract_name',
@@ -163,6 +180,41 @@ const SELECT_COLUMNS = [
   'DUENIO.entityid as dueno_nombre',
   'COBRADOR.entityid as cobrador_nombre',
 ];
+
+/** Distinct invoice netsuite_ids paid in (month, year) - checked via EITHER linkage mechanism a
+ * payment might carry to its invoice: the bespoke custbody_cryo_associated_invoices_item custom
+ * field, OR NetSuite's own native payment-application relationship
+ * (netsuite_payment_invoice_links, synced from nexttransactionlink - see
+ * paymentInvoiceLinkSyncService.ts). The custom field ALONE silently missed most real payments -
+ * confirmed live that 58% of all payment-invoice applications since 2026-09-01 have it null despite
+ * being genuinely, fully applied to their invoice in NetSuite (e.g. FV-CRYOMEX-9068, NetSuite status
+ * "Pagado por completo", paid via PAGCRYOC-7707 with no custom field set at all) - that
+ * invoice/partida never showed up in this report for any dueño/cobrador until this fix, same root
+ * cause across every affected contract.
+ *
+ * Built as a UNION ALL joined in (not a correlated `WHERE EXISTS (... OR EXISTS (...))` per row) -
+ * confirmed live the correlated-OR form made SQL Server abandon its index seeks entirely: a single
+ * month's query went from >120s (timed out) to ~1s once rewritten as a join against this
+ * precomputed set. */
+function paidInvoicesThisMonth(db: Knex, month: number, year: number): Knex.QueryBuilder {
+  const viaCustomField = db('netsuite_payments as PAY')
+    .whereNotNull('PAY.custbody_cryo_associated_invoices_item')
+    .whereRaw('MONTH(PAY.trandate) = ?', [month])
+    .whereRaw('YEAR(PAY.trandate) = ?', [year])
+    .select('PAY.custbody_cryo_associated_invoices_item as invoice_id');
+
+  const viaNativeLink = db('netsuite_payment_invoice_links as LINK')
+    .innerJoin('netsuite_payments as PAY', 'PAY.netsuite_id', 'LINK.payment_id')
+    .whereRaw('MONTH(PAY.trandate) = ?', [month])
+    .whereRaw('YEAR(PAY.trandate) = ?', [year])
+    .select('LINK.invoice_id as invoice_id');
+
+  // Plain UNION (not UNION ALL) - deliberately deduplicates to one row per invoice_id, so joining
+  // this into baseQuery below can never multiply a partida's row just because its invoice happens
+  // to have more than one qualifying payment this month (two partial payments, or the same payment
+  // matching both linkage methods at once).
+  return viaCustomField.union(viaNativeLink);
+}
 
 function baseQuery(
   db: Knex,
@@ -174,16 +226,12 @@ function baseQuery(
   const qb = db('netsuite_partidas as P')
     .innerJoin('netsuite_invoices as INVOICE', 'INVOICE.netsuite_id', 'P.custrecord_cryo_facturarelacionada')
     .innerJoin('netsuite_contracts as CONTRACT', 'CONTRACT.netsuite_id', 'P.custrecord_cryo_numcontrato')
-    .leftJoin('netsuite_employees as DUENIO', 'DUENIO.netsuite_id', 'CONTRACT.custrecord_cryo_duenio')
+    .innerJoin(paidInvoicesThisMonth(db, month, year).as('PAID'), 'PAID.invoice_id', 'INVOICE.netsuite_id')
+    .leftJoin('netsuite_employees as DUENIO', function (this: Knex.JoinClause) {
+      this.on(db.raw('DUENIO.netsuite_id = COALESCE(INVOICE.custbody_cryo_duenio, CONTRACT.custrecord_cryo_duenio)'));
+    })
     .leftJoin('netsuite_employees as COBRADOR', 'COBRADOR.netsuite_id', 'INVOICE.custbody_cryo_cobrador')
-    .where('P.isinactive', 'F')
-    .whereExists(function (this: Knex.QueryBuilder) {
-      this.select(1)
-        .from('netsuite_payments as PAY')
-        .whereRaw('PAY.custbody_cryo_associated_invoices_item = INVOICE.netsuite_id')
-        .whereRaw('MONTH(PAY.trandate) = ?', [month])
-        .whereRaw('YEAR(PAY.trandate) = ?', [year]);
-    });
+    .where('P.isinactive', 'F');
 
   if (restrictSubsidiaries !== null) {
     applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
@@ -195,7 +243,12 @@ function baseQuery(
   return qb;
 }
 
-/** Shared by the JSON report route and the CSV export - same rows, same grouping, two shapes. */
+/** Shared by the JSON report route and the CSV export - same rows, same grouping, two shapes. A
+ * "self cobrador/dueño" caller (see resolveSelfCobradorDuenoId) sees the SAME full report as anyone
+ * else, for every cobrador/dueño - just capped to the subsidiaria(s) where they themselves have
+ * contracts (restrictSubsidiaries, computed by the caller via resolveSelfCobradorDuenoSubsidiarias),
+ * per explicit instruction - NOT narrowed down to only their own assigned contracts within that
+ * subsidiaria. */
 export async function getCobranzaCommissionsReport(
   db: Knex,
   month: number,
@@ -275,6 +328,61 @@ export async function getCobranzaCommissionsReport(
     contract.asignado_tipo = asignacion.tipo;
   }
   return contracts;
+}
+
+/**
+ * Resolves a signed-in user (by their Entra email) to a NetSuite employee - and only returns that
+ * employee's netsuite_id if they've actually ever been the resolved Dueño or Cobrador on at least
+ * one invoice (or, for Dueño, on at least one contract directly - see baseQuery's COALESCE), same
+ * "self access without an explicit grant" pattern as commissionsRepository.ts's
+ * resolveSelfVendedorId, so a cobrador/dueño with no 'cobranza_commissions' grant still sees their
+ * own collections by default, scoped to just themselves (never every contract) - see
+ * contractReportsController.ts's loadCommissionsData for the equivalent full-access-vs-self
+ * branching this mirrors.
+ */
+export async function resolveSelfCobradorDuenoId(db: Knex, email: string | null): Promise<string | null> {
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const employee = (await db('netsuite_employees').whereRaw('LOWER(email) = ?', [normalized]).select('netsuite_id').first()) as
+    | { netsuite_id: string }
+    | undefined;
+  if (!employee) return null;
+
+  const [isCobrador, isDuenoOnInvoice, isDuenoOnContract] = await Promise.all([
+    db('netsuite_invoices').where('custbody_cryo_cobrador', employee.netsuite_id).select(1).first(),
+    db('netsuite_invoices').where('custbody_cryo_duenio', employee.netsuite_id).select(1).first(),
+    db('netsuite_contracts').where('custrecord_cryo_duenio', employee.netsuite_id).select(1).first(),
+  ]);
+
+  return isCobrador || isDuenoOnInvoice || isDuenoOnContract ? employee.netsuite_id : null;
+}
+
+/**
+ * The distinct subsidiarias (custrecord_cryo_subsidiaria_partida, the SAME column
+ * applySubsidiaryRestriction enforces on the main report) among partidas where this employee is the
+ * resolved Dueño or Cobrador - a self cobrador/dueño may only ever see cobranza commissions in the
+ * subsidiaria(s) where they actually have contracts, per explicit instruction. Deliberately NOT
+ * `permissions.allowedSubsidiaries` (that's empty for a caller with no explicit grant at all, which
+ * would zero out their own results) - same reasoning contractReportsController.ts's
+ * loadCommissionsData documents for why the self-vendedor path skips subsidiary restriction
+ * entirely; here, unlike there, the restriction is exactly what was asked for, computed from the
+ * employee's REAL contracts rather than any permission grant.
+ */
+export async function resolveSelfCobradorDuenoSubsidiarias(db: Knex, employeeId: string): Promise<Set<string>> {
+  const rows = (await db('netsuite_partidas as P')
+    .innerJoin('netsuite_invoices as INVOICE', 'INVOICE.netsuite_id', 'P.custrecord_cryo_facturarelacionada')
+    .innerJoin('netsuite_contracts as CONTRACT', 'CONTRACT.netsuite_id', 'P.custrecord_cryo_numcontrato')
+    .where('P.isinactive', 'F')
+    .andWhere((builder) => {
+      builder
+        .where('INVOICE.custbody_cryo_cobrador', employeeId)
+        .orWhere('INVOICE.custbody_cryo_duenio', employeeId)
+        .orWhere('CONTRACT.custrecord_cryo_duenio', employeeId);
+    })
+    .distinct('P.custrecord_cryo_subsidiaria_partida as subsidiaria_id')) as Array<{ subsidiaria_id: string | null }>;
+
+  return new Set(rows.map((r) => r.subsidiaria_id).filter((id): id is string => id !== null));
 }
 
 /** Contract ids with at least one OTHER still-unpaid partida (custrecord_cryo_estatuspartida not

@@ -35,6 +35,15 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   otrosContrato: '0 3,7,11,15,19,23 * * *',
   fcellsContrato: '5 3,7,11,15,19,23 * * *',
   customerAddress: '10 3,7,11,15,19,23 * * *',
+  // Zammad tickets aren't a NetSuite entity and don't share this batch's 4-hour cadence - a
+  // helpdesk ticket's state is live, support-facing data, so it syncs every 15 minutes per
+  // explicit instruction, independent of the ERP batches above.
+  zammadTicket: '*/15 * * * *',
+  // NetSuite's native payment-to-invoice application links (nexttransactionlink) - a cheap,
+  // low-churn relationship once a payment settles, so it doesn't need this batch's cadence either;
+  // every 30 minutes keeps cobranzaCommissionsRepository.ts's "was this invoice paid" check
+  // reasonably fresh without adding real NetSuite API load.
+  paymentInvoiceLink: '*/30 * * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -87,6 +96,8 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     PE_SERVICIO: mergeEntityConfig('peServicio', raw?.PE_SERVICIO),
     FCELLS_CONTRATO: mergeEntityConfig('fcellsContrato', raw?.FCELLS_CONTRATO),
     CUSTOMER_ADDRESS: mergeEntityConfig('customerAddress', raw?.CUSTOMER_ADDRESS),
+    ZAMMAD_TICKET: mergeEntityConfig('zammadTicket', raw?.ZAMMAD_TICKET),
+    PAYMENT_INVOICE_LINK: mergeEntityConfig('paymentInvoiceLink', raw?.PAYMENT_INVOICE_LINK),
   };
 }
 

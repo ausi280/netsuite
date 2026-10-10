@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../components/layout/AppShell';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
@@ -323,42 +323,60 @@ export function ComercialReportPage() {
       ) : null}
 
       <div className={styles.panels}>
-        <TareasVencidasSection view={view} />
+        <TareasVencidasSection
+          view={view}
+          selectedVendedorKey={selectedVendedorKey}
+          activoFilter={activoFilter}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
       </div>
     </AppShell>
   );
-}
-
-function tareasDefaultDateFrom(): string {
-  const now = new Date();
-  return toDateInputValue(new Date(now.getFullYear(), now.getMonth() - 3, now.getDate()));
 }
 
 const TAREAS_VENCIDAS_PAGE_SIZE = 50;
 
 /**
  * "Tareas Vencidas" - Cryo.dbo.Tarea rows that are overdue and were never properly closed on time:
- * FechaFinal (the task's own deadline) already passed, AND FechaCierre is either null (never
- * closed) or earlier than FechaFinal. A Comercial sub-report, embedded directly in this page
- * rather than a separate one (per explicit instruction) - filtered by the task's own FechaFinal
- * date range (not FechaCaptura, hence its own independent date state/filters from the rest of this
- * page) and optionally one vendedor. Gated by its own 'tareas_vencidas' permission, additional to
- * 'prospectos' - see api/src-ts/reporting/tareasVencidasController.ts.
+ * FechaInicial (the task's own deadline - per explicit instruction, not FechaFinal) already passed,
+ * AND FechaCierre is either null (never closed) or earlier than FechaInicial. A Comercial
+ * sub-report, embedded directly in this page rather than a separate one (per explicit instruction)
+ * - filtered by the task's own FechaInicial date range (not FechaCaptura, hence its own independent
+ * date state/filters from the rest of this page). Gated by its own 'tareas_vencidas' permission,
+ * additional to 'prospectos' - see api/src-ts/reporting/tareasVencidasController.ts.
  *
  * `view` is the SAME page-level Global/Por Vendedor switch the rest of ComercialReportPage uses -
- * "Global" shows only the all-vendedores-combined chart, "Por Vendedor" shows the vendedor selector
- * plus that one vendedor's chart AND the detail table/export (the table only ever makes sense
- * filtered to one vendedor, per explicit instruction).
+ * "Global" shows only the all-vendedores-combined chart, "Por Vendedor" shows that one vendedor's
+ * chart AND the detail table/export (the table only ever makes sense filtered to one vendedor, per
+ * explicit instruction). `selectedVendedorKey`, `activoFilter`, `dateFrom`/`dateTo` are the SAME
+ * page-level state the rest of ComercialReportPage uses too (per explicit instruction: one
+ * vendedor selector, one Activos/Todos switch, and one Desde/Hasta filter driving the whole page,
+ * not a second independent set just for this section, even though this section's own date range
+ * technically means something different - FechaInicial of the task, not FechaCaptura of the
+ * prospecto) - this section no longer owns any of them, it only resolves the shared vendedor key
+ * into the raw Vendedor ids its own queries need (see selectedVendedorIds below).
  */
-function TareasVencidasSection({ view }: { view: ComercialView }) {
+function TareasVencidasSection({
+  view,
+  selectedVendedorKey,
+  activoFilter,
+  dateFrom,
+  dateTo,
+}: {
+  view: ComercialView;
+  selectedVendedorKey: string | null;
+  activoFilter: ActivoFilter;
+  dateFrom: string;
+  dateTo: string;
+}) {
   const { getAccessToken } = useApiToken();
-  const [dateFrom, setDateFrom] = useState(tareasDefaultDateFrom());
-  const [dateTo, setDateTo] = useState(defaultDateTo());
-  const [selectedVendedorKey, setSelectedVendedorKey] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(TAREAS_VENCIDAS_PAGE_SIZE);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  const activoOnly = activoFilter === 'active';
 
   const vendedoresQuery = useTareaVencidaVendedores(dateFrom, dateTo, view === 'vendedor');
   const vendedorGroups = useMemo(() => groupVendedorOptions(vendedoresQuery.data ?? []), [vendedoresQuery.data]);
@@ -367,39 +385,35 @@ function TareasVencidasSection({ view }: { view: ComercialView }) {
     [vendedorGroups, selectedVendedorKey],
   );
 
+  // selectedVendedorKey/activoFilter/dateFrom/dateTo are all owned by the parent page now (one
+  // shared selector/switch/date-range for the whole page, per explicit instruction) - reset back
+  // to page 1 whenever any of them changes out from under this section, same as this section's own
+  // pageSize changes already did.
+  useEffect(() => {
+    setPage(1);
+  }, [selectedVendedorKey, activoFilter, dateFrom, dateTo]);
+
   const { data, isLoading, isError, error, refetch } = useTareasVencidas(
     dateFrom,
     dateTo,
     selectedVendedorIds,
     page,
     pageSize,
+    activoOnly,
     view === 'vendedor',
   );
 
-  // Always fetches both breakdowns unfiltered (see fetchTareasVencidasByMonth) - the vendedor chart
-  // below just slices `porVendedor` by the same selectedVendedorIds the table/export already use,
-  // so changing the vendedor dropdown never needs a refetch, same pattern as the rest of this page.
-  const byMonthQuery = useTareasVencidasByMonth(dateFrom, dateTo);
+  // Always fetches both breakdowns unfiltered by vendedor (see fetchTareasVencidasByMonth) - the
+  // vendedor chart below just slices `porVendedor` by the same selectedVendedorIds the table/export
+  // already use, so changing the vendedor selector never needs a refetch, same pattern as the rest
+  // of this page. activoOnly DOES need a refetch though - it's applied server-side (Tarea.Activo),
+  // not sliced client-side, since the backend returns pre-aggregated counts, not granular rows.
+  const byMonthQuery = useTareasVencidasByMonth(dateFrom, dateTo, activoOnly);
   const globalByMonth = useMemo(() => bucketTareaVencidasByMonth(byMonthQuery.data?.global ?? []), [byMonthQuery.data]);
   const vendedorByMonth = useMemo(
     () => bucketTareaVencidasByMonthForVendedores(byMonthQuery.data?.porVendedor ?? [], selectedVendedorIds),
     [byMonthQuery.data, selectedVendedorIds],
   );
-
-  function handleDateFromChange(value: string) {
-    setDateFrom(value);
-    setPage(1);
-  }
-
-  function handleDateToChange(value: string) {
-    setDateTo(value);
-    setPage(1);
-  }
-
-  function handleVendedorChange(value: string) {
-    setSelectedVendedorKey(value || null);
-    setPage(1);
-  }
 
   function handlePageSizeChange(nextPageSize: number) {
     setPageSize(nextPageSize);
@@ -411,7 +425,7 @@ function TareasVencidasSection({ view }: { view: ComercialView }) {
     setExportError(null);
     try {
       const token = await getAccessToken();
-      const blob = await fetchTareasVencidasExportCsv(token, { dateFrom, dateTo, vendedorIds: selectedVendedorIds });
+      const blob = await fetchTareasVencidasExportCsv(token, { dateFrom, dateTo, vendedorIds: selectedVendedorIds, activoOnly });
       downloadBlob(blob, `tareas-vencidas-${dateFrom}-a-${dateTo}.csv`);
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'No se pudo exportar el CSV.');
@@ -421,7 +435,7 @@ function TareasVencidasSection({ view }: { view: ComercialView }) {
   }
 
   const columns: SimpleColumn<TareaVencidaRow>[] = [
-    { key: 'fecha_final', header: 'Fecha Final (vencida)', render: (r) => formatDate(r.fecha_final) },
+    { key: 'fecha_inicial', header: 'Fecha Inicial (vencida)', render: (r) => formatDate(r.fecha_inicial) },
     { key: 'tipo_tarea', header: 'Tipo', render: (r) => r.tipo_tarea || '—' },
     { key: 'fecha_cierre', header: 'Fecha Cierre', render: (r) => (r.fecha_cierre ? formatDate(r.fecha_cierre) : 'Nunca cerrada') },
     { key: 'vendedor', header: 'Vendedor', render: (r) => r.vendedor || '—' },
@@ -437,18 +451,8 @@ function TareasVencidasSection({ view }: { view: ComercialView }) {
       <div className={chartStyles.chartCard}>
         <h2 className={styles.panelTitle}>Tareas Vencidas</h2>
         <p className={styles.panelSubtitle}>
-          Tareas cuya fecha final ya pasó y que nunca se cerraron a tiempo (sin cierre, o cerradas después de vencer).
+          Tareas cuya fecha inicial ya pasó y que nunca se cerraron a tiempo (sin cierre, o cerradas después de vencer).
         </p>
-        <div className={styles.dateFilters}>
-          <label className={styles.dateLabel}>
-            Desde
-            <input type="date" className={styles.dateInput} value={dateFrom} max={dateTo} onChange={(event) => handleDateFromChange(event.target.value)} />
-          </label>
-          <label className={styles.dateLabel}>
-            Hasta
-            <input type="date" className={styles.dateInput} value={dateTo} min={dateFrom} onChange={(event) => handleDateToChange(event.target.value)} />
-          </label>
-        </div>
       </div>
 
       {view === 'global' ? (
@@ -469,16 +473,8 @@ function TareasVencidasSection({ view }: { view: ComercialView }) {
             <div className={styles.panelHeader}>
               <div>
                 <h2 className={styles.panelTitle}>Tareas Vencidas · Por vendedor, por mes</h2>
-                <p className={styles.panelSubtitle}>Selecciona un vendedor para ver su distribución de tareas vencidas.</p>
+                <p className={styles.panelSubtitle}>Selecciona un vendedor arriba para ver su distribución de tareas vencidas.</p>
               </div>
-              <select className={styles.vendedorSelect} value={selectedVendedorKey ?? ''} onChange={(event) => handleVendedorChange(event.target.value)}>
-                <option value="">Seleccione un vendedor...</option>
-                {vendedorGroups.map((v) => (
-                  <option key={v.key} value={v.key}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
             </div>
             {selectedVendedorKey === null ? (
               <EmptyState message="Selecciona un vendedor para ver su distribución de tareas vencidas." />

@@ -31,12 +31,15 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  * matter what" nivel the vendedor is on - a fixed business rule, not one of the configurable
  * commission_level_tiers. Otros Contratos have no equivalent bonus.
  *
- * Separately, each distinct año with MORE THAN ONE "Anualidad" partida on a contract (a year of
- * storage the customer prepaid in advance) pays a flat $100 bonus - only ONE per year, regardless
- * of how many service-type Anualidad lines exist for that same year (e.g. SCU/TCU/ADN/Placenta
- * anualidad lines for the same año are still a single $100, not $100 each) - grouped by año for
- * display. A year with only a single Anualidad line doesn't pay at all - it takes more than one
- * (e.g. SCU + TCU) to count as a real renewal worth a bonus. "Procesamiento" partidas are a
+ * Separately, a contract with MORE THAN ONE distinct año of "Anualidad" partidas (i.e. it has
+ * renewed/prepaid storage for more than one future year, not just its initial year) pays a flat
+ * $100 bonus for EACH of those distinct años - the threshold is about how many YEARS the contract
+ * has, not how many service-type Anualidad lines exist within a given year (e.g. a year billed with
+ * both SCU and TCU anualidad lines is still a single $100 for that year, not $100 each - grouped by
+ * año for display). A contract with only a single distinct año of Anualidad partidas doesn't pay at
+ * all yet - it takes more than one año on file to count as a real multi-year renewal worth a bonus
+ * (e.g. a package pre-generating 10 future años' worth of Anualidad lines at sale time pays $100 x
+ * 10, since all 10 distinct años qualify once there's more than one). "Procesamiento" partidas are a
  * different charge (the one-time processing sale itself, already covered by the services total
  * above) and never count toward this bonus. Otros Contratos have no partidas of their own, so no
  * anualidad bonus applies to them either.
@@ -103,7 +106,9 @@ export interface ServiceCommissionLine {
 export interface AnualidadYearLine {
   anio: string;
   /** How many service-type Anualidad lines (SCU/TCU/ADN/etc.) exist for this año - informational
-   * only, since the $100 bonus is paid once per year regardless of this count. */
+   * only. Whether this año pays at all depends on how many DISTINCT años the contract has, not on
+   * this count (see the file-level comment) - the $100 is paid once per qualifying año regardless
+   * of how many service lines make it up. */
   count: number;
   /** Always ANUALIDAD_BONUS_PER_YEAR (one flat bonus for the year, not count * that amount). Null
    * when the caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
@@ -517,12 +522,17 @@ function buildContractCommission(
     const anio = partida.custrecord_cryo_aniopartida ?? 'N/A';
     anualidadByYear.set(anio, (anualidadByYear.get(anio) ?? 0) + 1);
   }
-  // A year with only 1 service-type Anualidad line doesn't pay - it takes more than one (e.g.
-  // SCU + TCU for the same año) to count as a real anualidad renewal worth a bonus.
-  const anualidades: AnualidadYearLine[] = Array.from(anualidadByYear.entries())
-    .filter(([, count]) => count > 1)
-    .map(([anio, count]) => ({ anio, count, monto: ANUALIDAD_BONUS_PER_YEAR }))
-    .sort((a, b) => a.anio.localeCompare(b.anio));
+  // A contract with only 1 distinct año of Anualidad partidas doesn't pay at all - it takes more
+  // than one año on file to count as a real multi-year renewal worth a bonus. The threshold is
+  // about how many YEARS exist, not how many service lines exist within a given year (e.g. a single
+  // SCU-only package pre-generating 10 future años still qualifies and pays all 10, even though
+  // every individual año only ever has exactly one service line).
+  const anualidades: AnualidadYearLine[] =
+    anualidadByYear.size > 1
+      ? Array.from(anualidadByYear.entries())
+          .map(([anio, count]) => ({ anio, count, monto: ANUALIDAD_BONUS_PER_YEAR }))
+          .sort((a, b) => a.anio.localeCompare(b.anio))
+      : [];
   const anualidadBonusTotal = docsComplete ? anualidades.length * ANUALIDAD_BONUS_PER_YEAR : 0;
 
   return {

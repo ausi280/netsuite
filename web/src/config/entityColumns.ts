@@ -240,6 +240,26 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
     ],
     defaultSort: { sortBy: 'lastmodifieddate_dt', sortDir: 'desc' },
   },
+  'zammad-tickets': {
+    label: 'Tickets Zammad',
+    idColumn: 'id',
+    columns: [
+      { key: 'number', header: 'Número' },
+      { key: 'title', header: 'Título' },
+      { key: 'asunto', header: 'Asunto' },
+      { key: 'group_name', header: 'Grupo' },
+      { key: 'state_name', header: 'Estado' },
+      { key: 'priority_name', header: 'Prioridad' },
+      { key: 'owner_name', header: 'Dueño' },
+      { key: 'customer_email', header: 'Cliente' },
+      { key: 'foliocontrato', header: 'Folio Contrato' },
+      { key: 'created_at_zammad', header: 'Fecha de Creación', format: 'datetime', sortable: true },
+      { key: 'first_response_at_zammad', header: 'Fecha de Primera Atención', format: 'datetime', sortable: true },
+      { key: 'close_at_zammad', header: 'Fecha de Cierre', format: 'datetime', sortable: true },
+      { key: 'updated_at_zammad', header: 'Actualizado', format: 'datetime', sortable: true },
+    ],
+    defaultSort: { sortBy: 'updated_at_zammad', sortDir: 'desc' },
+  },
 };
 
 /** The column key holding the subsidiary id for this entity, or null if it isn't filterable by subsidiary. */
@@ -264,4 +284,5 @@ export const entityOrder: ReportEntityKey[] = [
   'vendor-transactions',
   'otros-contratos',
   'fcells-contratos',
+  'zammad-tickets',
 ];

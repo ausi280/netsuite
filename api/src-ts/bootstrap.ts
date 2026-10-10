@@ -12,6 +12,7 @@ import { FamilyMemberRepository } from './repositories/familyMemberRepository';
 import { ServiceRepository } from './repositories/serviceRepository';
 import { InvoiceRepository } from './repositories/invoiceRepository';
 import { PaymentRepository } from './repositories/paymentRepository';
+import { PaymentInvoiceLinkRepository } from './repositories/paymentInvoiceLinkRepository';
 import { EmployeeRepository } from './repositories/employeeRepository';
 import { ReceivableRepository } from './repositories/receivableRepository';
 import { HospitalRepository } from './repositories/hospitalRepository';
@@ -28,12 +29,14 @@ import { OtrosContratoRepository } from './repositories/otrosContratoRepository'
 import { PeServicioRepository } from './repositories/peServicioRepository';
 import { FcellsContratoRepository } from './repositories/fcellsContratoRepository';
 import { CustomerAddressRepository } from './repositories/customerAddressRepository';
+import { ZammadTicketRepository } from './repositories/zammadTicketRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
 import { FamilyMemberSyncService } from './services/familyMemberSyncService';
 import { ServiceSyncService } from './services/serviceSyncService';
 import { InvoiceSyncService } from './services/invoiceSyncService';
 import { PaymentSyncService } from './services/paymentSyncService';
+import { PaymentInvoiceLinkSyncService } from './services/paymentInvoiceLinkSyncService';
 import { EmployeeSyncService } from './services/employeeSyncService';
 import { ReceivableSyncService } from './services/receivableSyncService';
 import { HospitalSyncService } from './services/hospitalSyncService';
@@ -50,7 +53,10 @@ import { OtrosContratoSyncService } from './services/otrosContratoSyncService';
 import { PeServicioSyncService } from './services/peServicioSyncService';
 import { FcellsContratoSyncService } from './services/fcellsContratoSyncService';
 import { CustomerAddressSyncService } from './services/customerAddressSyncService';
+import { ZammadTicketSyncService } from './services/zammadTicketSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
+import { ZammadHttpClient } from './http/zammadHttpClient';
+import { getZammadConfig } from './config';
 import type { EntitySyncService } from './services/types';
 
 export interface Bootstrapped {
@@ -99,7 +105,36 @@ export function bootstrap(): Bootstrapped {
     new OtrosContratoSyncService(db, http, syncState, rawStore, new OtrosContratoRepository(db), overlapMinutes),
     new FcellsContratoSyncService(db, http, syncState, rawStore, new FcellsContratoRepository(db), overlapMinutes),
     new CustomerAddressSyncService(db, http, syncState, rawStore, new CustomerAddressRepository(db), overlapMinutes),
+    new PaymentInvoiceLinkSyncService(db, http, syncState, rawStore, new PaymentInvoiceLinkRepository(db), overlapMinutes),
   ];
+
+  // Zammad isn't configured in every environment (ZAMMAD.RELAY_URL/RELAY_SECRET in config/env.json
+  // - see getZammadConfig()'s doc comment) - unlike every NetSuite service above, a missing config
+  // here must not crash bootstrap() for the other 22 entities, the server, and the CLI alike.
+  try {
+    const zammadConfig = getZammadConfig();
+    const zammadHttp = new ZammadHttpClient(
+      { relayUrl: zammadConfig.relayUrl, relaySecret: zammadConfig.relaySecret, timeoutMs: config.erp.SYNC.HTTP_TIMEOUT_MS },
+      config.erp.SYNC.RETRY,
+      createLogger('http:zammad'),
+    );
+    services.push(
+      new ZammadTicketSyncService(
+        db,
+        zammadHttp,
+        syncState,
+        rawStore,
+        new ZammadTicketRepository(db),
+        overlapMinutes,
+        config.erp.SYNC.PAGE_SIZE,
+      ),
+    );
+  } catch (error: any) {
+    createLogger('bootstrap').warn(
+      { error: error?.message ?? String(error) },
+      'Zammad not configured - skipping zammadTicket sync registration',
+    );
+  }
 
   const entityLimiter = new Bottleneck({ maxConcurrent: config.erp.SYNC.MAX_CONCURRENT_ENTITIES });
   const orchestrator = new SyncOrchestrator(services, entityLimiter);

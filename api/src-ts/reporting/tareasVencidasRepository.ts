@@ -2,12 +2,12 @@ import type { Knex } from 'knex';
 
 /**
  * "Tareas Vencidas" - Cryo.dbo.Tarea rows that are overdue and were never properly closed on
- * time: FechaFinal (the task's own deadline) already passed, AND FechaCierre (when it was
- * actually closed) is either null (never closed at all) or earlier than FechaFinal. Requested
- * verbatim as: "Tarea with FechaFinal less than today and FechaCierre null or less than
- * FechaFinal". Same legacy Cryo.dbo database every other Comercial/Prospectos/Marketing report
- * reads from, joined the same way (Tarea -> Lead -> Prospecto -> Vendedor) so "vendedor" here
- * means the same thing it does everywhere else in this app.
+ * time: FechaInicial (the task's own deadline, per explicit instruction - NOT FechaFinal, despite
+ * this report's original design) already passed, AND FechaCierre (when it was actually closed) is
+ * either null (never closed at all) or earlier than FechaInicial. Same legacy Cryo.dbo database
+ * every other Comercial/Prospectos/Marketing report reads from, joined the same way (Tarea -> Lead
+ * -> Prospecto -> Vendedor) so "vendedor" here means the same thing it does everywhere else in
+ * this app.
  *
  * Paginated like prospectosRepository.ts's getProspectosPaged - Cryo.dbo.Tarea has over a million
  * rows total and ~118k match this condition historically (confirmed live), far too many to fetch
@@ -18,10 +18,11 @@ export interface TareaVencidaRow {
   id_tarea: number;
   tipo_tarea: string | null;
   fecha_inicial: string | null;
-  /** The task's own deadline - always in the past for every row this query returns. */
+  /** The task's own final date - informational only; fecha_inicial is what determines "vencida"
+   * now (see the file-level comment). */
   fecha_final: string | null;
-  /** Null (never closed) or earlier than fecha_final (closed late is NOT included here - see the
-   * file-level comment: only FechaCierre IS NULL OR FechaCierre < FechaFinal match). */
+  /** Null (never closed) or earlier than fecha_inicial (closed late is NOT included here - see the
+   * file-level comment: only FechaCierre IS NULL OR FechaCierre < FechaInicial match). */
   fecha_cierre: string | null;
   nota: string | null;
   activo: boolean;
@@ -57,7 +58,7 @@ function clampPageSize(value: unknown): number {
 }
 
 /** Next-day exclusive upper bound - same convention as prospectosRepository.ts's
- * exclusiveUpperBound, needed since Tarea.FechaFinal is a real datetime column. */
+ * exclusiveUpperBound, needed since Tarea.FechaInicial is a real datetime column. */
 function exclusiveUpperBound(dateOnly: string): string {
   const date = new Date(`${dateOnly}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + 1);
@@ -69,18 +70,23 @@ function baseTareasVencidasQuery(
   fechaInicial: string,
   fechaFinal: string,
   vendedorIds: number[] | null,
+  activoOnly: boolean,
 ): Knex.QueryBuilder {
   const qb = legacyDb('Cryo.dbo.Tarea as t')
     .innerJoin('Cryo.dbo.Lead as l', 't.ID_Lead', 'l.ID_Lead')
     .innerJoin('Cryo.dbo.Prospecto as p', 'p.ID_Prospecto', 'l.ID_Prospecto')
     .innerJoin('Cryo.dbo.Vendedor as v', 'v.ID_Vendedor', 'p.ID_Vendedor')
-    .where('t.FechaFinal', '<', legacyDb.raw('GETDATE()'))
-    .andWhere((builder) => builder.whereNull('t.FechaCierre').orWhereRaw('t.FechaCierre < t.FechaFinal'))
-    .andWhere('t.FechaFinal', '>=', fechaInicial)
-    .andWhere('t.FechaFinal', '<', exclusiveUpperBound(fechaFinal));
+    .where('t.FechaInicial', '<', legacyDb.raw('GETDATE()'))
+    .andWhere((builder) => builder.whereNull('t.FechaCierre').orWhereRaw('t.FechaCierre < t.FechaInicial'))
+    .andWhere('t.FechaInicial', '>=', fechaInicial)
+    .andWhere('t.FechaInicial', '<', exclusiveUpperBound(fechaFinal));
 
   if (vendedorIds && vendedorIds.length > 0) {
     qb.whereIn('p.ID_Vendedor', vendedorIds);
+  }
+
+  if (activoOnly) {
+    qb.andWhere('t.Activo', 1);
   }
 
   return qb;
@@ -126,16 +132,17 @@ export async function getTareasVencidasPaged(
   vendedorIds: number[] | null,
   pageParam: unknown,
   pageSizeParam: unknown,
+  activoOnly: boolean,
 ): Promise<TareasVencidasPage> {
   const page = clampPage(pageParam);
   const pageSize = clampPageSize(pageSizeParam);
 
   const [rows, countRow] = await Promise.all([
-    selectTareaVencidaColumns(baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, vendedorIds), legacyDb)
-      .orderBy('t.FechaFinal', 'asc')
+    selectTareaVencidaColumns(baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, vendedorIds, activoOnly), legacyDb)
+      .orderBy('t.FechaInicial', 'asc')
       .offset((page - 1) * pageSize)
       .limit(pageSize) as Promise<TareaVencidaRow[]>,
-    baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, vendedorIds).count('* as count').first() as Promise<
+    baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, vendedorIds, activoOnly).count('* as count').first() as Promise<
       { count: number } | undefined
     >,
   ]);
@@ -152,15 +159,16 @@ export function getTareasVencidasForExport(
   fechaInicial: string,
   fechaFinal: string,
   vendedorIds: number[] | null,
+  activoOnly: boolean,
 ): Promise<TareaVencidaRow[]> {
-  return selectTareaVencidaColumns(baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, vendedorIds), legacyDb).orderBy(
-    't.FechaFinal',
+  return selectTareaVencidaColumns(baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, vendedorIds, activoOnly), legacyDb).orderBy(
+    't.FechaInicial',
     'asc',
   ) as Promise<TareaVencidaRow[]>;
 }
 
 export async function getTareaVencidaVendedorOptions(legacyDb: Knex, fechaInicial: string, fechaFinal: string): Promise<TareaVendedorOption[]> {
-  return baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, null).distinct(
+  return baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, null, false).distinct(
     'p.ID_Vendedor as id_vendedor',
     'v.Nombre as vendedor',
   ) as unknown as Promise<TareaVendedorOption[]>;
@@ -178,7 +186,7 @@ export interface TareaVencidaByVendedorMonthRow extends TareaVencidaMonthRow {
 }
 
 export interface TareasVencidasByMonthResult {
-  /** Every matching Tarea in the period, grouped by (año, mes) of FechaFinal, across every
+  /** Every matching Tarea in the period, grouped by (año, mes) of FechaInicial, across every
    * vendedor - for the "globalmente" chart. */
   global: TareaVencidaMonthRow[];
   /** Same grouping, split per vendedor - one row per (vendedor, año, mes) combination actually
@@ -193,18 +201,28 @@ export interface TareasVencidasByMonthResult {
  * unlike that report's tareas-per-prospecto count, there's no correlated subquery in play here
  * forcing a client-side aggregation; a plain COUNT(*)/GROUP BY over real columns works fine and
  * avoids pulling all ~118k matching Tarea rows into Node just to count them by month. */
-export async function getTareasVencidasByMonth(legacyDb: Knex, fechaInicial: string, fechaFinal: string): Promise<TareasVencidasByMonthResult> {
+export async function getTareasVencidasByMonth(
+  legacyDb: Knex,
+  fechaInicial: string,
+  fechaFinal: string,
+  activoOnly: boolean,
+): Promise<TareasVencidasByMonthResult> {
   const [global, porVendedor] = await Promise.all([
-    baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, null)
-      .select(legacyDb.raw('YEAR(t.FechaFinal) as anio'), legacyDb.raw('MONTH(t.FechaFinal) as mes'))
+    baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, null, activoOnly)
+      .select(legacyDb.raw('YEAR(t.FechaInicial) as anio'), legacyDb.raw('MONTH(t.FechaInicial) as mes'))
       .count('* as cantidad')
-      .groupByRaw('YEAR(t.FechaFinal), MONTH(t.FechaFinal)')
-      .orderByRaw('YEAR(t.FechaFinal), MONTH(t.FechaFinal)') as unknown as Promise<Array<{ anio: number; mes: number; cantidad: number | string }>>,
-    baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, null)
-      .select('p.ID_Vendedor as id_vendedor', 'v.Nombre as vendedor', legacyDb.raw('YEAR(t.FechaFinal) as anio'), legacyDb.raw('MONTH(t.FechaFinal) as mes'))
+      .groupByRaw('YEAR(t.FechaInicial), MONTH(t.FechaInicial)')
+      .orderByRaw('YEAR(t.FechaInicial), MONTH(t.FechaInicial)') as unknown as Promise<Array<{ anio: number; mes: number; cantidad: number | string }>>,
+    baseTareasVencidasQuery(legacyDb, fechaInicial, fechaFinal, null, activoOnly)
+      .select(
+        'p.ID_Vendedor as id_vendedor',
+        'v.Nombre as vendedor',
+        legacyDb.raw('YEAR(t.FechaInicial) as anio'),
+        legacyDb.raw('MONTH(t.FechaInicial) as mes'),
+      )
       .count('* as cantidad')
-      .groupByRaw('p.ID_Vendedor, v.Nombre, YEAR(t.FechaFinal), MONTH(t.FechaFinal)')
-      .orderByRaw('v.Nombre, YEAR(t.FechaFinal), MONTH(t.FechaFinal)') as unknown as Promise<
+      .groupByRaw('p.ID_Vendedor, v.Nombre, YEAR(t.FechaInicial), MONTH(t.FechaInicial)')
+      .orderByRaw('v.Nombre, YEAR(t.FechaInicial), MONTH(t.FechaInicial)') as unknown as Promise<
       Array<{ id_vendedor: number; vendedor: string | null; anio: number; mes: number; cantidad: number | string }>
     >,
   ]);

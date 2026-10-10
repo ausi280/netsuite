@@ -26,6 +26,8 @@ const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   peServicio: 'PE_SERVICIO',
   fcellsContrato: 'FCELLS_CONTRATO',
   customerAddress: 'CUSTOMER_ADDRESS',
+  zammadTicket: 'ZAMMAD_TICKET',
+  paymentInvoiceLink: 'PAYMENT_INVOICE_LINK',
 };
 
 /**

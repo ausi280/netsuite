@@ -15,7 +15,8 @@ export type ReportEntityKey =
   | 'vendors'
   | 'vendor-transactions'
   | 'otros-contratos'
-  | 'fcells-contratos';
+  | 'fcells-contratos'
+  | 'zammad-tickets';
 
 /**
  * Every key grantable via the per-user allowedEntities permission list: every ReportEntityKey
@@ -35,6 +36,10 @@ export type ReportEntityKey =
  * 'cobranza_commissions' is likewise its own standalone grant (NOT an additional gate on top of
  * 'partidas') for the Cobranza Commissions sub-report reached from the Partidas report - see
  * api/src-ts/reporting/cobranzaCommissionsController.ts.
+ * 'postventa' is likewise its own standalone grant for the bespoke Postventa status-tiles report
+ * (new/en proceso/cerrado/resuelto counts over zammad_tickets, group "Postventa" only) - NOT an
+ * additional gate on top of 'zammad-tickets', the separate generic Zammad Tickets table view
+ * (every group) - see api/src-ts/reporting/postventaController.ts.
  */
 export type PermissionKey =
   | ReportEntityKey
@@ -43,7 +48,8 @@ export type PermissionKey =
   | 'commissions'
   | 'commissions_amounts'
   | 'tareas_vencidas'
-  | 'cobranza_commissions';
+  | 'cobranza_commissions'
+  | 'postventa';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -66,6 +72,10 @@ export interface PaginatedRows<T = ReportRow> {
   pageSize: number;
   total: number;
   totalPages: number;
+  /** Only meaningful for 'payments' - whether this caller may actually charge (the "Cobrar"
+   * button), as opposed to merely viewing the list (which a self cobrador/dueño may do without the
+   * explicit 'payments' grant). Always true for every other entity. */
+  canCharge?: boolean;
 }
 
 export interface ReportRecord {
@@ -106,6 +116,193 @@ export interface EntitiesResponse {
   canAccessCommissions: boolean;
   canAccessProspectos: boolean;
   canAccessCobranzaCommissions: boolean;
+  canAccessPostventa: boolean;
+}
+
+// Postventa status tiles - see api/src-ts/reporting/postventaRepository.ts for exactly how each
+// bucket is defined.
+export interface PostventaSummary {
+  nuevos: number;
+  enProceso: number;
+  cerrados: number;
+  resueltos: number;
+}
+
+export interface PostventaSummaryResponse {
+  success: true;
+  data: PostventaSummary;
+}
+
+export interface PostventaOwnerOption {
+  owner_id: string;
+  owner_name: string;
+}
+
+export interface PostventaOwnersResponse {
+  success: true;
+  data: PostventaOwnerOption[];
+}
+
+export interface PostventaMonthRow {
+  anio: number;
+  mes: number;
+  nuevos: number;
+  enProceso: number;
+  cerrados: number;
+  resueltos: number;
+}
+
+export interface PostventaByMonthResponse {
+  success: true;
+  data: PostventaMonthRow[];
+}
+
+export interface PostventaAsuntoRow {
+  asunto: string;
+  cantidad: number;
+}
+
+export interface PostventaByAsuntoResponse {
+  success: true;
+  data: PostventaAsuntoRow[];
+}
+
+// Resuelto-state ticket counts per (año, mes) of their own close_at_zammad ("fecha resuelto") -
+// see api/src-ts/reporting/postventaRepository.ts's getPostventaResueltosByMonth.
+export interface PostventaResueltoMonthRow {
+  anio: number;
+  mes: number;
+  resueltos: number;
+}
+
+export interface PostventaResueltosByMonthResponse {
+  success: true;
+  data: PostventaResueltoMonthRow[];
+}
+
+// Zammad Tickets by-month chart (all groups) - creados/primeraAtencion/cerrados counted
+// independently per month, NOT mutually exclusive buckets like Postventa's estado - see
+// api/src-ts/reporting/zammadTicketsAnalyticsRepository.ts.
+export interface ZammadTicketsMonthRow {
+  anio: number;
+  mes: number;
+  creados: number;
+  primeraAtencion: number;
+  cerrados: number;
+}
+
+export interface ZammadTicketsByMonthResponse {
+  success: true;
+  data: ZammadTicketsMonthRow[];
+}
+
+export type PostventaEstado = 'nuevo' | 'enProceso' | 'cerrado' | 'resuelto';
+
+export interface PostventaTicketRow {
+  id: number;
+  number: string | null;
+  title: string | null;
+  asunto: string | null;
+  state_name: string | null;
+  priority_name: string | null;
+  owner_name: string | null;
+  customer_email: string | null;
+  foliocontrato: string | null;
+  telefono: string | null;
+  empresa: string | null;
+  created_at_zammad: string | null;
+  first_response_at_zammad: string | null;
+  close_at_zammad: string | null;
+  updated_at_zammad: string | null;
+  estado_resumen: PostventaEstado;
+}
+
+export interface PostventaTicketsResponse {
+  success: true;
+  data: PostventaTicketRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+// Reembolsos (Cryo.dbo.ControlReembolsos cash-refund workflow) - lives under the Postventa page,
+// see api/src-ts/reporting/reembolsosRepository.ts for the full classification rules.
+export type ReembolsoBucket =
+  | 'pendiente'
+  | 'sinReembolso'
+  | 'aplicadoTransferencia'
+  | 'aplicadoAnualidades'
+  | 'aplicadoNuevoContrato'
+  | 'aplicadoGarantias'
+  | 'otro';
+
+export interface ReembolsoEmpresaOption {
+  empresa_id: string;
+  nombre: string;
+}
+
+export interface ReembolsoEmpresasResponse {
+  success: true;
+  data: ReembolsoEmpresaOption[];
+}
+
+export interface ReembolsoMonthRow {
+  anio: number;
+  mes: number;
+  bucket: ReembolsoBucket;
+  monto: number;
+}
+
+export interface ReembolsoByMonthResponse {
+  success: true;
+  data: ReembolsoMonthRow[];
+}
+
+export interface ReembolsoCausaRow {
+  causa: string;
+  monto: number;
+}
+
+export interface ReembolsoByCausaResponse {
+  success: true;
+  data: ReembolsoCausaRow[];
+}
+
+// Closed reembolsos (any non-pendiente bucket) per (año, mes) of their own fecha cierre - see
+// api/src-ts/reporting/reembolsosRepository.ts's getReembolsosCerradosByMonth.
+export interface ReembolsoCierreMonthRow {
+  anio: number;
+  mes: number;
+  cantidad: number;
+  monto: number;
+}
+
+export interface ReembolsoCerradosByMonthResponse {
+  success: true;
+  data: ReembolsoCierreMonthRow[];
+}
+
+export interface ReembolsoRow {
+  id_reembolso_producto: number;
+  folio: string | null;
+  empresa_id: string;
+  empresa: string;
+  producto: string;
+  causa: string;
+  bucket: ReembolsoBucket;
+  anio: number;
+  mes: number;
+  monto: number;
+}
+
+export interface ReembolsosResponse {
+  success: true;
+  data: ReembolsoRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 }
 
 // HR Report - backed by the Peopleforce/Sesame HR data warehouse (DwhCryoholdcoLatam_Prod), a
@@ -386,11 +583,11 @@ export interface CobranzaCommissionPartidaRow {
   finvigencia: string | null;
   fecha_limite_pago: string | null;
   invoice_tranid: string | null;
-  /** custrecord_cryo_importepagado - the invoice's own paid total (tax included), repeated across
-   * every partida that invoice covers - NOT per-partida, so summing this across partidas requires
-   * deduping by `invoice_tranid` first (one count per distinct invoice). Null for partidas synced
-   * before this field was captured. */
-  importe_pagado: string | null;
+  /** The invoice's own `total` (tax included) - NOT custrecord_cryo_importepagado, which disagreed
+   * with the real invoice total on ~69% of October partidas (confirmed live) - repeated across
+   * every partida that invoice covers, so summing this across partidas requires deduping by
+   * `invoice_tranid` first (one count per distinct invoice). */
+  importe_pagado: string | number | null;
   /** True when this contract also has a procesamiento (enrollment/processing fee) partida paid in
    * the same month - this partida was part of the contract's initial billing package, not an
    * ongoing renewal. Excluded from accumulated sums, but still shown, labeled "Paquete Inicial de
