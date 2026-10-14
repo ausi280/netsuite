@@ -125,13 +125,17 @@ export interface CobranzaCommissionContractGroup {
    * only ever has one distinct invoice paid in a given month (confirmed live: 2 of 1,869 contracts
    * had more than one over the last 12 months, and neither diverged), but nothing enforces that, so
    * this is a representative value, not a verified-unique one. */
+  dueno_id: string | null;
   dueno_nombre: string | null;
+  cobrador_id: string | null;
   cobrador_nombre: string | null;
   /** The resolved assignee's display name (a Dueño's or Cobrador's name), or the literal "Bolsa" /
    * "Paquete inicial de anualidades" label - see computeAsignacion. Use `asignado_tipo` to tell
    * these apart programmatically rather than matching this string. */
   asignado_a: string;
   asignado_tipo: AsignacionTipo;
+  /** The resolved Dueño's/Cobrador's employee netsuite_id - null for Bolsa / Paquete inicial. */
+  asignado_id: string | null;
   years: CobranzaCommissionYearGroup[];
   partidas_count: number;
 }
@@ -154,7 +158,9 @@ interface RawRow {
   contract_name: string | null;
   folio_sistema_anterior: string | null;
   subsidiaria_id: string | null;
+  dueno_id: string | null;
   dueno_nombre: string | null;
+  cobrador_id: string | null;
   cobrador_nombre: string | null;
 }
 
@@ -177,7 +183,9 @@ const SELECT_COLUMNS = [
   'CONTRACT.name as contract_name',
   'CONTRACT.custrecord_cryo_contratosistemaanterior as folio_sistema_anterior',
   'CONTRACT.custrecord_cryo_subsidiariacontrato as subsidiaria_id',
+  'DUENIO.netsuite_id as dueno_id',
   'DUENIO.entityid as dueno_nombre',
+  'COBRADOR.netsuite_id as cobrador_id',
   'COBRADOR.entityid as cobrador_nombre',
 ];
 
@@ -273,10 +281,13 @@ export async function getCobranzaCommissionsReport(
         contract_name: row.contract_name,
         folio_sistema_anterior: row.folio_sistema_anterior,
         subsidiaria_id: row.subsidiaria_id,
+        dueno_id: row.dueno_id,
         dueno_nombre: row.dueno_nombre,
+        cobrador_id: row.cobrador_id,
         cobrador_nombre: row.cobrador_nombre,
         asignado_a: BOLSA,
         asignado_tipo: 'bolsa',
+        asignado_id: null,
         years: [],
         partidas_count: 0,
       };
@@ -326,6 +337,7 @@ export async function getCobranzaCommissionsReport(
       : computeAsignacion(contract, year, month, pastDebtContractIds.has(contract.contract_id));
     contract.asignado_a = asignacion.nombre;
     contract.asignado_tipo = asignacion.tipo;
+    contract.asignado_id = asignacion.tipo === 'dueno' ? contract.dueno_id : asignacion.tipo === 'cobrador' ? contract.cobrador_id : null;
   }
   return contracts;
 }

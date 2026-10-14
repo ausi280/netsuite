@@ -4,6 +4,7 @@ import {
   ESTADO_RESUMEN_LABELS,
   getPostventaByAsunto,
   getPostventaByMonth,
+  getPostventaByOwner,
   getPostventaOwnerOptions,
   getPostventaResueltosByMonth,
   getPostventaSummary,
@@ -12,6 +13,8 @@ import {
 } from './postventaRepository';
 import type { PostventaFilters, PostventaTicketRow } from './postventaRepository';
 import { csvRow, formatExportValue } from './csvExport';
+import { getLegacyDb } from '../db/legacyDbConnection';
+import { folioCandidates, getLatestReembolsoBucketByFolio, REEMBOLSO_BUCKET_LABELS } from './reembolsosRepository';
 import type { UserPermissions } from './permissionsRepository';
 
 /** Standalone grant, same shape as 'tareas_vencidas'/'cobranza_commissions' - NOT an additional
@@ -25,11 +28,12 @@ function isDateOnly(value: unknown): value is string {
 }
 
 function parseFilters(req: Request): PostventaFilters {
-  const { dateFrom, dateTo, ownerId } = req.query;
+  const { dateFrom, dateTo, ownerId, empresaId } = req.query;
   return {
     dateFrom: isDateOnly(dateFrom) ? dateFrom : undefined,
     dateTo: isDateOnly(dateTo) ? dateTo : undefined,
     ownerId: typeof ownerId === 'string' && ownerId.trim() !== '' ? ownerId.trim() : undefined,
+    empresaId: typeof empresaId === 'string' && empresaId.trim() !== '' ? empresaId.trim() : undefined,
   };
 }
 
@@ -96,6 +100,33 @@ export async function getPostventaResueltosByMonthRoute(req: Request, res: Respo
   res.status(200).json({ success: true, data });
 }
 
+/** GET /api/reports/postventa/by-owner?dateFrom=&dateTo=&ownerId= - the four counts per agent
+ * (owner), plus one "Sin asignar" row, for the by-agent chart. */
+export async function getPostventaByOwnerRoute(req: Request, res: Response): Promise<void> {
+  if (!isPostventaAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const data = await getPostventaByOwner(knex, parseFilters(req));
+  res.status(200).json({ success: true, data });
+}
+
+/** Fills in each ticket's reembolso_estatus from the legacy Cryo database (matched by contract
+ * folio - see folioCandidates). A failure there only blanks the column - the tickets grid itself
+ * lives in this app's own database and shouldn't go down with the legacy one. */
+async function attachReembolsoEstatus(rows: PostventaTicketRow[]): Promise<void> {
+  try {
+    const byFolio = await getLatestReembolsoBucketByFolio(getLegacyDb(), rows.flatMap((r) => folioCandidates(r.foliocontrato)));
+    for (const row of rows) {
+      const folio = folioCandidates(row.foliocontrato).find((f) => byFolio.has(f));
+      row.reembolso_estatus = folio ? byFolio.get(folio)! : null;
+    }
+  } catch (error) {
+    console.warn('[postventa] No se pudo consultar el estatus de reembolso:', error instanceof Error ? error.message : error);
+  }
+}
+
 /** GET /api/reports/postventa/tickets?dateFrom=&dateTo=&ownerId=&page=&pageSize= - the paginated
  * detail table. */
 export async function listPostventaTicketsRoute(req: Request, res: Response): Promise<void> {
@@ -105,6 +136,7 @@ export async function listPostventaTicketsRoute(req: Request, res: Response): Pr
   }
 
   const result = await getPostventaTicketsPaged(knex, parseFilters(req), req.query.page, req.query.pageSize);
+  await attachReembolsoEstatus(result.data);
   res.status(200).json({ success: true, ...result });
 }
 
@@ -113,6 +145,7 @@ const EXPORT_COLUMNS: Array<{ key: keyof PostventaTicketRow; header: string }> =
   { key: 'title', header: 'Título' },
   { key: 'asunto', header: 'Asunto' },
   { key: 'estado_resumen', header: 'Estatus' },
+  { key: 'reembolso_estatus', header: 'Estatus Reembolso' },
   { key: 'state_name', header: 'Estado Zammad' },
   { key: 'priority_name', header: 'Prioridad' },
   { key: 'owner_name', header: 'Dueño' },
@@ -128,6 +161,7 @@ const EXPORT_COLUMNS: Array<{ key: keyof PostventaTicketRow; header: string }> =
 
 function formatPostventaValue(key: keyof PostventaTicketRow, value: unknown): string {
   if (key === 'estado_resumen') return ESTADO_RESUMEN_LABELS[value as keyof typeof ESTADO_RESUMEN_LABELS] ?? String(value);
+  if (key === 'reembolso_estatus') return value ? (REEMBOLSO_BUCKET_LABELS[value as keyof typeof REEMBOLSO_BUCKET_LABELS] ?? String(value)) : '';
   return formatExportValue(key, value);
 }
 
@@ -141,6 +175,7 @@ export async function exportPostventaRoute(req: Request, res: Response): Promise
   }
 
   const rows = await getPostventaTicketsForExport(knex, parseFilters(req));
+  await attachReembolsoEstatus(rows);
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="postventa.csv"');

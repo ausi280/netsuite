@@ -36,6 +36,8 @@ export type ReportEntityKey =
  * 'cobranza_commissions' is likewise its own standalone grant (NOT an additional gate on top of
  * 'partidas') for the Cobranza Commissions sub-report reached from the Partidas report - see
  * api/src-ts/reporting/cobranzaCommissionsController.ts.
+ * 'cobranza_goals' is a further gate on top of 'cobranza_commissions' - lets the caller capture
+ * (edit) the monthly Dueño/Cobrador goals; without it, goals are view-only.
  * 'postventa' is likewise its own standalone grant for the bespoke Postventa status-tiles report
  * (new/en proceso/cerrado/resuelto counts over zammad_tickets, group "Postventa" only) - NOT an
  * additional gate on top of 'zammad-tickets', the separate generic Zammad Tickets table view
@@ -49,6 +51,7 @@ export type PermissionKey =
   | 'commissions_amounts'
   | 'tareas_vencidas'
   | 'cobranza_commissions'
+  | 'cobranza_goals'
   | 'postventa';
 
 export interface EntitySummary {
@@ -152,6 +155,24 @@ export interface PostventaMonthRow {
   resueltos: number;
 }
 
+/** Same four counts as PostventaMonthRow, per agent (owner) instead of per month - see
+ * api/src-ts/reporting/postventaRepository.ts's getPostventaByOwner. */
+export interface PostventaOwnerRow {
+  /** null for the "Sin asignar" row. */
+  owner_id: string | null;
+  owner_label: string;
+  nuevos: number;
+  enProceso: number;
+  cerrados: number;
+  resueltos: number;
+  total: number;
+}
+
+export interface PostventaByOwnerResponse {
+  success: true;
+  data: PostventaOwnerRow[];
+}
+
 export interface PostventaByMonthResponse {
   success: true;
   data: PostventaMonthRow[];
@@ -160,6 +181,8 @@ export interface PostventaByMonthResponse {
 export interface PostventaAsuntoRow {
   asunto: string;
   cantidad: number;
+  /** The same count split by agent ("Sin asignar" for unassigned) - sums to `cantidad`. */
+  por_agente: Array<{ agente: string; cantidad: number }>;
 }
 
 export interface PostventaByAsuntoResponse {
@@ -215,6 +238,9 @@ export interface PostventaTicketRow {
   close_at_zammad: string | null;
   updated_at_zammad: string | null;
   estado_resumen: PostventaEstado;
+  /** The ticket's contract's latest reembolso status (matched by folio against the Reembolsos data),
+   * or null when it has none. */
+  reembolso_estatus: ReembolsoBucket | null;
 }
 
 export interface PostventaTicketsResponse {
@@ -607,7 +633,9 @@ export interface CobranzaCommissionContractGroup {
   contract_name: string | null;
   folio_sistema_anterior: string | null;
   subsidiaria_id: string | null;
+  dueno_id: string | null;
   dueno_nombre: string | null;
+  cobrador_id: string | null;
   cobrador_nombre: string | null;
   /** The resolved assignee's display name (a Dueño's or Cobrador's name), or the literal "Bolsa" /
    * "Paquete inicial de anualidades" label - see
@@ -615,6 +643,8 @@ export interface CobranzaCommissionContractGroup {
    * programmatically rather than matching this string. */
   asignado_a: string;
   asignado_tipo: AsignacionTipo;
+  /** The resolved Dueño's/Cobrador's employee netsuite_id - null for Bolsa / Paquete inicial. */
+  asignado_id: string | null;
   years: CobranzaCommissionYearGroup[];
   partidas_count: number;
 }
@@ -1108,3 +1138,35 @@ export interface ApiError {
 }
 
 export type ApiResult<T> = ApiSuccess<T> | ApiError;
+
+// Monthly collections goals (metas) per Dueño/Cobrador - a month-wide default plus per-employee
+// overrides, see api/src-ts/reporting/cobranzaGoalsRepository.ts.
+export interface CobranzaGoalPerson {
+  employee_id: string;
+  nombre: string;
+  /** This person's own override for the month, or null when they inherit the month's default. */
+  override_amount: number | null;
+  /** override_amount ?? default_amount (null when neither is set). */
+  goal_amount: number | null;
+}
+
+export interface CobranzaGoalExcludedPerson {
+  employee_id: string;
+  nombre: string;
+}
+
+export interface CobranzaGoalsForMonth {
+  year: number;
+  month: number;
+  default_amount: number | null;
+  people: CobranzaGoalPerson[];
+  /** Permanently left out of goals (every month) - never given a goal, never charted. */
+  excluded: CobranzaGoalExcludedPerson[];
+}
+
+export interface CobranzaGoalsResponse {
+  success: true;
+  data: CobranzaGoalsForMonth;
+  can_edit: boolean;
+  can_view_all: boolean;
+}

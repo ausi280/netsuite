@@ -24,7 +24,7 @@ const DB_RETRY_CONFIG: DbRetryConfig = {
  * tracking over time, not a balance to recompute from scratch each run.
  *
  * Watermark is Zammad's own `updated_at` (ISO-8601), fed into the next run's search query as
- * `updated_at:>=<watermark>` - same overlap-buffer-minutes safety margin BaseSyncService uses, to
+ * `updated_at:[<watermark> TO *]` - same overlap-buffer-minutes safety margin BaseSyncService uses, to
  * tolerate Zammad's search index lagging slightly behind a ticket's real last-modified time.
  */
 export class ZammadTicketSyncService implements EntitySyncService {
@@ -43,7 +43,10 @@ export class ZammadTicketSyncService implements EntitySyncService {
   private buildQuery(watermark: Date | null): string {
     if (!watermark) return '*';
     const effective = new Date(watermark.getTime() - this.overlapBufferMinutes * 60_000);
-    return `updated_at:>='${effective.toISOString()}'`;
+    // Elasticsearch range syntax - NOT `updated_at:>='<iso>'`: confirmed live that the quoted (and
+    // the unquoted) `>=` form with a full ISO timestamp silently matches zero tickets on Zammad's
+    // search, which left this sync "succeeding" with nothing new from 2026-10-07 to 2026-10-13.
+    return `updated_at:[${effective.toISOString()} TO *]`;
   }
 
   async run(ctx: SyncRunContext): Promise<SyncResult> {

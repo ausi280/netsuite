@@ -18,6 +18,13 @@ interface SelectFilterProps {
   allLabel: string;
 }
 
+interface DateRangeFilterProps {
+  /** YYYY-MM-DD, or '' for unbounded. */
+  from: string;
+  to: string;
+  onChange: (range: { from: string; to: string }) => void;
+}
+
 interface ReportToolbarProps {
   initialSearch: string;
   onSearchChange: (value: string) => void;
@@ -26,6 +33,8 @@ interface ReportToolbarProps {
   subsidiaryFilter?: SubsidiaryFilterProps;
   /** A second, generic single-select filter (e.g. Partidas' Estatus) - omit entirely to hide it. */
   statusFilter?: SelectFilterProps;
+  /** Desde/Hasta date inputs (e.g. Otros Contratos' Fecha) - omit entirely to hide them. */
+  dateRangeFilter?: DateRangeFilterProps;
   /** Omit to hide the export button entirely (not used yet on every page that renders this toolbar). */
   onExport?: () => void;
   isExporting?: boolean;
@@ -34,7 +43,16 @@ interface ReportToolbarProps {
 const DEBOUNCE_MS = 350;
 
 /** Search input debounced ~350ms before bubbling up to the URL-driven query state. */
-export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsidiaryFilter, statusFilter, onExport, isExporting }: ReportToolbarProps) {
+export function ReportToolbar({
+  initialSearch,
+  onSearchChange,
+  totalLabel,
+  subsidiaryFilter,
+  statusFilter,
+  dateRangeFilter,
+  onExport,
+  isExporting,
+}: ReportToolbarProps) {
   const [value, setValue] = useState(initialSearch);
 
   // Keep the local input in sync if the URL param changes from elsewhere (e.g. back/forward nav).
@@ -102,6 +120,28 @@ export function ReportToolbar({ initialSearch, onSearchChange, totalLabel, subsi
             </option>
           ))}
         </select>
+      ) : null}
+      {dateRangeFilter ? (
+        <>
+          <input
+            type="date"
+            className={styles.subsidiarySelect}
+            value={dateRangeFilter.from}
+            max={dateRangeFilter.to || undefined}
+            onChange={(event) => dateRangeFilter.onChange({ from: event.target.value, to: dateRangeFilter.to })}
+            aria-label="Desde"
+            title="Desde"
+          />
+          <input
+            type="date"
+            className={styles.subsidiarySelect}
+            value={dateRangeFilter.to}
+            min={dateRangeFilter.from || undefined}
+            onChange={(event) => dateRangeFilter.onChange({ from: dateRangeFilter.from, to: event.target.value })}
+            aria-label="Hasta"
+            title="Hasta"
+          />
+        </>
       ) : null}
       <span className={styles.total}>{totalLabel}</span>
       {onExport ? (

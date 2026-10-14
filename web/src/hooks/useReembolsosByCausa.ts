@@ -7,7 +7,7 @@ export function useReembolsosByCausa(params: ReembolsoFiltersParams) {
   const { getAccessToken } = useApiToken();
 
   return useQuery({
-    queryKey: ['reembolsos-by-causa', params.anio, params.empresaId],
+    queryKey: ['reembolsos-by-causa', params.dateFrom, params.dateTo, params.empresaId],
     queryFn: async () => {
       const token = await getAccessToken();
       return fetchReembolsosByCausa(token, params);

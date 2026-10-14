@@ -13,12 +13,17 @@ import type { ReembolsoFilters, ReembolsoRow } from './reembolsosRepository';
 import { csvRow } from './csvExport';
 import { isPostventaAllowed } from './postventaController';
 
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Returns null only when a date is present but malformed - both are optional (omitted =
+ * unbounded), same date-range filter as postventaController.ts's parseFilters. */
 function parseFilters(req: Request): ReembolsoFilters | null {
-  const anio = Number(req.query.anio);
-  if (!Number.isInteger(anio) || anio < 2000 || anio > 2100) return null;
+  const dateFrom = typeof req.query.dateFrom === 'string' && req.query.dateFrom !== '' ? req.query.dateFrom : undefined;
+  const dateTo = typeof req.query.dateTo === 'string' && req.query.dateTo !== '' ? req.query.dateTo : undefined;
+  if ((dateFrom && !DATE_ONLY.test(dateFrom)) || (dateTo && !DATE_ONLY.test(dateTo))) return null;
 
   const empresaId = typeof req.query.empresaId === 'string' && req.query.empresaId.trim() !== '' ? req.query.empresaId.trim() : undefined;
-  return { anio, empresaId };
+  return { dateFrom, dateTo, empresaId };
 }
 
 /** GET /api/reports/postventa/reembolsos/empresas - every empresa with at least one Reembolso on
@@ -34,7 +39,7 @@ export async function listReembolsoEmpresasRoute(req: Request, res: Response): P
   res.status(200).json({ success: true, data });
 }
 
-/** GET /api/reports/postventa/reembolsos/by-month?anio=&empresaId= - monto per (mes, bucket). */
+/** GET /api/reports/postventa/reembolsos/by-month?dateFrom=&dateTo=&empresaId= - monto per (mes, bucket). */
 export async function getReembolsosByMonthRoute(req: Request, res: Response): Promise<void> {
   if (!isPostventaAllowed(req.permissions)) {
     res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
@@ -43,7 +48,7 @@ export async function getReembolsosByMonthRoute(req: Request, res: Response): Pr
 
   const filters = parseFilters(req);
   if (!filters) {
-    res.status(400).json({ success: false, message: 'Provee un ?anio=YYYY válido.' });
+    res.status(400).json({ success: false, message: 'dateFrom/dateTo deben tener formato YYYY-MM-DD.' });
     return;
   }
 
@@ -51,7 +56,7 @@ export async function getReembolsosByMonthRoute(req: Request, res: Response): Pr
   res.status(200).json({ success: true, data });
 }
 
-/** GET /api/reports/postventa/reembolsos/by-causa?anio=&empresaId= - monto per causa de reembolso. */
+/** GET /api/reports/postventa/reembolsos/by-causa?dateFrom=&dateTo=&empresaId= - monto per causa de reembolso. */
 export async function getReembolsosByCausaRoute(req: Request, res: Response): Promise<void> {
   if (!isPostventaAllowed(req.permissions)) {
     res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
@@ -60,7 +65,7 @@ export async function getReembolsosByCausaRoute(req: Request, res: Response): Pr
 
   const filters = parseFilters(req);
   if (!filters) {
-    res.status(400).json({ success: false, message: 'Provee un ?anio=YYYY válido.' });
+    res.status(400).json({ success: false, message: 'dateFrom/dateTo deben tener formato YYYY-MM-DD.' });
     return;
   }
 
@@ -68,7 +73,7 @@ export async function getReembolsosByCausaRoute(req: Request, res: Response): Pr
   res.status(200).json({ success: true, data });
 }
 
-/** GET /api/reports/postventa/reembolsos/cerrados-by-month?anio=&empresaId= - count + monto of
+/** GET /api/reports/postventa/reembolsos/cerrados-by-month?dateFrom=&dateTo=&empresaId= - count + monto of
  * closed reembolsos per (mes, año) of their own fecha cierre (FechaActualizacion). */
 export async function getReembolsosCerradosByMonthRoute(req: Request, res: Response): Promise<void> {
   if (!isPostventaAllowed(req.permissions)) {
@@ -78,7 +83,7 @@ export async function getReembolsosCerradosByMonthRoute(req: Request, res: Respo
 
   const filters = parseFilters(req);
   if (!filters) {
-    res.status(400).json({ success: false, message: 'Provee un ?anio=YYYY válido.' });
+    res.status(400).json({ success: false, message: 'dateFrom/dateTo deben tener formato YYYY-MM-DD.' });
     return;
   }
 
@@ -86,7 +91,7 @@ export async function getReembolsosCerradosByMonthRoute(req: Request, res: Respo
   res.status(200).json({ success: true, data });
 }
 
-/** GET /api/reports/postventa/reembolsos?anio=&empresaId=&page=&pageSize= - the paginated detail table. */
+/** GET /api/reports/postventa/reembolsos?dateFrom=&dateTo=&empresaId=&page=&pageSize= - the paginated detail table. */
 export async function listReembolsosRoute(req: Request, res: Response): Promise<void> {
   if (!isPostventaAllowed(req.permissions)) {
     res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
@@ -95,7 +100,7 @@ export async function listReembolsosRoute(req: Request, res: Response): Promise<
 
   const filters = parseFilters(req);
   if (!filters) {
-    res.status(400).json({ success: false, message: 'Provee un ?anio=YYYY válido.' });
+    res.status(400).json({ success: false, message: 'dateFrom/dateTo deben tener formato YYYY-MM-DD.' });
     return;
   }
 
@@ -120,7 +125,7 @@ function formatReembolsoValue(key: keyof ReembolsoRow, value: unknown): string {
   return String(value);
 }
 
-/** GET /api/reports/postventa/reembolsos/export?anio=&empresaId= - the same filtered rows
+/** GET /api/reports/postventa/reembolsos/export?dateFrom=&dateTo=&empresaId= - the same filtered rows
  * listReembolsosRoute would page through, streamed out as one CSV file. */
 export async function exportReembolsosRoute(req: Request, res: Response): Promise<void> {
   if (!isPostventaAllowed(req.permissions)) {
@@ -130,14 +135,15 @@ export async function exportReembolsosRoute(req: Request, res: Response): Promis
 
   const filters = parseFilters(req);
   if (!filters) {
-    res.status(400).json({ success: false, message: 'Provee un ?anio=YYYY válido.' });
+    res.status(400).json({ success: false, message: 'dateFrom/dateTo deben tener formato YYYY-MM-DD.' });
     return;
   }
 
   const rows = await getReembolsosForExport(getLegacyDb(), filters);
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="reembolsos-${filters.anio}.csv"`);
+  const range = [filters.dateFrom, filters.dateTo].filter(Boolean).join('_a_');
+  res.setHeader('Content-Disposition', `attachment; filename="reembolsos${range ? `-${range}` : ''}.csv"`);
   res.write('﻿');
   res.write(csvRow(EXPORT_COLUMNS.map((c) => c.header)));
   for (const row of rows) {

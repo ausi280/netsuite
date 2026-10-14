@@ -7,6 +7,8 @@ import type {
   ComercialReportResponse,
   CobranzaCommissionContractGroup,
   CobranzaCommissionsResponse,
+  CobranzaGoalsForMonth,
+  CobranzaGoalsResponse,
   CommissionLevelTier,
   CommissionsResponse,
   ContractDossier,
@@ -34,6 +36,8 @@ import type {
   PostventaAsuntoRow,
   PostventaByAsuntoResponse,
   PostventaByMonthResponse,
+  PostventaByOwnerResponse,
+  PostventaOwnerRow,
   PostventaMonthRow,
   PostventaOwnerOption,
   PostventaOwnersResponse,
@@ -97,6 +101,9 @@ export interface EntityRowsParams {
   estatus?: string;
   /** vendor-transactions-only: narrows to one vendor's rows (the per-vendor drill-down view) - ignored by every other entity. */
   vendorId?: string;
+  /** otros-contratos-only: YYYY-MM-DD, inclusive, on the contract's Fecha - ignored by every other entity. */
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export async function fetchEntities(token: string | null): Promise<EntitiesResult> {
@@ -116,6 +123,9 @@ export interface PostventaFiltersParams {
   dateFrom?: string;
   dateTo?: string;
   ownerId?: string;
+  /** Cryo empresa id - the same one the Reembolsos section filters by (mapped to Zammad's empresa
+   * server-side). */
+  empresaId?: string;
 }
 
 function postventaQueryParams(params: PostventaFiltersParams): URLSearchParams {
@@ -123,6 +133,7 @@ function postventaQueryParams(params: PostventaFiltersParams): URLSearchParams {
   if (params.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params.dateTo) query.set('dateTo', params.dateTo);
   if (params.ownerId) query.set('ownerId', params.ownerId);
+  if (params.empresaId) query.set('empresaId', params.empresaId);
   return query;
 }
 
@@ -144,6 +155,13 @@ export async function fetchPostventaOwners(token: string | null): Promise<Postve
 export async function fetchPostventaByMonth(token: string | null, params: PostventaFiltersParams): Promise<PostventaMonthRow[]> {
   const query = postventaQueryParams(params);
   const result = await apiFetch<PostventaByMonthResponse>(`/reports/postventa/by-month?${query.toString()}`, { token });
+  return result.data;
+}
+
+/** The four status counts per agent (plus "Sin asignar"), for the Postventa by-agent chart. */
+export async function fetchPostventaByOwner(token: string | null, params: PostventaFiltersParams): Promise<PostventaOwnerRow[]> {
+  const query = postventaQueryParams(params);
+  const result = await apiFetch<PostventaByOwnerResponse>(`/reports/postventa/by-owner?${query.toString()}`, { token });
   return result.data;
 }
 
@@ -191,13 +209,18 @@ export async function fetchPostventaExportCsv(token: string | null, params: Post
   return apiFetchBlob(`/reports/postventa/export?${query.toString()}`, { token });
 }
 
+/** Same date range as the Postventa tickets filter (on the reembolso's incidencia date) - the
+ * Postventa page drives both sections from one filter bar. */
 export interface ReembolsoFiltersParams {
-  anio: number;
+  dateFrom?: string;
+  dateTo?: string;
   empresaId?: string;
 }
 
 function reembolsoQueryParams(params: ReembolsoFiltersParams): URLSearchParams {
-  const query = new URLSearchParams({ anio: String(params.anio) });
+  const query = new URLSearchParams();
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
   if (params.empresaId) query.set('empresaId', params.empresaId);
   return query;
 }
@@ -253,7 +276,7 @@ export async function fetchReembolsos(token: string | null, params: ReembolsosPa
   return { data: result.data, page: result.page, pageSize: result.pageSize, total: result.total, totalPages: result.totalPages };
 }
 
-/** CSV of every matching Reembolso in the filtered año (unpaginated), same convention as
+/** CSV of every matching Reembolso in the filtered date range (unpaginated), same convention as
  * fetchPostventaExportCsv. */
 export async function fetchReembolsosExportCsv(token: string | null, params: ReembolsoFiltersParams): Promise<Blob> {
   const query = reembolsoQueryParams(params);
@@ -290,6 +313,8 @@ export async function fetchEntityRows(
   if (params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
   if (params.estatus) query.set('estatus', params.estatus);
   if (params.vendorId) query.set('vendorId', params.vendorId);
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
 
   return apiFetch<PaginatedRows>(`/reports/${entityKey}?${query.toString()}`, { token });
 }
@@ -301,6 +326,8 @@ export interface EntityExportParams {
   subsidiary: string[];
   estatus?: string;
   vendorId?: string;
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 /** CSV of every row matching the current search/subsidiary/sort filters (unpaginated - the whole filtered set). */
@@ -316,6 +343,8 @@ export async function fetchEntityExportCsv(
   if (params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
   if (params.estatus) query.set('estatus', params.estatus);
   if (params.vendorId) query.set('vendorId', params.vendorId);
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
 
   return apiFetchBlob(`/reports/${entityKey}/export?${query.toString()}`, { token });
 }
@@ -853,4 +882,62 @@ export async function fetchContratosReport(token: string | null, params: Contrat
 export async function fetchContratosReportExportCsv(token: string | null, params: Pick<ContratosReportParams, 'search' | 'subsidiary'>): Promise<Blob> {
   const query = buildContratosReportQuery(params);
   return apiFetchBlob(`/reports/contratos-report/export?${query.toString()}`, { token });
+}
+
+export interface CobranzaGoalsResult {
+  goals: CobranzaGoalsForMonth;
+  /** Whether the caller may capture goals (the 'cobranza_goals' grant). */
+  canEdit: boolean;
+  /** Full cobranza access - lists every Dueño/Cobrador, not just those in the caller's own report. */
+  canViewAll: boolean;
+}
+
+/** The month's default collections goal plus every Dueño/Cobrador's effective goal. */
+export async function fetchCobranzaGoals(token: string | null, month: number, year: number): Promise<CobranzaGoalsResult> {
+  const query = new URLSearchParams({ month: String(month), year: String(year) });
+  const result = await apiFetch<CobranzaGoalsResponse>(`/reports/cobranza-comisiones/metas?${query.toString()}`, { token });
+  return { goals: result.data, canEdit: result.can_edit, canViewAll: result.can_view_all };
+}
+
+export interface CobranzaGoalDefaultInput {
+  month: number;
+  year: number;
+  amount: number | null;
+  /** True drops every individual override for the month - "apply this value to everyone". */
+  clear_overrides: boolean;
+}
+
+export async function setCobranzaGoalDefault(token: string | null, input: CobranzaGoalDefaultInput): Promise<void> {
+  await apiFetch('/reports/cobranza-comisiones/metas/default', {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export interface CobranzaGoalOverrideInput {
+  month: number;
+  year: number;
+  /** null removes the override, so the person inherits the month's default again. */
+  amount: number | null;
+}
+
+export async function setCobranzaGoalOverride(token: string | null, employeeId: string, input: CobranzaGoalOverrideInput): Promise<void> {
+  await apiFetch('/reports/cobranza-comisiones/metas/employees/' + encodeURIComponent(employeeId), {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+/** Permanently removes a person from (or restores them to) the cobranza goals list - every month. */
+export async function setCobranzaGoalExclusion(token: string | null, employeeId: string, excluded: boolean): Promise<void> {
+  await apiFetch('/reports/cobranza-comisiones/metas/employees/' + encodeURIComponent(employeeId) + '/exclusion', {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ excluded }),
+  });
 }

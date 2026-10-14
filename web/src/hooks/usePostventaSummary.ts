@@ -7,7 +7,7 @@ export function usePostventaSummary(params: PostventaFiltersParams) {
   const { getAccessToken } = useApiToken();
 
   return useQuery({
-    queryKey: ['postventa-summary', params.dateFrom, params.dateTo, params.ownerId],
+    queryKey: ['postventa-summary', params.dateFrom, params.dateTo, params.ownerId, params.empresaId],
     queryFn: async () => {
       const token = await getAccessToken();
       return fetchPostventaSummary(token, params);

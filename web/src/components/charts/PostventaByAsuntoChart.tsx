@@ -1,6 +1,6 @@
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { PostventaAsuntoRow } from '../../api/types';
-import { ChartTooltip } from './ChartTooltip';
+import { StackedChartTooltip } from './StackedChartTooltip';
 import styles from './charts.module.css';
 
 interface PostventaByAsuntoChartProps {
@@ -8,28 +8,42 @@ interface PostventaByAsuntoChartProps {
   formatValue: (value: number) => string;
 }
 
-// Same fixed categorical palette hrAnalytics.ts's CATEGORY_PALETTE uses for other open-ended,
-// many-category breakdowns (brand/department) - asunto is free text, so the set of labels isn't
-// known in advance (today it's ~5: the 3 "Postventa::" motivos, the "Sin asunto" fallback below,
-// and the occasional outlier like "Software").
-const CATEGORY_PALETTE = [
+// Same fixed categorical palette hrAnalytics.ts's CATEGORY_PALETTE uses, assigned to agents in a
+// stable (alphabetical) order - never by rank, so an agent keeps their color as counts change.
+// "Sin asignar" isn't a person, so it always takes the recessive neutral instead.
+const AGENT_PALETTE = [
   'var(--color-primary)',
-  'var(--color-neutral-800)',
   'var(--color-secondary)',
-  'var(--color-neutral-300)',
+  'var(--color-neutral-800)',
   'var(--color-primary-tint1)',
   'var(--color-secondary-tint1)',
   'var(--color-primary-tint2)',
   'var(--color-secondary-tint2)',
   'var(--color-primary-tint3)',
 ];
+const SIN_ASIGNAR = 'Sin asignar';
+const SIN_ASIGNAR_COLOR = 'var(--color-neutral-300)';
+const TOTAL_KEY = '__total';
+// A zero-height series stacked last on every bar, purely to carry the total label - labeling the
+// last agent series instead would drop the total on any asunto that agent has no tickets for.
+const CAP_KEY = '__cap';
 
-/** Postventa ticket counts by (normalized) asunto, across the whole filtered range - a plain bar
- * chart (magnitude comparison across categories), not a monthly trend like PostventaByMonthChart,
- * since the question this answers is "which motivos dominate" rather than "how did this change over
- * time". Rows arrive pre-sorted descending by count from the backend. */
+/** Postventa ticket counts by (normalized) asunto across the whole filtered range, each bar
+ * stacked by agent (owner) - "which motivos dominate, and who's handling them". Rows arrive
+ * pre-sorted descending by count from the backend; the total is labeled on top of each bar. */
 export function PostventaByAsuntoChart({ rows, formatValue }: PostventaByAsuntoChartProps) {
-  const data = rows.map((row) => ({ key: row.asunto, count: row.cantidad }));
+  const agentes = Array.from(new Set(rows.flatMap((row) => row.por_agente.map((a) => a.agente)))).sort((a, b) =>
+    a === SIN_ASIGNAR ? 1 : b === SIN_ASIGNAR ? -1 : a.localeCompare(b),
+  );
+  const colorOf = (agente: string, index: number) => (agente === SIN_ASIGNAR ? SIN_ASIGNAR_COLOR : AGENT_PALETTE[index % AGENT_PALETTE.length]);
+
+  // Recharts keys series by dataKey - prefixed so an agent label can never collide with "key".
+  const data = rows.map((row) => ({
+    key: row.asunto,
+    [TOTAL_KEY]: row.cantidad,
+    [CAP_KEY]: 0,
+    ...Object.fromEntries(row.por_agente.map((a) => [`a:${a.agente}`, a.cantidad])),
+  }));
 
   return (
     <>
@@ -47,17 +61,34 @@ export function PostventaByAsuntoChart({ rows, formatValue }: PostventaByAsuntoC
               textAnchor={data.length > 3 ? 'end' : 'middle'}
               height={data.length > 3 ? 64 : 30}
             />
-            <YAxis tickFormatter={formatValue} tick={{ fill: 'var(--chart-muted)', fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
+            <YAxis
+              allowDecimals={false}
+              tickFormatter={formatValue}
+              tick={{ fill: 'var(--chart-muted)', fontSize: 12 }}
+              axisLine={false}
+              tickLine={false}
+              width={48}
+            />
             <Tooltip
               cursor={{ fill: 'var(--color-primary-soft)' }}
-              content={<ChartTooltip formatValue={formatValue} metricName="tickets" />}
+              content={
+                <StackedChartTooltip formatLabel={(label) => label} formatValue={formatValue} seriesLabel={(key) => key.replace(/^a:/, '')} />
+              }
             />
-            <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={48} animationDuration={450}>
-              {data.map((row, index) => (
-                <Cell key={row.key} fill={CATEGORY_PALETTE[index % CATEGORY_PALETTE.length]} />
-              ))}
+            {agentes.map((agente, index) => (
+              <Bar
+                key={agente}
+                dataKey={`a:${agente}`}
+                name={agente}
+                stackId="agente"
+                fill={colorOf(agente, index)}
+                maxBarSize={48}
+                animationDuration={450}
+              />
+            ))}
+            <Bar dataKey={CAP_KEY} stackId="agente" fill="transparent" tooltipType="none" legendType="none" maxBarSize={48} isAnimationActive={false}>
               <LabelList
-                dataKey="count"
+                dataKey={TOTAL_KEY}
                 position="top"
                 formatter={(value: unknown) => formatValue(Number(value ?? 0))}
                 style={{ fill: 'var(--color-neutral-900)', fontSize: 12 }}
@@ -65,6 +96,14 @@ export function PostventaByAsuntoChart({ rows, formatValue }: PostventaByAsuntoC
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      </div>
+      <div className={styles.legendRow}>
+        {agentes.map((agente, index) => (
+          <span className={styles.legendItem} key={agente}>
+            <span className={styles.legendSwatch} style={{ backgroundColor: colorOf(agente, index) }} aria-hidden="true" />
+            {agente}
+          </span>
+        ))}
       </div>
     </>
   );

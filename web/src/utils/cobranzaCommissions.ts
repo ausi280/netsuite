@@ -104,3 +104,37 @@ export function summarizeByAssignee(groups: CobranzaCommissionContractGroup[]): 
     totals: Array.from(entry.totals.entries()).map(([currency, total]) => ({ currency: currency || null, total })),
   }));
 }
+
+/** Net-of-IVA collected (MXN) per resolved Dueño/Cobrador employee id - the progress figure their
+ * monthly goal is measured against. Per person, not per (person, role): a goal belongs to the
+ * person, so what they collected as Dueño and as Cobrador both count toward it. Same rules as
+ * summarizeByAssignee - es_paquete_inicial partidas skipped, deduped by invoice - but only the
+ * IMPORTE_PAGADO_CURRENCY figure counts; a partida with no invoice total (the nominal-`importe`
+ * fallback there, in arbitrary currencies) can't be summed into an MXN goal. */
+export function collectedByEmployee(groups: CobranzaCommissionContractGroup[]): Map<string, number> {
+  const totals = new Map<string, number>();
+  const seenInvoices = new Map<string, Set<string>>();
+
+  for (const group of groups) {
+    if (!group.asignado_id) continue;
+    let seen = seenInvoices.get(group.asignado_id);
+    if (!seen) {
+      seen = new Set();
+      seenInvoices.set(group.asignado_id, seen);
+    }
+
+    for (const yearGroup of group.years) {
+      for (const partida of yearGroup.partidas) {
+        if (partida.es_paquete_inicial) continue;
+        const net = importePagadoNeto(partida.importe_pagado);
+        if (net === null) continue;
+        const invoiceKey = partida.invoice_tranid ?? partida.netsuite_id;
+        if (seen.has(invoiceKey)) continue;
+        seen.add(invoiceKey);
+        totals.set(group.asignado_id, (totals.get(group.asignado_id) ?? 0) + net);
+      }
+    }
+  }
+
+  return totals;
+}

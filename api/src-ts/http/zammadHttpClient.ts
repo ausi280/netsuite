@@ -85,7 +85,12 @@ export class ZammadHttpClient {
           headers: { 'X-Relay-Secret': this.config.relaySecret },
           timeout: this.config.timeoutMs ?? 30000,
         });
-        return Array.isArray(response.data) ? response.data : [];
+        // Anything but a ticket array (e.g. a relay/Zammad error object) must fail the run - quietly
+        // treating it as "no tickets" would let the sync report success while ingesting nothing.
+        if (!Array.isArray(response.data)) {
+          throw new Error(`Unexpected Zammad search response: ${JSON.stringify(response.data).slice(0, 300)}`);
+        }
+        return response.data;
       },
       this.retryConfig,
       this.logger,

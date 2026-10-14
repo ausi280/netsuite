@@ -8,6 +8,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { MultiSelectDropdown } from '../components/common/MultiSelectDropdown';
 import { CobranzaContractGroupCard } from '../components/reports/CobranzaContractGroupCard';
 import { AssigneeSummaryTiles } from '../components/reports/AssigneeSummaryTiles';
+import { CobranzaGoalsSection } from '../components/reports/CobranzaGoalsSection';
 import { useCobranzaCommissions } from '../hooks/useCobranzaCommissions';
 import { useEntities } from '../hooks/useEntities';
 import { useSubsidiaryOptions } from '../hooks/useSubsidiaryOptions';
@@ -230,6 +231,7 @@ export function CobranzaCommissionsPage() {
           </div>
         </div>
       ) : null}
+      {data ? <CobranzaGoalsSection month={month} year={year} groups={data} /> : null}
       {data && data.length > 0 ? <AssigneeSummaryTiles groups={data} /> : null}
       {isLoading ? <LoadingState label="Cargando comisiones de cobranza..." /> : null}
       {isError ? (

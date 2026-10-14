@@ -10,8 +10,11 @@ interface ReembolsosByMonthChartProps {
 
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
-function formatMonthLabel(mes: string): string {
-  return MONTH_LABELS[Number(mes) - 1] ?? mes;
+/** Keys are "YYYY-MM" (zero-padded, so they also sort chronologically as strings) - the page's
+ * date range can span several years, so a bare month would merge e.g. Ene 2025 and Ene 2026. */
+function formatMonthLabel(key: string): string {
+  const [anio, mes] = key.split('-');
+  return `${MONTH_LABELS[Number(mes) - 1] ?? mes} ${anio}`;
 }
 
 // Fixed per-bucket colors (never cycled/reassigned by filter) - same categorical palette
@@ -46,21 +49,22 @@ const BUCKET_COLORS: Record<ReembolsoBucket, string> = {
   otro: 'var(--color-neutral-800)',
 };
 
-/** Reembolsos monto per mes, stacked by bucket (see reembolsosRepository.ts's classification) - one
+/** Reembolsos monto per (año, mes), stacked by bucket (see reembolsosRepository.ts's classification) - one
  * bar per month, one stacked segment per bucket, same stacked-by-month convention as
  * PostventaByMonthChart (these buckets DO partition every reembolso-línea exactly once, unlike
  * ZammadTicketsByMonthChart's lifecycle-event counts, so stacking is correct here). */
 export function ReembolsosByMonthChart({ rows, formatValue }: ReembolsosByMonthChartProps) {
-  const byMes = new Map<number, Record<string, number>>();
+  const byMes = new Map<string, Record<string, number>>();
   for (const row of rows) {
-    const entry = byMes.get(row.mes) ?? {};
+    const key = `${row.anio}-${String(row.mes).padStart(2, '0')}`;
+    const entry = byMes.get(key) ?? {};
     entry[row.bucket] = (entry[row.bucket] ?? 0) + row.monto;
-    byMes.set(row.mes, entry);
+    byMes.set(key, entry);
   }
 
   const data = Array.from(byMes.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([mes, buckets]) => ({ key: String(mes), ...buckets }));
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([key, buckets]) => ({ key, ...buckets }));
 
   const presentBuckets = BUCKET_ORDER.filter((bucket) => rows.some((r) => r.bucket === bucket));
 
@@ -76,7 +80,10 @@ export function ReembolsosByMonthChart({ rows, formatValue }: ReembolsosByMonthC
               tick={{ fill: 'var(--chart-muted)', fontSize: 12 }}
               axisLine={{ stroke: 'var(--chart-axis)' }}
               tickLine={false}
-              interval={0}
+              interval={data.length > 12 ? Math.ceil(data.length / 12) - 1 : 0}
+              angle={data.length > 12 ? -20 : 0}
+              textAnchor={data.length > 12 ? 'end' : 'middle'}
+              height={data.length > 12 ? 56 : 30}
             />
             <YAxis tickFormatter={formatValue} tick={{ fill: 'var(--chart-muted)', fontSize: 12 }} axisLine={false} tickLine={false} width={64} />
             <Tooltip

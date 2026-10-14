@@ -36,13 +36,21 @@ import {
   listTareasVencidasRoute,
 } from './tareasVencidasController';
 import { exportCuentasRoute, listCuentasRoute } from './cuentasController';
-import { exportCobranzaCommissionsRoute, getCobranzaCommissionsRoute } from './cobranzaCommissionsController';
+import {
+  exportCobranzaCommissionsRoute,
+  getCobranzaCommissionsRoute,
+  getCobranzaGoalsRoute,
+  setCobranzaGoalDefaultRoute,
+  setCobranzaGoalExclusionRoute,
+  setCobranzaGoalOverrideRoute,
+} from './cobranzaCommissionsController';
 import { exportNotesReportRoute, listNotesReportRoute } from './notesReportController';
 import { exportContratosReportRoute, listContratosReportRoute } from './contratosReportController';
 import {
   exportPostventaRoute,
   getPostventaByAsuntoRoute,
   getPostventaByMonthRoute,
+  getPostventaByOwnerRoute,
   getPostventaResueltosByMonthRoute,
   getPostventaSummaryRoute,
   listPostventaOwnersRoute,
@@ -146,6 +154,10 @@ export function buildReportingRouter(): Router {
   // entity key and 404.
   router.get('/cobranza-comisiones', getCobranzaCommissionsRoute);
   router.get('/cobranza-comisiones/export', exportCobranzaCommissionsRoute);
+  router.get('/cobranza-comisiones/metas', getCobranzaGoalsRoute);
+  router.put('/cobranza-comisiones/metas/default', setCobranzaGoalDefaultRoute);
+  router.put('/cobranza-comisiones/metas/employees/:id', setCobranzaGoalOverrideRoute);
+  router.put('/cobranza-comisiones/metas/employees/:id/exclusion', setCobranzaGoalExclusionRoute);
   // Reporte de Notas (NetSuite-native Notes across every contract, date-filtered) is likewise
   // bespoke, not a generic ENTITY_REGISTRY entity - must be registered before /:entity/export, or
   // that route would swallow "notas" as an entity key and 404.
@@ -163,6 +175,7 @@ export function buildReportingRouter(): Router {
   router.get('/postventa/owners', listPostventaOwnersRoute);
   router.get('/postventa/by-month', getPostventaByMonthRoute);
   router.get('/postventa/by-asunto', getPostventaByAsuntoRoute);
+  router.get('/postventa/by-owner', getPostventaByOwnerRoute);
   router.get('/postventa/resueltos-by-month', getPostventaResueltosByMonthRoute);
   // Reembolsos (Cryo.dbo.ControlReembolsos cash-refund workflow) lives under the Postventa page
   // too, same 'postventa' grant - must be registered before /:entity/:id, or that route would

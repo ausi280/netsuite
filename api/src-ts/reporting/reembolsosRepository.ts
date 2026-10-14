@@ -30,8 +30,9 @@ import type { Knex } from 'knex';
  *
  * Only @YearInicial is actually used as a filter in the SP's real data-populating query, despite it
  * also accepting YearFinal/MonthInicial/MonthFinal parameters - those are dead/unused there,
- * vestigial from a shared generic report-template pattern this SP was copied from. This port keeps
- * just the one real filter (a single año), plus an optional empresa filter - the SP defaults this to
+ * vestigial from a shared generic report-template pattern this SP was copied from. This port
+ * filters by a date range instead (a superset of a single año - shared with the Postventa tickets
+ * filter at the top of the same page), plus an optional empresa filter - the SP defaults this to
  * the CALLING USER's own empresa via dbo.ObtenEmpresa(@token), a per-user-session concept this app
  * has no equivalent of, so we default to EVERY empresa instead of guessing one.
  */
@@ -81,8 +82,12 @@ export function classifyReembolsoBucket(estatus: number | null, motivoCierre: nu
 }
 
 export interface ReembolsoFilters {
-  /** A single calendar year - the only date filter the source SP's real query actually applies. */
-  anio: number;
+  /** YYYY-MM-DD, inclusive - on the incidencia date (FechaIncidenciaManual, else FechaIncidencia).
+   * Same date-range filter the Postventa tickets above it on the page use (the source SP only
+   * filtered by a single año; a range is a superset of that). Omitted = unbounded. */
+  dateFrom?: string;
+  /** YYYY-MM-DD, inclusive. */
+  dateTo?: string;
   /** Cryo.dbo.Empresa.ID_Empresa, as a string. */
   empresaId?: string;
 }
@@ -128,7 +133,18 @@ interface RawRow {
   IdEstatusReembolso: number | null;
   IdMotivoCierre: number | null;
   MontoReembolso: number | string | null;
+  Anio: number;
   Mes: number;
+}
+
+const FECHA_INCIDENCIA = 'ISNULL(T0.FechaIncidenciaManual, T0.FechaIncidencia)';
+
+/** Next-day exclusive upper bound - same convention as postventaRepository.ts, since the incidencia
+ * dates are real datetime columns. */
+function exclusiveUpperBound(dateOnly: string): string {
+  const date = new Date(`${dateOnly}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return date.toISOString().slice(0, 10);
 }
 
 function baseQuery(db: Knex, filters: ReembolsoFilters): Knex.QueryBuilder {
@@ -137,8 +153,10 @@ function baseQuery(db: Knex, filters: ReembolsoFilters): Knex.QueryBuilder {
     .innerJoin('Cryo.dbo.Empresa as EMP', 'EMP.ID_Empresa', 'T0.IdEmpresa')
     .leftJoin('Cryo.dbo.CatCausasReembolsos as CAUSA', 'CAUSA.IdCausaReembolso', 'T1.IdCausaReembolso')
     .where('T1.Activo', true)
-    .andWhere('T0.Activo', true)
-    .andWhereRaw('YEAR(ISNULL(T0.FechaIncidenciaManual, T0.FechaIncidencia)) = ?', [filters.anio]);
+    .andWhere('T0.Activo', true);
+
+  if (filters.dateFrom) qb.andWhereRaw(`${FECHA_INCIDENCIA} >= ?`, [filters.dateFrom]);
+  if (filters.dateTo) qb.andWhereRaw(`${FECHA_INCIDENCIA} < ?`, [exclusiveUpperBound(filters.dateTo)]);
 
   if (filters.empresaId) {
     qb.andWhere('T0.IdEmpresa', filters.empresaId);
@@ -169,7 +187,7 @@ function toRow(raw: RawRow): ReembolsoRow {
     producto: (raw.IdProducto && PRODUCTO_LABELS[raw.IdProducto]) || 'Sin producto',
     causa: raw.NombreCausa ?? 'Sin causa',
     bucket: classifyReembolsoBucket(raw.IdEstatusReembolso, raw.IdMotivoCierre),
-    anio: 0, // filled in by the caller, which already knows the filtered año
+    anio: raw.Anio,
     mes: raw.Mes,
     monto: Number(raw.MontoReembolso ?? 0),
   };
@@ -189,15 +207,15 @@ export async function getReembolsoEmpresaOptions(db: Knex): Promise<ReembolsoEmp
   return rows.map((r) => ({ empresa_id: String(r.empresa_id), nombre: r.nombre }));
 }
 
-/** The full filtered set for one año (and optional empresa), one row per reembolso-línea - for the
+/** The full filtered set for the date range (and optional empresa), one row per reembolso-línea - for the
  * detail table and CSV export alike. Small volume (a few hundred to ~700 rows/año account-wide,
  * confirmed live), so both read the same unpaginated query - see getReembolsosPaged below for the
  * on-screen paginated view. */
 async function getReembolsosDetail(db: Knex, filters: ReembolsoFilters): Promise<ReembolsoRow[]> {
   const rows = (await baseQuery(db, filters)
     .select(SELECT_COLUMNS)
-    .select(db.raw('MONTH(ISNULL(T0.FechaIncidenciaManual, T0.FechaIncidencia)) as Mes'))) as RawRow[];
-  return rows.map((raw) => ({ ...toRow(raw), anio: filters.anio }));
+    .select(db.raw(`YEAR(${FECHA_INCIDENCIA}) as Anio`), db.raw(`MONTH(${FECHA_INCIDENCIA}) as Mes`))) as RawRow[];
+  return rows.map(toRow);
 }
 
 export interface ReembolsosPage {
@@ -220,7 +238,7 @@ function clampPageSize(value: unknown): number {
 }
 
 /** Paginated wrapper over getReembolsosDetail's same filtered set, for the on-screen table -
- * fetches the whole filtered año in one go (small volume, see above) and pages in JS rather than at
+ * fetches the whole filtered range in one go (~2,600 rows even unbounded, confirmed live) (small volume, see above) and pages in JS rather than at
  * the SQL level, since every other consumer (by-month/by-causa/export) already needs the full set
  * anyway and this keeps all four views guaranteed consistent with each other. */
 export async function getReembolsosPaged(
@@ -253,16 +271,16 @@ export async function getReembolsosByMonth(db: Knex, filters: ReembolsoFilters):
 
   const byKey = new Map<string, ReembolsoMonthRow>();
   for (const row of rows) {
-    const key = `${row.mes}-${row.bucket}`;
+    const key = `${row.anio}-${row.mes}-${row.bucket}`;
     const entry = byKey.get(key) ?? { anio: row.anio, mes: row.mes, bucket: row.bucket, monto: 0 };
     entry.monto += row.monto;
     byKey.set(key, entry);
   }
 
-  return Array.from(byKey.values()).sort((a, b) => a.mes - b.mes);
+  return Array.from(byKey.values()).sort((a, b) => a.anio - b.anio || a.mes - b.mes);
 }
 
-/** Monto per causa (NombreCausa), across the whole filtered año - sorted descending so the biggest
+/** Monto per causa (NombreCausa), across the whole filtered range - sorted descending so the biggest
  * causas render first, same convention as postventaRepository.ts's getPostventaByAsunto. */
 export async function getReembolsosByCausa(db: Knex, filters: ReembolsoFilters): Promise<ReembolsoCausaRow[]> {
   const rows = await getReembolsosDetail(db, filters);
@@ -291,10 +309,10 @@ export interface ReembolsoCierreMonthRow {
  * live only 2 of 1,820 closed reembolsos have it null, and it's always on/after FechaIncidencia
  * (sampled live - a reembolso filed in 2022 showing FechaActualizacion in 2026, consistent with
  * "last touched when it was finally closed", never earlier than when it was opened). Still scoped
- * by the page's existing año/empresa filter (based on FechaIncidencia, not FechaActualizacion), same
+ * by the page's date-range/empresa filter (based on FechaIncidencia, not FechaActualizacion), same
  * lifecycle-view convention as postventaRepository.ts's getPostventaResueltosByMonth - a reembolso
- * filed within the selected año but closed in a later month can land outside that año's own 12
- * months here, which is intentional (closing can lag filing by months or years). */
+ * filed within the selected range but closed in a later month can land outside that range's
+ * own months here, which is intentional (closing can lag filing by months or years). */
 export async function getReembolsosCerradosByMonth(db: Knex, filters: ReembolsoFilters): Promise<ReembolsoCierreMonthRow[]> {
   const rows = (await baseQuery(db, filters)
     .where('T0.IdEstatusReembolso', 3)
@@ -319,4 +337,39 @@ export async function getReembolsosCerradosByMonth(db: Knex, filters: ReembolsoF
   }
 
   return Array.from(byMonth.values()).sort((a, b) => a.anio - b.anio || a.mes - b.mes);
+}
+
+/** The contract folio(s) a Zammad ticket's free-text foliocontrato may carry. Usually it's just the
+ * folio itself (e.g. "SIN012916-1" - the same value as ControlReembolsos.Folio), but a migrated
+ * contract can read "NEWFOLIO(OLDFOLIO)" (e.g. "MX-BC-2026-002043-1(B-DF012049-1)", confirmed live),
+ * so both halves are tried as well. */
+export function folioCandidates(foliocontrato: string | null): string[] {
+  const raw = foliocontrato?.trim();
+  if (!raw) return [];
+  const candidates = [raw];
+  const parenthesized = raw.match(/^(.*?)\(([^)]+)\)$/);
+  if (parenthesized) candidates.push(parenthesized[1].trim(), parenthesized[2].trim());
+  return candidates.filter(Boolean);
+}
+
+/** Folio -> the bucket (same classification as the Reembolsos section) of that contract's most
+ * recent active reembolso, for showing a ticket's reembolso status in the Postventa grid. Folios
+ * with no reembolso are simply absent. Confirmed live no folio currently has more than one active
+ * reembolso, but nothing enforces that, hence "most recent" (highest IdReembolso). */
+export async function getLatestReembolsoBucketByFolio(db: Knex, folios: string[]): Promise<Map<string, ReembolsoBucket>> {
+  const result = new Map<string, ReembolsoBucket>();
+  const unique = Array.from(new Set(folios));
+  if (unique.length === 0) return result;
+
+  const rows = (await db('Cryo.dbo.ControlReembolsos')
+    .where('Activo', true)
+    .whereIn('Folio', unique)
+    .select('Folio', 'IdReembolso', 'IdEstatusReembolso', 'IdMotivoCierre')
+    .orderBy('IdReembolso', 'asc')) as Array<{ Folio: string; IdEstatusReembolso: number | null; IdMotivoCierre: number | null }>;
+
+  // Ascending by id, so a later (more recent) reembolso overwrites an earlier one for the same folio.
+  for (const row of rows) {
+    result.set(row.Folio, classifyReembolsoBucket(row.IdEstatusReembolso, row.IdMotivoCierre));
+  }
+  return result;
 }

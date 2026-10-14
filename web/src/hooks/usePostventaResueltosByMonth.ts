@@ -7,7 +7,7 @@ export function usePostventaResueltosByMonth(params: PostventaFiltersParams) {
   const { getAccessToken } = useApiToken();
 
   return useQuery({
-    queryKey: ['postventa-resueltos-by-month', params.dateFrom, params.dateTo, params.ownerId],
+    queryKey: ['postventa-resueltos-by-month', params.dateFrom, params.dateTo, params.ownerId, params.empresaId],
     queryFn: async () => {
       const token = await getAccessToken();
       return fetchPostventaResueltosByMonth(token, params);

@@ -7,7 +7,7 @@ export function useReembolsos(params: ReembolsosParams) {
   const { getAccessToken } = useApiToken();
 
   return useQuery({
-    queryKey: ['reembolsos', params.anio, params.empresaId, params.page, params.pageSize],
+    queryKey: ['reembolsos', params.dateFrom, params.dateTo, params.empresaId, params.page, params.pageSize],
     queryFn: async () => {
       const token = await getAccessToken();
       return fetchReembolsos(token, params);

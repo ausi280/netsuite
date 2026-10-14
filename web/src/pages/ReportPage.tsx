@@ -46,6 +46,10 @@ export function ReportPage() {
   const estatus = isPartidas ? searchParams.get('estatus') ?? '' : '';
   const isVendorTransactions = entityKey === 'vendor-transactions';
   const vendorId = isVendorTransactions ? searchParams.get('vendorId') ?? '' : '';
+  // Otros Contratos is the only entity with a date-range filter (on its own Fecha).
+  const hasDateRangeFilter = entityKey === 'otros-contratos';
+  const dateFrom = hasDateRangeFilter ? searchParams.get('dateFrom') ?? '' : '';
+  const dateTo = hasDateRangeFilter ? searchParams.get('dateTo') ?? '' : '';
   const subsidiaryColumn = getSubsidiaryColumnKey(entityKey);
   // vendor-transactions' subsidiary comes from the joined vendor (netsuite_vendors.subsidiary),
   // not a plain column on netsuite_vendor_transactions itself, so it has no format:'subsidiary'
@@ -59,7 +63,7 @@ export function ReportPage() {
     isError,
     error,
     refetch,
-  } = useEntityRows(entityKey, { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId }, { enabled: isValid });
+  } = useEntityRows(entityKey, { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo }, { enabled: isValid });
 
   const { data: subsidiaryOptions } = useSubsidiaryOptions(entityKey, { enabled: isValid && hasSubsidiaryFilter });
   // 'contracts' access alone no longer implies commissions access - canAccessCommissions is the
@@ -98,6 +102,10 @@ export function ReportPage() {
 
   function handleEstatusChange(value: string) {
     updateParams({ estatus: value || null, page: '1' });
+  }
+
+  function handleDateRangeChange(range: { from: string; to: string }) {
+    updateParams({ dateFrom: range.from || null, dateTo: range.to || null, page: '1' });
   }
 
   function handleSortChange(columnKey: string) {
@@ -148,7 +156,7 @@ export function ReportPage() {
     setExportError(null);
     try {
       const token = await getAccessToken();
-      const blob = await fetchEntityExportCsv(token, entityKey, { search, sortBy, sortDir, subsidiary, estatus, vendorId });
+      const blob = await fetchEntityExportCsv(token, entityKey, { search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo });
       downloadBlob(blob, `${entityKey}.csv`);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'No se pudo exportar el CSV.');
@@ -263,6 +271,7 @@ export function ReportPage() {
               }
             : undefined
         }
+        dateRangeFilter={hasDateRangeFilter ? { from: dateFrom, to: dateTo, onChange: handleDateRangeChange } : undefined}
         onExport={handleExport}
         isExporting={isExporting}
       />

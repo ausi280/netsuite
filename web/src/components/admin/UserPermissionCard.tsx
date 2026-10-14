@@ -118,6 +118,14 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
             <label className={styles.checkItem}>
               <input
                 type="checkbox"
+                checked={entities.includes('cobranza_goals')}
+                onChange={() => setEntities((prev) => toggle(prev, 'cobranza_goals'))}
+              />
+              Capturar metas de cobranza (requiere Comisiones de Cobranza)
+            </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
                 checked={entities.includes('postventa')}
                 onChange={() => setEntities((prev) => toggle(prev, 'postventa'))}
               />

@@ -7,7 +7,7 @@ export function useReembolsosCerradosByMonth(params: ReembolsoFiltersParams) {
   const { getAccessToken } = useApiToken();
 
   return useQuery({
-    queryKey: ['reembolsos-cerrados-by-month', params.anio, params.empresaId],
+    queryKey: ['reembolsos-cerrados-by-month', params.dateFrom, params.dateTo, params.empresaId],
     queryFn: async () => {
       const token = await getAccessToken();
       return fetchReembolsosCerradosByMonth(token, params);

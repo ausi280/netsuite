@@ -7,7 +7,7 @@ export function useReembolsosByMonth(params: ReembolsoFiltersParams) {
   const { getAccessToken } = useApiToken();
 
   return useQuery({
-    queryKey: ['reembolsos-by-month', params.anio, params.empresaId],
+    queryKey: ['reembolsos-by-month', params.dateFrom, params.dateTo, params.empresaId],
     queryFn: async () => {
       const token = await getAccessToken();
       return fetchReembolsosByMonth(token, params);

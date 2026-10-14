@@ -7,7 +7,7 @@ export function usePostventaTickets(params: PostventaTicketsParams) {
   const { getAccessToken } = useApiToken();
 
   return useQuery({
-    queryKey: ['postventa-tickets', params.dateFrom, params.dateTo, params.ownerId, params.page, params.pageSize],
+    queryKey: ['postventa-tickets', params.dateFrom, params.dateTo, params.ownerId, params.empresaId, params.page, params.pageSize],
     queryFn: async () => {
       const token = await getAccessToken();
       return fetchPostventaTickets(token, params);

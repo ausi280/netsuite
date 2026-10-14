@@ -151,7 +151,7 @@ export async function listEntityRows(req: Request, res: Response): Promise<void>
         : entityKey === 'vendor-transactions'
           ? await getVendorTransactionsList(knex, { page, pageSize, search, sortBy, sortDir, subsidiary, vendorId }, restrictSubsidiaries)
           : entityKey === 'otros-contratos'
-            ? await getEnrichedOtrosContratoRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
+            ? await getEnrichedOtrosContratoRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary, dateFrom, dateTo }, restrictSubsidiaries)
             : entityKey === 'fcells-contratos'
               ? await getEnrichedFcellsContratoRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
               : await getPagedRows(knex, config, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
@@ -247,7 +247,7 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
     return;
   }
 
-  const { search, sortBy, sortDir, subsidiary, estatus, vendorId } = req.query;
+  const { search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo } = req.query;
   const restrictSubsidiaries = access.selfSubsidiarias ?? subsidiaryRestrictionFor(permissions);
   const isPartidas = entityKey === 'partidas';
   const isVendorTransactions = entityKey === 'vendor-transactions';
@@ -277,7 +277,7 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
       : isVendorTransactions
         ? buildVendorTransactionsExportQuery(knex, { search, sortBy, sortDir, subsidiary, vendorId }, restrictSubsidiaries)
         : isOtrosContratos
-          ? buildOtrosContratoExportQuery(knex, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
+          ? buildOtrosContratoExportQuery(knex, { search, sortBy, sortDir, subsidiary, dateFrom, dateTo }, restrictSubsidiaries)
           : isFcellsContratos
             ? buildFcellsContratoExportQuery(knex, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
             : buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);

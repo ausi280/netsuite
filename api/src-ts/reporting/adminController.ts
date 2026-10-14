@@ -18,8 +18,10 @@ const VALID_ENTITY_KEYS = new Set<string>([
   'hr',
   'prospectos',
   'commissions',
+  'commissions_amounts',
   'tareas_vencidas',
   'cobranza_commissions',
+  'cobranza_goals',
   'postventa',
 ]);
 

@@ -9,6 +9,8 @@ import type { CobranzaCommissionContractGroup } from './cobranzaCommissionsRepos
 import { parseSubsidiaryFilter } from './reportingRepository';
 import { csvRow, formatExportValue } from './csvExport';
 import type { UserPermissions } from './permissionsRepository';
+import { getCobranzaGoals, setCobranzaGoalDefault, setCobranzaGoalExclusion, setCobranzaGoalOverride } from './cobranzaGoalsRepository';
+import { paramString } from './controller';
 
 /** Whether this caller sees EVERY contract's cobranza data (as opposed to only the ones where
  * they're the resolved Dueño or Cobrador, via the separate self-cobrador/dueño path below). Its own
@@ -17,6 +19,12 @@ import type { UserPermissions } from './permissionsRepository';
  * cobrador-identifying collections data that not every Partidas viewer should see. */
 export function isCobranzaCommissionsFullAccessAllowed(permissions?: UserPermissions): boolean {
   return Boolean(permissions?.isAdmin || permissions?.allowedEntities.has('cobranza_commissions'));
+}
+
+/** Whether this caller may capture (edit) the monthly Dueño/Cobrador goals - its own grant,
+ * 'cobranza_goals', separate from seeing the report; without it, goals are view-only. */
+export function isCobranzaGoalsEditAllowed(permissions?: UserPermissions): boolean {
+  return Boolean(permissions?.isAdmin || permissions?.allowedEntities.has('cobranza_goals'));
 }
 
 function subsidiaryRestrictionFor(permissions: UserPermissions): Set<string> | null {
@@ -191,4 +199,107 @@ export async function exportCobranzaCommissionsRoute(req: Request, res: Response
     }
   }
   res.end();
+}
+
+/** Same two-way gate as loadCobranzaCommissionsData (full access, or a self cobrador/dueño) -
+ * goals are visible to anyone who can see the report itself. */
+async function canViewCobranzaGoals(req: Request): Promise<boolean> {
+  if (isCobranzaCommissionsFullAccessAllowed(req.permissions)) return true;
+  return (await resolveSelfCobradorDuenoId(knex, req.auditUser?.username ?? null)) !== null;
+}
+
+/** Parses an optional goal amount from a request body - null/'' clears it, otherwise a
+ * non-negative finite number. Returns undefined when the value is invalid. */
+function parseGoalAmount(value: unknown): number | null | undefined {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+function parseMonthYearBody(body: Record<string, unknown>): { month: number; year: number } | null {
+  const month = parsePositiveInt(body.month);
+  const year = parsePositiveInt(body.year);
+  if (!month || month > 12 || !year) return null;
+  return { month, year };
+}
+
+/** GET /api/reports/cobranza-comisiones/metas?month=&year= - the month's default goal plus every
+ * Dueño/Cobrador's effective goal. `can_edit` (the 'cobranza_goals' grant) tells the UI whether to
+ * show the editing controls; `can_view_all` (full cobranza access) whether to list every person, or
+ * only those present in the caller's own subsidiary-capped report (a self cobrador/dueño). */
+export async function getCobranzaGoalsRoute(req: Request, res: Response): Promise<void> {
+  if (!(await canViewCobranzaGoals(req))) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const { month, year } = resolveMonthYear(req);
+  const data = await getCobranzaGoals(knex, year, month);
+  res.status(200).json({
+    success: true,
+    data,
+    can_edit: isCobranzaGoalsEditAllowed(req.permissions),
+    can_view_all: isCobranzaCommissionsFullAccessAllowed(req.permissions),
+  });
+}
+
+/** PUT /api/reports/cobranza-comisiones/metas/default - body { month, year, amount: number | null,
+ * clear_overrides?: boolean }. clear_overrides=true applies `amount` to everyone, dropping every
+ * individual override for that month. */
+export async function setCobranzaGoalDefaultRoute(req: Request, res: Response): Promise<void> {
+  if (!isCobranzaGoalsEditAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta configuración.' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const period = parseMonthYearBody(body);
+  const amount = parseGoalAmount(body.amount);
+  if (!period || amount === undefined) {
+    res.status(400).json({ success: false, message: 'Provide month (1-12), year and amount (>= 0 or null).' });
+    return;
+  }
+
+  await setCobranzaGoalDefault(knex, period.year, period.month, amount, body.clear_overrides === true);
+  res.status(200).json({ success: true });
+}
+
+/** PUT /api/reports/cobranza-comisiones/metas/employees/:id - body { month, year, amount: number |
+ * null }. null removes the override, so the employee inherits the month's default again. */
+export async function setCobranzaGoalOverrideRoute(req: Request, res: Response): Promise<void> {
+  if (!isCobranzaGoalsEditAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta configuración.' });
+    return;
+  }
+
+  const employeeId = paramString(req.params.id);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const period = parseMonthYearBody(body);
+  const amount = parseGoalAmount(body.amount);
+  if (!employeeId || !period || amount === undefined) {
+    res.status(400).json({ success: false, message: 'Provide month (1-12), year and amount (>= 0 or null).' });
+    return;
+  }
+
+  await setCobranzaGoalOverride(knex, employeeId, period.year, period.month, amount);
+  res.status(200).json({ success: true });
+}
+
+/** PUT /api/reports/cobranza-comisiones/metas/employees/:id/exclusion - body { excluded: boolean }.
+ * Permanently removes a person from (or restores them to) the goals list, for every month. */
+export async function setCobranzaGoalExclusionRoute(req: Request, res: Response): Promise<void> {
+  if (!isCobranzaGoalsEditAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta configuración.' });
+    return;
+  }
+
+  const employeeId = paramString(req.params.id);
+  const excluded = (req.body ?? {}).excluded;
+  if (!employeeId || typeof excluded !== 'boolean') {
+    res.status(400).json({ success: false, message: 'Provide excluded (boolean).' });
+    return;
+  }
+
+  await setCobranzaGoalExclusion(knex, employeeId, excluded);
+  res.status(200).json({ success: true });
 }

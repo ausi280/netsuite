@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import type { ReembolsoBucket } from './reembolsosRepository';
 
 /**
  * Postventa status tiles - zammad_tickets rows in the "Postventa" group only (after-sales customer
@@ -25,6 +26,8 @@ const POSTVENTA_GROUP = 'Postventa';
 // Zammad's own sentinel for "no owner assigned" - a real row in Zammad's User table (id 1, name
 // "-"), not a null/empty value - confirmed live against production zammad_tickets.
 const SIN_OWNER_ID = '1';
+// Label for tickets with no real owner, wherever tickets are broken down by agent.
+const SIN_ASIGNAR_LABEL = 'Sin asignar';
 
 export type PostventaEstado = 'nuevo' | 'enProceso' | 'cerrado' | 'resuelto';
 
@@ -41,12 +44,25 @@ export const ESTADO_RESUMEN_LABELS: Record<PostventaEstado, string> = {
   resuelto: 'Resuelto',
 };
 
+// zammad_tickets.empresa is free text; the Postventa page's one Empresa filter uses the legacy Cryo
+// database's Empresa ids (the Reembolsos section's own empresas), mapped here - confirmed by the
+// user. Zammad also has "Fcells" / "Renew Therapies" tickets, which have no Cryo empresa (and no
+// reembolsos), so they're only reachable with the filter unset.
+const ZAMMAD_EMPRESA_BY_CRYO_EMPRESA_ID: Record<string, string> = {
+  '1': 'CryoCell',
+  '2': 'BCU',
+  '3': 'BSCU',
+};
+
 export interface PostventaFilters {
   /** YYYY-MM-DD, inclusive - filters on the ticket's own created_at_zammad. */
   dateFrom?: string;
   /** YYYY-MM-DD, inclusive. */
   dateTo?: string;
   ownerId?: string;
+  /** Cryo.dbo.Empresa.ID_Empresa (same ids as the Reembolsos filter) - see
+   * ZAMMAD_EMPRESA_BY_CRYO_EMPRESA_ID. */
+  empresaId?: string;
 }
 
 export interface PostventaSummary {
@@ -88,6 +104,10 @@ export interface PostventaTicketRow {
   updated_at_zammad: Date | null;
   /** Derived via estadoResumen() above - not a real zammad_tickets column. */
   estado_resumen: PostventaEstado;
+  /** The ticket's contract's latest reembolso status (Reembolsos bucket key, e.g. 'pendiente'),
+   * matched by folio against the legacy Cryo database - null when it has none. Filled in by
+   * postventaController.ts (a different database than this repository reads). */
+  reembolso_estatus: ReembolsoBucket | null;
 }
 
 interface RawTicketRow {
@@ -111,7 +131,7 @@ interface RawTicketRow {
 
 function toTicketRow(raw: RawTicketRow): PostventaTicketRow {
   const { owner_id, ...rest } = raw;
-  return { ...rest, estado_resumen: estadoResumen(owner_id, raw.state_name) };
+  return { ...rest, estado_resumen: estadoResumen(owner_id, raw.state_name), reembolso_estatus: null };
 }
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -141,6 +161,12 @@ function baseQuery(db: Knex, filters: PostventaFilters): Knex.QueryBuilder {
   if (filters.dateFrom) qb.andWhere('created_at_zammad', '>=', filters.dateFrom);
   if (filters.dateTo) qb.andWhere('created_at_zammad', '<', exclusiveUpperBound(filters.dateTo));
   if (filters.ownerId) qb.andWhere('owner_id', filters.ownerId);
+  if (filters.empresaId) {
+    const empresa = ZAMMAD_EMPRESA_BY_CRYO_EMPRESA_ID[filters.empresaId];
+    // An unmapped id matches nothing rather than silently ignoring the filter.
+    if (empresa) qb.andWhere('empresa', empresa);
+    else qb.andWhereRaw('1 = 0');
+  }
   return qb;
 }
 
@@ -261,6 +287,9 @@ export interface PostventaAsuntoRow {
    * "Sin asunto" (56 of 175 tickets at last count had no asunto set at all). */
   asunto: string;
   cantidad: number;
+  /** The same count split by agent (owner) - unassigned tickets under "Sin asignar" - for the
+   * by-asunto chart's per-agent stacking. Sums to `cantidad`. */
+  por_agente: Array<{ agente: string; cantidad: number }>;
 }
 
 function normalizeAsunto(raw: string | null): string {
@@ -274,17 +303,99 @@ function normalizeAsunto(raw: string | null): string {
  * - a few hundred rows, no need for a SQL GROUP BY. Sorted descending by count so the chart's
  * biggest categories render first. */
 export async function getPostventaByAsunto(db: Knex, filters: PostventaFilters): Promise<PostventaAsuntoRow[]> {
-  const rows = (await baseQuery(db, filters).select('asunto')) as Array<{ asunto: string | null }>;
+  const rows = (await baseQuery(db, filters).select('asunto', 'owner_id', 'owner_name')) as Array<{
+    asunto: string | null;
+    owner_id: string | null;
+    owner_name: string | null;
+  }>;
 
-  const counts = new Map<string, number>();
+  const counts = new Map<string, Map<string, number>>();
   for (const row of rows) {
     const asunto = normalizeAsunto(row.asunto);
-    counts.set(asunto, (counts.get(asunto) ?? 0) + 1);
+    const agente = !row.owner_id || row.owner_id === SIN_OWNER_ID ? SIN_ASIGNAR_LABEL : ownerLabel(row.owner_name);
+    const byAgente = counts.get(asunto) ?? new Map<string, number>();
+    byAgente.set(agente, (byAgente.get(agente) ?? 0) + 1);
+    counts.set(asunto, byAgente);
   }
 
   return Array.from(counts.entries())
-    .map(([asunto, cantidad]) => ({ asunto, cantidad }))
+    .map(([asunto, byAgente]) => {
+      const por_agente = Array.from(byAgente.entries()).map(([agente, cantidad]) => ({ agente, cantidad }));
+      return { asunto, cantidad: por_agente.reduce((sum, a) => sum + a.cantidad, 0), por_agente };
+    })
     .sort((a, b) => b.cantidad - a.cantidad);
+}
+
+export interface PostventaOwnerRow {
+  /** Zammad owner id, or null for the "Sin asignar" row (the SIN_OWNER_ID sentinel / no owner). */
+  owner_id: string | null;
+  /** Display label - Zammad's owner_name here is the agent's email (confirmed live), shown as its
+   * local part ("angelina.vazquez@..." -> "Angelina Vazquez"). */
+  owner_label: string;
+  nuevos: number;
+  enProceso: number;
+  cerrados: number;
+  resueltos: number;
+  total: number;
+}
+
+function ownerLabel(ownerName: string | null): string {
+  if (!ownerName) return 'Sin nombre';
+  const local = ownerName.includes('@') ? ownerName.split('@')[0] : ownerName;
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/** The same four-bucket counts as getPostventaByMonth, but per agent (owner) instead of per month -
+ * "how is each person's workload/progress". Unassigned tickets fold into one "Sin asignar" row
+ * (always Nuevo/Cerrado/Resuelto - never En Proceso, by estadoResumen's own definition). Same
+ * filters and same in-JS classification as every other Postventa breakdown. Sorted by total,
+ * descending, with "Sin asignar" last. */
+export async function getPostventaByOwner(db: Knex, filters: PostventaFilters): Promise<PostventaOwnerRow[]> {
+  const rows = (await baseQuery(db, filters).select('owner_id', 'owner_name', 'state_name')) as Array<{
+    owner_id: string | null;
+    owner_name: string | null;
+    state_name: string | null;
+  }>;
+
+  const byOwner = new Map<string, PostventaOwnerRow>();
+  for (const row of rows) {
+    const unassigned = !row.owner_id || row.owner_id === SIN_OWNER_ID;
+    const key = unassigned ? '' : row.owner_id!;
+    const entry = byOwner.get(key) ?? {
+      owner_id: unassigned ? null : row.owner_id,
+      owner_label: unassigned ? SIN_ASIGNAR_LABEL : ownerLabel(row.owner_name),
+      nuevos: 0,
+      enProceso: 0,
+      cerrados: 0,
+      resueltos: 0,
+      total: 0,
+    };
+
+    switch (estadoResumen(row.owner_id, row.state_name)) {
+      case 'nuevo':
+        entry.nuevos += 1;
+        break;
+      case 'enProceso':
+        entry.enProceso += 1;
+        break;
+      case 'cerrado':
+        entry.cerrados += 1;
+        break;
+      case 'resuelto':
+        entry.resueltos += 1;
+        break;
+    }
+    entry.total += 1;
+    byOwner.set(key, entry);
+  }
+
+  return Array.from(byOwner.values()).sort(
+    (a, b) => Number(a.owner_id === null) - Number(b.owner_id === null) || b.total - a.total,
+  );
 }
 
 const TICKET_COLUMNS = [

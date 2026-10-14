@@ -13,6 +13,7 @@ import { CommissionsPage } from './pages/CommissionsPage';
 import { ProspectosPage } from './pages/ProspectosPage';
 import { CuentasPage } from './pages/CuentasPage';
 import { CobranzaCommissionsPage } from './pages/CobranzaCommissionsPage';
+import { CobranzaGoalsPage } from './pages/CobranzaGoalsPage';
 import { PostventaReportPage } from './pages/PostventaReportPage';
 import { NotasReportPage } from './pages/NotasReportPage';
 import { ContratosReportPage } from './pages/ContratosReportPage';
@@ -137,6 +138,16 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CobranzaCommissionsPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/cobranza-comisiones/metas"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <CobranzaGoalsPage />
               </PageTransition>
             </RequireAuth>
           }

@@ -8,6 +8,7 @@ import type { SimpleColumn } from '../components/table/SimpleTable';
 import { Pagination } from '../components/table/Pagination';
 import { PostventaByMonthChart } from '../components/charts/PostventaByMonthChart';
 import { PostventaByAsuntoChart } from '../components/charts/PostventaByAsuntoChart';
+import { PostventaByOwnerChart } from '../components/charts/PostventaByOwnerChart';
 import { PostventaResueltosByMonthChart } from '../components/charts/PostventaResueltosByMonthChart';
 import { ReembolsosByMonthChart } from '../components/charts/ReembolsosByMonthChart';
 import { ReembolsosByCausaChart } from '../components/charts/ReembolsosByCausaChart';
@@ -17,6 +18,7 @@ import { usePostventaSummary } from '../hooks/usePostventaSummary';
 import { usePostventaOwners } from '../hooks/usePostventaOwners';
 import { usePostventaByMonth } from '../hooks/usePostventaByMonth';
 import { usePostventaByAsunto } from '../hooks/usePostventaByAsunto';
+import { usePostventaByOwner } from '../hooks/usePostventaByOwner';
 import { usePostventaResueltosByMonth } from '../hooks/usePostventaResueltosByMonth';
 import { usePostventaTickets } from '../hooks/usePostventaTickets';
 import { useReembolsoEmpresas } from '../hooks/useReembolsoEmpresas';
@@ -35,9 +37,16 @@ import tileStyles from './PostventaReportPage.module.css';
 const countFormatter = new Intl.NumberFormat('es-MX');
 const mxnFormatter = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' });
 const PAGE_SIZE = 25;
+
+/** Local-time YYYY-MM-DD (not toISOString, which is UTC and can roll over to tomorrow in the evening). */
+function toDateOnly(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// The page opens year to date (Jan 1 -> today); either bound can still be cleared for all-time.
+const YEAR_START = toDateOnly(new Date(new Date().getFullYear(), 0, 1));
+const TODAY = toDateOnly(new Date());
 const REEMBOLSO_PAGE_SIZE = 25;
-const CURRENT_YEAR = new Date().getFullYear();
-const REEMBOLSO_YEAR_OPTIONS = Array.from({ length: 6 }, (_, index) => CURRENT_YEAR - index);
 
 const REEMBOLSO_MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -67,11 +76,17 @@ const ESTADO_RESUMEN_LABELS: Record<PostventaEstado, string> = {
  * range (the ticket's own creation date). The by-month chart and the detail table/export below the
  * tiles share the exact same filters and the exact same bucket classification (estadoResumen on
  * the backend), so all three can never disagree about where a ticket falls.
+ *
+ * One filter bar drives the whole page: the date range applies to both the tickets and the
+ * Reembolsos section (on each reembolso's incidencia date), and so does the empresa filter (Cryo
+ * empresa ids, mapped to Zammad's own empresa names server-side - see postventaRepository.ts). The
+ * dueño filter only narrows tickets - Zammad agents have no counterpart in the Reembolsos data.
  */
 export function PostventaReportPage() {
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useState(YEAR_START);
+  const [dateTo, setDateTo] = useState(TODAY);
   const [ownerId, setOwnerId] = useState('');
+  const [empresaId, setEmpresaId] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [isExporting, setIsExporting] = useState(false);
@@ -79,27 +94,31 @@ export function PostventaReportPage() {
   const { getAccessToken } = useApiToken();
 
   const filters = useMemo(
-    () => ({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, ownerId: ownerId || undefined }),
-    [dateFrom, dateTo, ownerId],
+    () => ({
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      ownerId: ownerId || undefined,
+      empresaId: empresaId || undefined,
+    }),
+    [dateFrom, dateTo, ownerId, empresaId],
   );
 
   const ownersQuery = usePostventaOwners();
   const { data, isLoading, isError, error, refetch } = usePostventaSummary(filters);
   const byMonthQuery = usePostventaByMonth(filters);
   const byAsuntoQuery = usePostventaByAsunto(filters);
+  const byOwnerQuery = usePostventaByOwner(filters);
   const resueltosByMonthQuery = usePostventaResueltosByMonth(filters);
   const ticketsQuery = usePostventaTickets({ ...filters, page, pageSize });
 
-  const [reembolsoAnio, setReembolsoAnio] = useState(CURRENT_YEAR);
-  const [reembolsoEmpresaId, setReembolsoEmpresaId] = useState('');
   const [reembolsoPage, setReembolsoPage] = useState(1);
   const [reembolsoPageSize, setReembolsoPageSize] = useState(REEMBOLSO_PAGE_SIZE);
   const [isExportingReembolsos, setIsExportingReembolsos] = useState(false);
   const [reembolsoExportError, setReembolsoExportError] = useState<string | null>(null);
 
   const reembolsoFilters = useMemo(
-    () => ({ anio: reembolsoAnio, empresaId: reembolsoEmpresaId || undefined }),
-    [reembolsoAnio, reembolsoEmpresaId],
+    () => ({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, empresaId: empresaId || undefined }),
+    [dateFrom, dateTo, empresaId],
   );
   const reembolsoEmpresasQuery = useReembolsoEmpresas();
   const reembolsosByMonthQuery = useReembolsosByMonth(reembolsoFilters);
@@ -110,6 +129,7 @@ export function PostventaReportPage() {
   function handleFilterChange(setter: (value: string) => void, value: string) {
     setter(value);
     setPage(1);
+    setReembolsoPage(1);
   }
 
   function handlePageSizeChange(nextPageSize: number) {
@@ -131,16 +151,6 @@ export function PostventaReportPage() {
     }
   }
 
-  function handleReembolsoAnioChange(value: string) {
-    setReembolsoAnio(Number(value));
-    setReembolsoPage(1);
-  }
-
-  function handleReembolsoEmpresaChange(value: string) {
-    setReembolsoEmpresaId(value);
-    setReembolsoPage(1);
-  }
-
   function handleReembolsoPageSizeChange(nextPageSize: number) {
     setReembolsoPageSize(nextPageSize);
     setReembolsoPage(1);
@@ -152,7 +162,8 @@ export function PostventaReportPage() {
     try {
       const token = await getAccessToken();
       const blob = await fetchReembolsosExportCsv(token, reembolsoFilters);
-      downloadBlob(blob, `reembolsos-${reembolsoAnio}.csv`);
+      const range = [dateFrom, dateTo].filter(Boolean).join('_a_');
+      downloadBlob(blob, range ? `reembolsos-${range}.csv` : 'reembolsos.csv');
     } catch (err) {
       setReembolsoExportError(err instanceof Error ? err.message : 'No se pudo exportar el CSV.');
     } finally {
@@ -165,6 +176,7 @@ export function PostventaReportPage() {
     { key: 'title', header: 'Título', render: (r) => r.title || '—' },
     { key: 'asunto', header: 'Asunto', render: (r) => r.asunto || '—' },
     { key: 'estado_resumen', header: 'Estatus', render: (r) => ESTADO_RESUMEN_LABELS[r.estado_resumen] },
+    { key: 'reembolso_estatus', header: 'Estatus Reembolso', render: (r) => (r.reembolso_estatus ? REEMBOLSO_BUCKET_LABELS[r.reembolso_estatus] : '—') },
     { key: 'owner_name', header: 'Dueño', render: (r) => r.owner_name || '—' },
     { key: 'customer_email', header: 'Cliente', render: (r) => r.customer_email || '—' },
     { key: 'foliocontrato', header: 'Folio Contrato', render: (r) => r.foliocontrato || '—' },
@@ -180,7 +192,7 @@ export function PostventaReportPage() {
     { key: 'producto', header: 'Producto', render: (r) => r.producto },
     { key: 'causa', header: 'Causa', render: (r) => r.causa },
     { key: 'bucket', header: 'Estatus', render: (r) => REEMBOLSO_BUCKET_LABELS[r.bucket] },
-    { key: 'mes', header: 'Mes', render: (r) => REEMBOLSO_MONTH_LABELS[r.mes - 1] ?? r.mes },
+    { key: 'mes', header: 'Mes', render: (r) => `${REEMBOLSO_MONTH_LABELS[r.mes - 1] ?? r.mes} ${r.anio}` },
     { key: 'monto', header: 'Monto', render: (r) => mxnFormatter.format(r.monto) },
   ];
 
@@ -227,10 +239,23 @@ export function PostventaReportPage() {
           onChange={(event) => handleFilterChange(setOwnerId, event.target.value)}
           aria-label="Filtrar por dueño"
         >
-          <option value="">Todos los dueños</option>
+          <option value="">Todos los dueños (tickets)</option>
           {(ownersQuery.data ?? []).map((owner) => (
             <option key={owner.owner_id} value={owner.owner_id}>
               {owner.owner_name}
+            </option>
+          ))}
+        </select>
+        <select
+          className={styles.select}
+          value={empresaId}
+          onChange={(event) => handleFilterChange(setEmpresaId, event.target.value)}
+          aria-label="Filtrar por empresa"
+        >
+          <option value="">Todas las empresas</option>
+          {(reembolsoEmpresasQuery.data ?? []).map((empresa) => (
+            <option key={empresa.empresa_id} value={empresa.empresa_id}>
+              {empresa.nombre}
             </option>
           ))}
         </select>
@@ -281,9 +306,23 @@ export function PostventaReportPage() {
 
         <div className={chartStyles.chartCard}>
           <h2 className={styles.title} style={{ fontSize: 18 }}>
+            Tickets por Agente
+          </h2>
+          <p className={styles.subtitle}>Tickets de Postventa por agente asignado, por estatus, en el periodo seleccionado.</p>
+          {byOwnerQuery.isLoading ? (
+            <LoadingState label="Cargando tickets por agente..." />
+          ) : (byOwnerQuery.data ?? []).length === 0 ? (
+            <EmptyState message="No hay tickets de Postventa en este periodo." />
+          ) : (
+            <PostventaByOwnerChart rows={byOwnerQuery.data ?? []} formatValue={(v) => countFormatter.format(v)} />
+          )}
+        </div>
+
+        <div className={chartStyles.chartCard}>
+          <h2 className={styles.title} style={{ fontSize: 18 }}>
             Tickets por Asunto
           </h2>
-          <p className={styles.subtitle}>Tickets de Postventa por asunto, en el periodo seleccionado.</p>
+          <p className={styles.subtitle}>Tickets de Postventa por asunto y agente, en el periodo seleccionado.</p>
           {byAsuntoQuery.isLoading ? (
             <LoadingState label="Cargando tickets por asunto..." />
           ) : (byAsuntoQuery.data ?? []).length === 0 ? (
@@ -346,7 +385,7 @@ export function PostventaReportPage() {
           <h1 className={styles.title} style={{ fontSize: 22 }}>
             Reembolsos
           </h1>
-          <p className={styles.subtitle}>Reembolsos de servicio (Cryo), por causa y por mes - filtrable por año y empresa.</p>
+          <p className={styles.subtitle}>Reembolsos de servicio (Cryo), por causa y por mes - usa los filtros de fecha y empresa de arriba.</p>
         </div>
         <div className={styles.actions}>
           <button type="button" className={styles.actionButton} onClick={handleExportReembolsos} disabled={isExportingReembolsos}>
@@ -360,34 +399,6 @@ export function PostventaReportPage() {
         </div>
       </div>
       {reembolsoExportError ? <p className={styles.exportError}>{reembolsoExportError}</p> : null}
-
-      <div className={styles.filters}>
-        <select
-          className={styles.select}
-          value={reembolsoAnio}
-          onChange={(event) => handleReembolsoAnioChange(event.target.value)}
-          aria-label="Año"
-        >
-          {REEMBOLSO_YEAR_OPTIONS.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
-        <select
-          className={styles.select}
-          value={reembolsoEmpresaId}
-          onChange={(event) => handleReembolsoEmpresaChange(event.target.value)}
-          aria-label="Filtrar por empresa"
-        >
-          <option value="">Todas las empresas</option>
-          {(reembolsoEmpresasQuery.data ?? []).map((empresa) => (
-            <option key={empresa.empresa_id} value={empresa.empresa_id}>
-              {empresa.nombre}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div className={tileStyles.chartStack}>
         <div className={chartStyles.chartCard}>

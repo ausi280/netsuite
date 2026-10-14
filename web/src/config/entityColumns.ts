@@ -217,6 +217,9 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'monto', header: 'Monto', format: 'currency', currencyColumn: 'moneda' },
       { key: 'custrecord_cryo_fecha_otroscontratos', header: 'Fecha', format: 'date' },
       { key: 'custrecord_cryo_fechaprobable_otroscontr', header: 'Fecha Probable', format: 'date' },
+      // Vía is only captured on Mexico records (custrecord_cryo_mx_via) - blank elsewhere.
+      { key: 'via', header: 'Vía' },
+      { key: 'vendedor_nombre', header: 'Vendedor' },
       { key: 'custrecord_cryo_subsidiaria_otroscontrat', header: 'Subsidiaria', format: 'subsidiary' },
       { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
       { key: 'lastmodifieddate_dt', header: 'Última Modificación', format: 'datetime', sortable: true },
