@@ -1,5 +1,6 @@
 import { BaseSyncService, RawNetSuiteRecord } from './baseSyncService';
 import { SuiteQlQueryBuilder } from '../suiteql/queryBuilder';
+import { parseNetSuiteDate } from '../mappers/utils';
 import type { PaymentInvoiceLinkRow } from '../repositories/paymentInvoiceLinkRepository';
 import type { SyncEntityName } from '../config/types';
 
@@ -40,5 +41,11 @@ export class PaymentInvoiceLinkSyncService extends BaseSyncService<RawNetSuiteRe
       payment_id: String(raw.id),
       invoice_id: String(raw.invoice_id),
     };
+  }
+
+  // NetSuite returns dd/mm/yyyy - the base class's `new Date(value)` reads that as mm/dd, which
+  // pushed this watermark into the future (12/10/2026 -> Dec 10) and would skip real changes.
+  protected extractTimestamp(raw: RawNetSuiteRecord): Date | null {
+    return parseNetSuiteDate(raw.lastmodifieddate);
   }
 }

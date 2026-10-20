@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
@@ -6,9 +7,13 @@ import { EmptyState } from '../components/common/EmptyState';
 import { MarketingSalesChart } from '../components/charts/MarketingSalesChart';
 import { MarketingQualificationChart } from '../components/charts/MarketingQualificationChart';
 import { MotivosBreakdownTable } from '../components/charts/MotivosBreakdownTable';
+import { MarketingFunnelSection } from '../components/charts/MarketingFunnelSection';
+import { MarketingTicketsSection } from '../components/reports/MarketingTicketsSection';
+import { buildMarketingFunnel } from '../utils/marketingFunnel';
+import { ARGENTINA_MARCAS, MARKETING_PAISES, parseArgentinaMarca, parseMarketingPais } from '../utils/marketingPais';
 import chartStyles from '../components/charts/charts.module.css';
 import { useMarketingReport } from '../hooks/useMarketingReport';
-import type { MarketingSalesByMonthRow, QualificationByMonthRow } from '../api/types';
+import type { MarketingPais, MarketingSalesByMonthRow, QualificationByMonthRow } from '../api/types';
 import styles from './MarketingReportPage.module.css';
 
 function pad(n: number): string {
@@ -52,10 +57,11 @@ function buildLeadsContactadosByMonth(byMonth: QualificationByMonthRow[]): Marke
 }
 
 /**
- * "Reporte de Marketing" - two charts built on top of the same Prospecto data as /reports/
- * prospectos (legacy Cryo.dbo CRM lead funnel), scoped to the 3 Mexican brands (CRYO-CELL DE
- * MEXICO / BCU / BSCU) - see api/src-ts/reporting/marketingRepository.ts for exactly which ids
- * this covers and why.
+ * "Reporte de Marketing", per country (?pais=MX|AR). México: built on top of the same Prospecto
+ * data as /reports/prospectos (legacy Cryo.dbo CRM lead funnel), scoped to the 3 Mexican brands
+ * (CRYO-CELL DE MEXICO / BCU / BSCU) - see api/src-ts/reporting/marketingRepository.ts. Argentina:
+ * NetSuite leads and contracts (subsidiary 20, Biocells + Cryolab) - see
+ * api/src-ts/reporting/argentinaMarketingRepository.ts. Same charts and shapes for both.
  *
  *  - "Ventas por mes": every Prospecto with a matched Contrato, by the contract's own sale month,
  *    split online (Internet TipoCanal) vs offline (everything else).
@@ -67,21 +73,65 @@ function buildLeadsContactadosByMonth(byMonth: QualificationByMonthRow[]): Marke
 export function MarketingReportPage() {
   const [dateFrom, setDateFrom] = useState(defaultDateFrom());
   const [dateTo, setDateTo] = useState(defaultDateTo());
+  const [searchParams, setSearchParams] = useSearchParams();
+  const pais = parseMarketingPais(searchParams.get('pais'));
+  const config = MARKETING_PAISES[pais];
+  // Brand filter - Argentina only (México's CRM data is already split by empresa elsewhere).
+  const marca = pais === 'AR' ? parseArgentinaMarca(searchParams.get('marca')) : '';
+  const marcaLabel = ARGENTINA_MARCAS.find((m) => m.id === marca)?.label;
 
-  const { data, isLoading, isError, error, refetch } = useMarketingReport(dateFrom, dateTo);
+  function handleParamChange(key: 'pais' | 'marca', value: string) {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    if (key === 'pais' && value !== 'AR') next.delete('marca');
+    setSearchParams(next, { replace: true });
+  }
+
+  const { data, isLoading, isError, error, refetch } = useMarketingReport(pais, dateFrom, dateTo, marca);
 
   const leadsContactadosByMonth = useMemo(() => buildLeadsContactadosByMonth(data?.qualification.byMonth ?? []), [data]);
+  const funnel = useMemo(
+    // Inversión and metas are captured per country, not per brand - a single brand gets none
+    // rather than being compared against the whole country's.
+    () => (data ? buildMarketingFunnel(data.qualification.byMonth, data.salesByMonth, marca ? [] : (data.funnelInputs ?? []), dateFrom, dateTo) : null),
+    [data, dateFrom, dateTo, marca],
+  );
 
   return (
     <AppShell breadcrumbs={[{ label: 'Reportes', to: '/' }, { label: 'Prospectos', to: '/reports/prospectos' }, { label: 'Marketing' }]}>
       <div className={styles.heading}>
         <div>
           <h1 className={styles.title}>Reporte de Marketing</h1>
-          <p className={styles.subtitle}>Ventas por canal y calificación de prospectos - CRYO-CELL DE MEXICO, BCU y BSCU.</p>
+          <p className={styles.subtitle}>
+            Ventas por canal y calificación de prospectos · {config.label} - {marcaLabel && marca ? marcaLabel : config.marcas} (prospectos de {config.fuente}).
+          </p>
         </div>
       </div>
 
       <div className={styles.dateFilters}>
+        <label className={styles.dateLabel}>
+          País
+          <select className={styles.dateInput} value={pais} onChange={(event) => handleParamChange('pais', event.target.value)}>
+            {(Object.keys(MARKETING_PAISES) as MarketingPais[]).map((key) => (
+              <option key={key} value={key}>
+                {MARKETING_PAISES[key].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {pais === 'AR' ? (
+          <label className={styles.dateLabel}>
+            Marca
+            <select className={styles.dateInput} value={marca} onChange={(event) => handleParamChange('marca', event.target.value)}>
+              {ARGENTINA_MARCAS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label className={styles.dateLabel}>
           Desde
           <input type="date" className={styles.dateInput} value={dateFrom} max={dateTo} onChange={(event) => setDateFrom(event.target.value)} />
@@ -99,10 +149,24 @@ export function MarketingReportPage() {
 
       {!isError && data ? (
         <div className={styles.panels}>
+          {funnel ? (
+            <MarketingFunnelSection
+              funnel={funnel}
+              pais={pais}
+              scopeNote={
+                marca
+                  ? `Solo ${marcaLabel}: la inversión y las metas se capturan por país, no por marca - CAC, CPL y cumplimientos se muestran con "Todas".`
+                  : undefined
+              }
+              canEditInputs={data.canEditInputs}
+              captureLink={`/reports/marketing/captura?year=${dateTo.slice(0, 4)}&pais=${pais}`}
+            />
+          ) : null}
+
           <div className={chartStyles.chartCard}>
             <h2 className={styles.panelTitle}>Ventas por mes (Online / Offline)</h2>
             <p className={styles.panelSubtitle}>
-              Prospectos con contrato asociado, por mes de venta del contrato. "Online" = canal Internet de cada empresa.
+              {pais === 'AR' ? 'Contratos de Argentina por mes de inicio del contrato.' : 'Prospectos con contrato asociado, por mes de venta del contrato.'} {config.onlineNote}
             </p>
             {data.salesByMonth.length === 0 ? (
               <EmptyState message="No hay ventas en este periodo." />
@@ -114,7 +178,8 @@ export function MarketingReportPage() {
           <div className={chartStyles.chartCard}>
             <h2 className={styles.panelTitle}>Calificación de prospectos por mes</h2>
             <p className={styles.panelSubtitle}>
-              Todos los prospectos del periodo (por fecha de captura), por mes, agrupados por su motivo de no-venta - separado por canal Online / Offline.
+              Todos los prospectos del periodo (por fecha de {pais === 'AR' ? 'alta como lead' : 'captura'}), por mes, agrupados por su motivo de{' '}
+              {pais === 'AR' ? 'pérdida' : 'no-venta'} - separado por canal Online / Offline.
             </p>
             {data.qualification.summary.total === 0 ? (
               <EmptyState message="No hay prospectos en este periodo." />
@@ -167,14 +232,17 @@ export function MarketingReportPage() {
             )}
           </div>
 
+          <MarketingTicketsSection dateFrom={dateFrom} dateTo={dateTo} />
+
           {data.qualification.motivos.length > 0 ? (
             <div className={chartStyles.chartCard}>
-              <h2 className={styles.panelTitle}>Detalle por motivo de no-venta</h2>
+              <h2 className={styles.panelTitle}>Detalle por motivo de {pais === 'AR' ? 'pérdida' : 'no-venta'}</h2>
               <p className={styles.motivosNote}>
-                Cada fila es un motivo real de Cryo.dbo.noventa (con su propia empresa e ID_NoVenta) y la categoría en la que se agrupó arriba - útil
-                para verificar o ajustar la clasificación en el futuro.
+                {pais === 'AR'
+                  ? 'Cada fila es un motivo de pérdida real de NetSuite (por marca) y la categoría en la que se agrupó arriba - útil para verificar o ajustar la clasificación en el futuro.'
+                  : 'Cada fila es un motivo real de Cryo.dbo.noventa (con su propia empresa e ID_NoVenta) y la categoría en la que se agrupó arriba - útil para verificar o ajustar la clasificación en el futuro.'}
               </p>
-              <MotivosBreakdownTable rows={data.qualification.motivos} formatCount={(v) => countFormatter.format(v)} />
+              <MotivosBreakdownTable rows={data.qualification.motivos} formatCount={(v) => countFormatter.format(v)} pais={pais} />
             </div>
           ) : null}
         </div>

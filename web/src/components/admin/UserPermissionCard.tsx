@@ -126,6 +126,14 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
             <label className={styles.checkItem}>
               <input
                 type="checkbox"
+                checked={entities.includes('marketing_inputs')}
+                onChange={() => setEntities((prev) => toggle(prev, 'marketing_inputs'))}
+              />
+              Capturar inversión y metas de Marketing (requiere Prospectos)
+            </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
                 checked={entities.includes('postventa')}
                 onChange={() => setEntities((prev) => toggle(prev, 'postventa'))}
               />

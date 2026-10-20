@@ -9,6 +9,13 @@ import type {
   CobranzaCommissionsResponse,
   CobranzaGoalsForMonth,
   CobranzaGoalsResponse,
+  MarketingInputsResponse,
+  MarketingTicketsResponse,
+  MarketingMonthlyInputs,
+  MarketingPais,
+  CobranzaIncentiveConfig,
+  CobranzaIncentivesResponse,
+  IncentiveScheme,
   CommissionLevelTier,
   CommissionsResponse,
   ContractDossier,
@@ -653,9 +660,39 @@ export async function fetchProspectosExportCsv(token: string | null, dateFrom: s
 /** "Reporte de Marketing" - sales-by-month (online/offline split) + prospecto qualification
  * funnel, built on the same Prospecto data as fetchProspectos - see
  * api/src-ts/reporting/marketingRepository.ts. */
-export async function fetchMarketingReport(token: string | null, dateFrom: string, dateTo: string): Promise<MarketingReportResponse> {
-  const query = new URLSearchParams({ dateFrom, dateTo });
+export async function fetchMarketingReport(
+  token: string | null,
+  pais: MarketingPais,
+  dateFrom: string,
+  dateTo: string,
+  /** Argentina only - one brand id, or '' for all. */
+  marca = '',
+): Promise<MarketingReportResponse> {
+  const query = new URLSearchParams({ dateFrom, dateTo, pais });
+  if (marca) query.set('marca', marca);
   return apiFetch<MarketingReportResponse>(`/reports/marketing?${query.toString()}`, { token });
+}
+
+/** The Marketing group's Zammad tickets for the date range (by creation date). */
+export async function fetchMarketingTickets(token: string | null, dateFrom: string, dateTo: string): Promise<MarketingTicketsResponse> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  return apiFetch<MarketingTicketsResponse>(`/reports/marketing/tickets?${query.toString()}`, { token });
+}
+
+/** All 12 months of a year's hand-captured inversión digital / funnel metas (uncaptured = all null). */
+export async function fetchMarketingInputs(token: string | null, pais: MarketingPais, year: number): Promise<MarketingInputsResponse> {
+  const query = new URLSearchParams({ year: String(year), pais });
+  return apiFetch<MarketingInputsResponse>(`/reports/marketing/inputs?${query.toString()}`, { token });
+}
+
+/** Replaces one month's inversión digital / funnel metas. */
+export async function saveMarketingInputs(token: string | null, pais: MarketingPais, input: MarketingMonthlyInputs): Promise<void> {
+  await apiFetch('/reports/marketing/inputs', {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...input, pais }),
+  });
 }
 
 /** "Comercial" - tareas-per-prospecto distribution, global and per vendedor - see
@@ -939,5 +976,43 @@ export async function setCobranzaGoalExclusion(token: string | null, employeeId:
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ excluded }),
+  });
+}
+
+/** Sets one agent's incentive esquema for that month only (null clears it). */
+export async function setCobranzaAgentScheme(
+  token: string | null,
+  employeeId: string,
+  input: { month: number; year: number; scheme: IncentiveScheme | null },
+): Promise<void> {
+  await apiFetch('/reports/cobranza-comisiones/metas/employees/' + encodeURIComponent(employeeId) + '/esquema', {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export interface CobranzaIncentivesResult {
+  config: CobranzaIncentiveConfig;
+  copySource: CobranzaIncentiveConfig | null;
+  /** Whether the caller may capture incentives (the 'cobranza_goals' grant). */
+  canEdit: boolean;
+}
+
+/** The month's incentive tables (% recuperado tiers + proyecto thresholds). */
+export async function fetchCobranzaIncentives(token: string | null, month: number, year: number): Promise<CobranzaIncentivesResult> {
+  const query = new URLSearchParams({ month: String(month), year: String(year) });
+  const result = await apiFetch<CobranzaIncentivesResponse>(`/reports/cobranza-comisiones/incentivos?${query.toString()}`, { token });
+  return { config: result.data, copySource: result.copy_source, canEdit: result.can_edit };
+}
+
+/** Replaces the month's whole incentive configuration. */
+export async function saveCobranzaIncentives(token: string | null, input: CobranzaIncentiveConfig): Promise<void> {
+  await apiFetch('/reports/cobranza-comisiones/incentivos', {
+    token,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
   });
 }

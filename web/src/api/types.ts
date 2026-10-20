@@ -38,6 +38,8 @@ export type ReportEntityKey =
  * api/src-ts/reporting/cobranzaCommissionsController.ts.
  * 'cobranza_goals' is a further gate on top of 'cobranza_commissions' - lets the caller capture
  * (edit) the monthly Dueño/Cobrador goals; without it, goals are view-only.
+ * 'marketing_inputs' is a further gate on top of 'prospectos' - lets the caller capture the
+ * Reporte de Marketing's monthly inversión digital and funnel metas; without it they're view-only.
  * 'postventa' is likewise its own standalone grant for the bespoke Postventa status-tiles report
  * (new/en proceso/cerrado/resuelto counts over zammad_tickets, group "Postventa" only) - NOT an
  * additional gate on top of 'zammad-tickets', the separate generic Zammad Tickets table view
@@ -52,6 +54,7 @@ export type PermissionKey =
   | 'tareas_vencidas'
   | 'cobranza_commissions'
   | 'cobranza_goals'
+  | 'marketing_inputs'
   | 'postventa';
 
 export interface EntitySummary {
@@ -626,7 +629,7 @@ export interface CobranzaCommissionYearGroup {
   partidas: CobranzaCommissionPartidaRow[];
 }
 
-export type AsignacionTipo = 'dueno' | 'cobrador' | 'bolsa' | 'paquete_inicial';
+export type AsignacionTipo = 'dueno' | 'cobrador' | 'bolsa' | 'bolsa_domiciliado' | 'paquete_inicial';
 
 export interface CobranzaCommissionContractGroup {
   contract_id: string;
@@ -645,6 +648,9 @@ export interface CobranzaCommissionContractGroup {
   asignado_tipo: AsignacionTipo;
   /** The resolved Dueño's/Cobrador's employee netsuite_id - null for Bolsa / Paquete inicial. */
   asignado_id: string | null;
+  /** Paid this month by a domiciliated-card payment (forma de pago 110/111) - assigned to "Bolsa
+   * Domiciliado". */
+  pagado_domiciliado: boolean;
   years: CobranzaCommissionYearGroup[];
   partidas_count: number;
 }
@@ -802,6 +808,34 @@ export interface MarketingReportResponse {
     byMonth: QualificationByMonthRow[];
     motivos: MarketingMotivoBreakdownRow[];
   };
+  /** Captured months (inversión digital + funnel metas) the date range touches - see
+   * api/src-ts/reporting/marketingInputsRepository.ts. Months never captured are absent. */
+  funnelInputs: MarketingMonthlyInputs[];
+  /** The 'marketing_inputs' grant - may open the capture page. */
+  canEditInputs: boolean;
+}
+
+/** Country of the Reporte de Marketing - México (legacy CRM) or Argentina (NetSuite). */
+export type MarketingPais = 'MX' | 'AR';
+
+/** Hand-captured monthly figures for one country's funnel - that country's currency for money,
+ * counts for the metas. */
+export interface MarketingMonthlyInputs {
+  year: number;
+  month: number;
+  inversion_digital: number | null;
+  meta_inversion_digital: number | null;
+  meta_leads_digital: number | null;
+  meta_leads_offline: number | null;
+  meta_prospectos: number | null;
+  meta_ventas_digital: number | null;
+  meta_ventas_total: number | null;
+}
+
+export interface MarketingInputsResponse {
+  success: true;
+  data: MarketingMonthlyInputs[];
+  canEdit: boolean;
 }
 
 /** Online (Internet TipoCanal) vs offline (everything else) - same split
@@ -1148,6 +1182,8 @@ export interface CobranzaGoalPerson {
   override_amount: number | null;
   /** override_amount ?? default_amount (null when neither is set). */
   goal_amount: number | null;
+  /** The agent's incentive esquema this month, or null - see IncentiveScheme. */
+  scheme: IncentiveScheme | null;
 }
 
 export interface CobranzaGoalExcludedPerson {
@@ -1162,6 +1198,9 @@ export interface CobranzaGoalsForMonth {
   people: CobranzaGoalPerson[];
   /** Permanently left out of goals (every month) - never given a goal, never charted. */
   excluded: CobranzaGoalExcludedPerson[];
+  /** The month the esquemas shown were stored for - this month once configured, else the earlier
+   * month they're carried over from (null when none were ever set). */
+  scheme_source: { year: number; month: number } | null;
 }
 
 export interface CobranzaGoalsResponse {
@@ -1169,4 +1208,73 @@ export interface CobranzaGoalsResponse {
   data: CobranzaGoalsForMonth;
   can_edit: boolean;
   can_view_all: boolean;
+}
+
+// Monthly cobranza incentive configuration - see api/src-ts/reporting/cobranzaIncentivesRepository.ts.
+/** Rate columns of the % recuperado tier table (percent values, 1.22 = 1.22%). */
+export const INCENTIVE_RATE_COLUMNS = [
+  { key: 'rate_ccell', label: 'CCELL' },
+  { key: 'rate_bcu', label: 'BCU' },
+  { key: 'rate_bscu', label: 'BSCU' },
+  { key: 'rate_fcells', label: 'FCELLS' },
+  { key: 'rate_gte_ccell', label: 'GTE CCELL' },
+  { key: 'rate_sup_bcu', label: 'SUP. BCU' },
+  { key: 'rate_sup_fcells', label: 'SUP. FCELLS' },
+] as const;
+
+export type IncentiveRateKey = (typeof INCENTIVE_RATE_COLUMNS)[number]['key'];
+
+/** An agent's esquema - one of the tier table's rate columns, or 'proyecto' (paid from the proyecto
+ * amount thresholds instead). */
+export type IncentiveScheme = 'ccell' | 'bcu' | 'bscu' | 'fcells' | 'gte_ccell' | 'sup_bcu' | 'sup_fcells' | 'proyecto';
+
+export const INCENTIVE_SCHEME_LABELS: Record<IncentiveScheme, string> = {
+  ccell: 'CCELL',
+  bcu: 'BCU',
+  bscu: 'BSCU',
+  fcells: 'FCELLS',
+  gte_ccell: 'GTE CCELL',
+  sup_bcu: 'SUP. BCU',
+  sup_fcells: 'SUP. FCELLS',
+  proyecto: 'Proyecto',
+};
+
+export type CobranzaIncentiveTier = {
+  /** Lower bound of % recuperado (70 = 70%) - runs up to the next tier's min_pct. */
+  min_pct: number;
+  /** "% de incentivo" as captured ("50%", "90 al 100%"...). */
+  incentive_label: string | null;
+} & Record<IncentiveRateKey, number | null>;
+
+export interface CobranzaProyectoIncentiveTier {
+  min_amount: number;
+  /** 8.5 = 8.5% */
+  rate_pct: number;
+}
+
+export interface CobranzaIncentiveConfig {
+  year: number;
+  month: number;
+  tiers: CobranzaIncentiveTier[];
+  proyecto_tiers: CobranzaProyectoIncentiveTier[];
+}
+
+export interface CobranzaIncentivesResponse {
+  success: true;
+  data: CobranzaIncentiveConfig;
+  /** Latest earlier configured month - only when this month has nothing captured yet. */
+  copy_source: CobranzaIncentiveConfig | null;
+  can_edit: boolean;
+}
+
+/** The Marketing group's Zammad tickets - same buckets/breakdowns as Postventa's (see
+ * api/src-ts/reporting/marketingController.ts getMarketingTicketsRoute). cerradosByMonth reuses the
+ * resueltos-by-month row shape, counting Cerrado tickets by close date. */
+export interface MarketingTicketsResponse {
+  success: true;
+  summary: PostventaSummary;
+  byMonth: PostventaMonthRow[];
+  byOwner: PostventaOwnerRow[];
+  byAsunto: PostventaAsuntoRow[];
+  cerradosByMonth: PostventaResueltoMonthRow[];
 }

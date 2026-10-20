@@ -52,9 +52,10 @@ try {
   console.error('[Reporting API] failed to load, skipping:', error.message);
 }
 
-console.log('Loaded Services Configuration:', JSON.stringify(env.SERVICES, null, 2));
+// Names only - env.SERVICES holds credentials (NetSuite consumer/token secrets, etc.) that must
+// never reach the log stream.
+console.log('Loaded services:', env.SERVICES ? Object.keys(env.SERVICES).join(', ') : 'None');
 
-const loadedRoutes = [];
 if (env.SERVICES) {
   for (const name in env.SERVICES) {
       
@@ -67,10 +68,8 @@ if (env.SERVICES) {
         if (route && route.default) route = route.default;
         if (env.SERVICES[name]) app.use(env.SERVICES[name].SLUG || '/', route);
         const fullUrl = `${env.API.URL}${env.API.PORT ? `:${env.API.PORT}` : ""}${env.SERVICES[name].SLUG || '/'}`;
-        loadedRoutes.push(`${name} -> ${fullUrl} (${routesPath})`);
         console.log(`Loaded routes for ${name} at ${fullUrl}`);
       } else {
-        loadedRoutes.push(`${name} -> FAILED (File not found: ${routesPath})`);
         console.log(`Expected route file not found at: ${routesPath}`);
       }
 
@@ -81,7 +80,6 @@ if (env.SERVICES) {
         console.log(`Loaded webhooks for ${name} at ${env.SERVICES[name].SLUG || '/'}`);
       }
     } catch (error) {
-      loadedRoutes.push(`${name} -> ERROR: ${error.message}\nSTACK: ${error.stack}`);
       console.error(`Failed to load service ${name}:`, error);
     }
     
@@ -103,8 +101,9 @@ if (fs.existsSync(path.join(frontendDist, 'index.html'))) {
 
 app.use((req, res) => {
     console.log(`404 Not Found: ${req.method} ${req.originalUrl}`);
-    const servicesList = env.SERVICES ? Object.keys(env.SERVICES).join(', ') : 'None';
-    res.status(404).send(`Route not found: ${req.originalUrl}.\n\nConfigured Services: ${servicesList}\n\nDebug Info:\n${loadedRoutes.join('\n')}`);
+    // Generic body on purpose - no echoed URL (reflected into an HTML response) and no service list,
+    // file paths or stack traces for scanners to harvest. Details stay in the server log above.
+    res.status(404).json({ error: 'Not Found' });
 });
 
 const port = process.env.PORT || (env.API && env.API.PORT) || 3000;

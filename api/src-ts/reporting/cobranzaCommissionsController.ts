@@ -11,6 +11,15 @@ import { csvRow, formatExportValue } from './csvExport';
 import type { UserPermissions } from './permissionsRepository';
 import { getCobranzaGoals, setCobranzaGoalDefault, setCobranzaGoalExclusion, setCobranzaGoalOverride } from './cobranzaGoalsRepository';
 import { paramString } from './controller';
+import {
+  getCobranzaIncentives,
+  INCENTIVE_RATE_KEYS,
+  isIncentiveScheme,
+  saveCobranzaIncentives,
+  setAgentIncentiveScheme,
+  type CobranzaIncentiveTier,
+  type CobranzaProyectoIncentiveTier,
+} from './cobranzaIncentivesRepository';
 
 /** Whether this caller sees EVERY contract's cobranza data (as opposed to only the ones where
  * they're the resolved Dueño or Cobrador, via the separate self-cobrador/dueño path below). Its own
@@ -112,6 +121,7 @@ const ASIGNACION_TIPO_LABELS: Record<string, string> = {
   dueno: 'Dueño',
   cobrador: 'Cobrador',
   bolsa: 'Bolsa',
+  bolsa_domiciliado: 'Bolsa Domiciliado',
   paquete_inicial: 'Paquete Inicial',
 };
 
@@ -301,5 +311,102 @@ export async function setCobranzaGoalExclusionRoute(req: Request, res: Response)
   }
 
   await setCobranzaGoalExclusion(knex, employeeId, excluded);
+  res.status(200).json({ success: true });
+}
+
+/** PUT /api/reports/cobranza-comisiones/metas/employees/:id/esquema - body { month, year, scheme }.
+ * Sets the agent's incentive esquema for that month only (null clears it) - see
+ * cobranzaIncentivesRepository.ts's setAgentIncentiveScheme for how months are kept separate. */
+export async function setCobranzaAgentSchemeRoute(req: Request, res: Response): Promise<void> {
+  if (!isCobranzaGoalsEditAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta configuración.' });
+    return;
+  }
+
+  const employeeId = paramString(req.params.id);
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const period = parseMonthYearBody(body);
+  const scheme = body.scheme === null || body.scheme === '' ? null : body.scheme;
+  if (!employeeId || !period || (scheme !== null && !isIncentiveScheme(scheme))) {
+    res.status(400).json({ success: false, message: 'Provide month (1-12), year and a valid scheme (or null).' });
+    return;
+  }
+
+  await setAgentIncentiveScheme(knex, employeeId, period.year, period.month, scheme);
+  res.status(200).json({ success: true });
+}
+
+/** GET /api/reports/cobranza-comisiones/incentivos?month=&year= - the month's incentive tables,
+ * plus `copy_source` (the latest earlier configured month) when the month has none captured yet. */
+export async function getCobranzaIncentivesRoute(req: Request, res: Response): Promise<void> {
+  if (!(await canViewCobranzaGoals(req))) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return;
+  }
+
+  const { month, year } = resolveMonthYear(req);
+  const { config, copy_source } = await getCobranzaIncentives(knex, year, month);
+  res.status(200).json({ success: true, data: config, copy_source, can_edit: isCobranzaGoalsEditAllowed(req.permissions) });
+}
+
+/** A non-negative finite number, null for null/'' when `optional`, else undefined (invalid). */
+function parseRate(value: unknown, optional: boolean): number | null | undefined {
+  if (value === null || value === undefined || value === '') return optional ? null : undefined;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
+function parseTiers(value: unknown): CobranzaIncentiveTier[] | null {
+  if (!Array.isArray(value)) return null;
+  const tiers: CobranzaIncentiveTier[] = [];
+  for (const raw of value as Array<Record<string, unknown>>) {
+    const minPct = parseRate(raw?.min_pct, false);
+    const label = raw?.incentive_label;
+    if (minPct === undefined || minPct === null) return null;
+    if (label !== null && label !== undefined && (typeof label !== 'string' || label.length > 50)) return null;
+    const tier = { min_pct: minPct, incentive_label: typeof label === 'string' && label.trim() ? label.trim() : null } as CobranzaIncentiveTier;
+    for (const key of INCENTIVE_RATE_KEYS) {
+      const rate = parseRate(raw[key], true);
+      if (rate === undefined) return null;
+      tier[key] = rate;
+    }
+    tiers.push(tier);
+  }
+  return new Set(tiers.map((t) => t.min_pct)).size === tiers.length ? tiers : null;
+}
+
+function parseProyectoTiers(value: unknown): CobranzaProyectoIncentiveTier[] | null {
+  if (!Array.isArray(value)) return null;
+  const tiers: CobranzaProyectoIncentiveTier[] = [];
+  for (const raw of value as Array<Record<string, unknown>>) {
+    const minAmount = parseRate(raw?.min_amount, false);
+    const ratePct = parseRate(raw?.rate_pct, false);
+    if (minAmount === undefined || minAmount === null || ratePct === undefined || ratePct === null) return null;
+    tiers.push({ min_amount: minAmount, rate_pct: ratePct });
+  }
+  return new Set(tiers.map((t) => t.min_amount)).size === tiers.length ? tiers : null;
+}
+
+/** PUT /api/reports/cobranza-comisiones/incentivos - body { month, year, tiers, proyecto_tiers }.
+ * Replaces the month's whole incentive configuration. */
+export async function saveCobranzaIncentivesRoute(req: Request, res: Response): Promise<void> {
+  if (!isCobranzaGoalsEditAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta configuración.' });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const period = parseMonthYearBody(body);
+  const tiers = parseTiers(body.tiers);
+  const proyectoTiers = parseProyectoTiers(body.proyecto_tiers);
+  if (!period || !tiers || !proyectoTiers) {
+    res.status(400).json({
+      success: false,
+      message: 'Provide month (1-12), year, tiers and proyecto_tiers - non-negative numbers, no repeated % recuperado / monto mínimo.',
+    });
+    return;
+  }
+
+  await saveCobranzaIncentives(knex, period.year, period.month, tiers, proyectoTiers);
   res.status(200).json({ success: true });
 }

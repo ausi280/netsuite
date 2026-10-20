@@ -29,6 +29,7 @@ import { OtrosContratoRepository } from './repositories/otrosContratoRepository'
 import { PeServicioRepository } from './repositories/peServicioRepository';
 import { FcellsContratoRepository } from './repositories/fcellsContratoRepository';
 import { CustomerAddressRepository } from './repositories/customerAddressRepository';
+import { LeadRepository } from './repositories/leadRepository';
 import { ZammadTicketRepository } from './repositories/zammadTicketRepository';
 import { CustomerSyncService } from './services/customerSyncService';
 import { ContractSyncService } from './services/contractSyncService';
@@ -53,6 +54,7 @@ import { OtrosContratoSyncService } from './services/otrosContratoSyncService';
 import { PeServicioSyncService } from './services/peServicioSyncService';
 import { FcellsContratoSyncService } from './services/fcellsContratoSyncService';
 import { CustomerAddressSyncService } from './services/customerAddressSyncService';
+import { LeadSyncService } from './services/leadSyncService';
 import { ZammadTicketSyncService } from './services/zammadTicketSyncService';
 import { SyncOrchestrator } from './orchestrator/syncOrchestrator';
 import { ZammadHttpClient } from './http/zammadHttpClient';
@@ -106,6 +108,7 @@ export function bootstrap(): Bootstrapped {
     new FcellsContratoSyncService(db, http, syncState, rawStore, new FcellsContratoRepository(db), overlapMinutes),
     new CustomerAddressSyncService(db, http, syncState, rawStore, new CustomerAddressRepository(db), overlapMinutes),
     new PaymentInvoiceLinkSyncService(db, http, syncState, rawStore, new PaymentInvoiceLinkRepository(db), overlapMinutes),
+    new LeadSyncService(db, http, syncState, rawStore, new LeadRepository(db), overlapMinutes),
   ];
 
   // Zammad isn't configured in every environment (ZAMMAD.RELAY_URL/RELAY_SECRET in config/env.json

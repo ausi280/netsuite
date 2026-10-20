@@ -4,9 +4,11 @@ import {
   setCobranzaGoalDefault,
   setCobranzaGoalExclusion,
   setCobranzaGoalOverride,
+  setCobranzaAgentScheme,
   type CobranzaGoalDefaultInput,
   type CobranzaGoalOverrideInput,
 } from '../api/reportsApi';
+import type { IncentiveScheme } from '../api/types';
 import { useApiToken } from '../auth/useApiToken';
 
 export function useCobranzaGoals(month: number, year: number) {
@@ -62,6 +64,22 @@ export function useSetCobranzaGoalExclusion() {
     },
     onSuccess: () => {
       // Exclusions apply to every month, so every cached month's goals are stale.
+      queryClient.invalidateQueries({ queryKey: ['cobranza-goals'] });
+    },
+  });
+}
+
+export function useSetCobranzaAgentScheme() {
+  const { getAccessToken } = useApiToken();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ employeeId, input }: { employeeId: string; input: { month: number; year: number; scheme: IncentiveScheme | null } }) => {
+      const token = await getAccessToken();
+      await setCobranzaAgentScheme(token, employeeId, input);
+    },
+    onSuccess: () => {
+      // Later months not configured yet show this month's esquemas, so they're stale too.
       queryClient.invalidateQueries({ queryKey: ['cobranza-goals'] });
     },
   });

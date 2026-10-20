@@ -133,7 +133,7 @@ export function CobranzaGoalsSection({ month, year, groups }: CobranzaGoalsSecti
                 <tr key={person.employee_id}>
                   <td>
                     {person.nombre}
-                    {person.override_amount !== null ? <span className={styles.overrideBadge}>individual</span> : null}
+                    {person.override_amount !== null ? <span className={styles.overrideBadge}>Proyecto</span> : null}
                   </td>
                   <td>{formatCurrency(person.goal_amount, IMPORTE_PAGADO_CURRENCY)}</td>
                   <td>{formatCurrency(person.collected, IMPORTE_PAGADO_CURRENCY)}</td>

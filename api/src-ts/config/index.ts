@@ -44,6 +44,9 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   // every 30 minutes keeps cobranzaCommissionsRepository.ts's "was this invoice paid" check
   // reasonably fresh without adding real NetSuite API load.
   paymentInvoiceLink: '*/30 * * * *',
+  // NetSuite leads (Argentina's prospectos for the Reporte de Marketing) - same 4-hour batch as
+  // the other ERP entities.
+  lead: '15 3,7,11,15,19,23 * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -98,6 +101,7 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     CUSTOMER_ADDRESS: mergeEntityConfig('customerAddress', raw?.CUSTOMER_ADDRESS),
     ZAMMAD_TICKET: mergeEntityConfig('zammadTicket', raw?.ZAMMAD_TICKET),
     PAYMENT_INVOICE_LINK: mergeEntityConfig('paymentInvoiceLink', raw?.PAYMENT_INVOICE_LINK),
+    LEAD: mergeEntityConfig('lead', raw?.LEAD),
   };
 }
 

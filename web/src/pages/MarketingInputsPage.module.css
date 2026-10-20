@@ -1,0 +1,31 @@
+.tableWrapper {
+  overflow-x: auto;
+}
+
+.monthCell {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cellInput {
+  width: 110px;
+}
+
+.invalid {
+  border-color: var(--color-danger);
+}
+
+.actionCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.computedCell {
+  display: inline-block;
+  min-width: 110px;
+  padding: 0 4px;
+  color: var(--color-neutral-800);
+  font-variant-numeric: tabular-nums;
+}

@@ -88,3 +88,18 @@
   font-size: 13px;
   color: var(--color-secondary);
 }
+
+.search {
+  padding: 7px 10px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-200);
+  font-size: 13px;
+  color: var(--color-neutral-900);
+  background: var(--color-white);
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}

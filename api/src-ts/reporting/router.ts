@@ -27,7 +27,7 @@ import { chargeDomiciledRoute } from './paymentsChargeController';
 import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
 import { createLogisticaTicketRoute, logisticaUpload } from './logisticaTicketController';
 import { exportProspectosRoute, listProspectosRoute } from './prospectosController';
-import { getMarketingReportRoute } from './marketingController';
+import { getMarketingInputsRoute, getMarketingReportRoute, getMarketingTicketsRoute, saveMarketingInputsRoute } from './marketingController';
 import { getComercialReportRoute } from './comercialController';
 import {
   exportTareasVencidasRoute,
@@ -43,6 +43,9 @@ import {
   setCobranzaGoalDefaultRoute,
   setCobranzaGoalExclusionRoute,
   setCobranzaGoalOverrideRoute,
+  setCobranzaAgentSchemeRoute,
+  getCobranzaIncentivesRoute,
+  saveCobranzaIncentivesRoute,
 } from './cobranzaCommissionsController';
 import { exportNotesReportRoute, listNotesReportRoute } from './notesReportController';
 import { exportContratosReportRoute, listContratosReportRoute } from './contratosReportController';
@@ -131,6 +134,9 @@ export function buildReportingRouter(): Router {
   // built on the same Prospecto data as /prospectos) - likewise bespoke, must be registered before
   // /:entity/export, or that route would swallow "marketing" as an entity key and 404.
   router.get('/marketing', getMarketingReportRoute);
+  router.get('/marketing/inputs', getMarketingInputsRoute);
+  router.put('/marketing/inputs', saveMarketingInputsRoute);
+  router.get('/marketing/tickets', getMarketingTicketsRoute);
   // Comercial (tareas-per-prospecto distribution, global and per vendedor) - built on the same
   // Prospecto data as /prospectos - likewise bespoke, must be registered before /:entity/export,
   // or that route would swallow "comercial" as an entity key and 404.
@@ -158,6 +164,9 @@ export function buildReportingRouter(): Router {
   router.put('/cobranza-comisiones/metas/default', setCobranzaGoalDefaultRoute);
   router.put('/cobranza-comisiones/metas/employees/:id', setCobranzaGoalOverrideRoute);
   router.put('/cobranza-comisiones/metas/employees/:id/exclusion', setCobranzaGoalExclusionRoute);
+  router.put('/cobranza-comisiones/metas/employees/:id/esquema', setCobranzaAgentSchemeRoute);
+  router.get('/cobranza-comisiones/incentivos', getCobranzaIncentivesRoute);
+  router.put('/cobranza-comisiones/incentivos', saveCobranzaIncentivesRoute);
   // Reporte de Notas (NetSuite-native Notes across every contract, date-filtered) is likewise
   // bespoke, not a generic ENTITY_REGISTRY entity - must be registered before /:entity/export, or
   // that route would swallow "notas" as an entity key and 404.

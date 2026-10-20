@@ -14,6 +14,7 @@ interface CobranzaContractGroupCardProps {
 
 const ASIGNADO_BADGE_CLASS: Record<AsignacionTipo, string> = {
   bolsa: 'asignadoBolsa',
+  bolsa_domiciliado: 'asignadoBolsa',
   paquete_inicial: 'asignadoPaqueteInicial',
   dueno: 'asignadoDueno',
   cobrador: 'asignadoCobrador',

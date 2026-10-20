@@ -27,7 +27,8 @@ export type SyncEntityName =
   | 'fcellsContrato'
   | 'customerAddress'
   | 'zammadTicket'
-  | 'paymentInvoiceLink';
+  | 'paymentInvoiceLink'
+  | 'lead';
 
 export interface RetryConfig {
   MAX_ATTEMPTS: number;
@@ -72,6 +73,7 @@ export interface ErpSyncConfig {
   CUSTOMER_ADDRESS: EntitySyncConfig;
   ZAMMAD_TICKET: EntitySyncConfig;
   PAYMENT_INVOICE_LINK: EntitySyncConfig;
+  LEAD: EntitySyncConfig;
 }
 
 export interface ErpConfig {

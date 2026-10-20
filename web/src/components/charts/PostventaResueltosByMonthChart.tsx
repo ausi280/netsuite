@@ -6,6 +6,11 @@ import styles from './charts.module.css';
 interface PostventaResueltosByMonthChartProps {
   rows: PostventaResueltoMonthRow[];
   formatValue: (value: number) => string;
+  /** Tooltip metric name - "Resueltos" by default; e.g. "Cerrados" for groups that close tickets
+   * instead of resolving them (Marketing). */
+  metricName?: string;
+  /** Bar color - the Resuelto green by default. */
+  color?: string;
 }
 
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -22,7 +27,12 @@ function formatMonthKey(key: string): string {
  * this page for visual consistency. A different question than PostventaByMonthChart's by-month
  * breakdown: that one buckets every ticket by when it was CREATED; this one only looks at tickets
  * that reached Resuelto, bucketed by when they got there. */
-export function PostventaResueltosByMonthChart({ rows, formatValue }: PostventaResueltosByMonthChartProps) {
+export function PostventaResueltosByMonthChart({
+  rows,
+  formatValue,
+  metricName = 'Resueltos',
+  color = 'var(--status-good)',
+}: PostventaResueltosByMonthChartProps) {
   const data = rows.map((row) => ({ key: `${row.anio}-${row.mes}`, resueltos: row.resueltos }));
 
   return (
@@ -44,9 +54,9 @@ export function PostventaResueltosByMonthChart({ rows, formatValue }: PostventaR
           <YAxis tickFormatter={formatValue} tick={{ fill: 'var(--chart-muted)', fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
           <Tooltip
             cursor={{ fill: 'var(--color-primary-soft)' }}
-            content={<ChartTooltip formatLabel={formatMonthKey} formatValue={formatValue} metricName="Resueltos" />}
+            content={<ChartTooltip formatLabel={formatMonthKey} formatValue={formatValue} metricName={metricName} />}
           />
-          <Bar dataKey="resueltos" fill="var(--status-good)" radius={[6, 6, 0, 0]} maxBarSize={36} animationDuration={450}>
+          <Bar dataKey="resueltos" fill={color} radius={[6, 6, 0, 0]} maxBarSize={36} animationDuration={450}>
             <LabelList
               dataKey="resueltos"
               position="top"

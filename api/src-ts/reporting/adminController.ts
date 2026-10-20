@@ -22,6 +22,7 @@ const VALID_ENTITY_KEYS = new Set<string>([
   'tareas_vencidas',
   'cobranza_commissions',
   'cobranza_goals',
+  'marketing_inputs',
   'postventa',
 ]);
 

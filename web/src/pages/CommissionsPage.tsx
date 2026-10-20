@@ -41,7 +41,10 @@ export function CommissionsPage() {
   const year = Number(searchParams.get('year')) || now.getFullYear();
   const subsidiary = (searchParams.get('subsidiary') ?? '').split(',').filter(Boolean);
   const currency = searchParams.get('currency') ?? '';
+  // Comma-separated vendedor ids (same convention as ?subsidiary=) - passed through as-is to the
+  // API, which splits it.
   const vendedor = searchParams.get('vendedor') ?? '';
+  const selectedVendedores = useMemo(() => vendedor.split(',').filter(Boolean), [vendedor]);
 
   // Whether /reports/contracts (and its subsidiary-options/commission-levels routes) are reachable
   // at all - independent from whether commissions itself is scoped to everyone or just this caller
@@ -58,15 +61,19 @@ export function CommissionsPage() {
   // query above for free whenever vendedor is already '' (the common case), so there's no extra
   // request until a vendedor filter is actually applied.
   const { data: unfilteredResult } = useCommissions(month, year, subsidiary, currency);
-  const vendedorOptions = useMemo(() => {
+  const vendedorNames = useMemo(() => {
     const byId = new Map<string, string>();
     for (const group of unfilteredResult?.groups ?? []) {
       if (!byId.has(group.vendedor_id)) byId.set(group.vendedor_id, group.vendedor_nombre ?? group.vendedor_id);
     }
-    return Array.from(byId.entries())
-      .map(([id, nombre]) => ({ id, nombre }))
-      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return byId;
   }, [unfilteredResult]);
+  // Sorted by name; a selected vendedor with no sales in the newly chosen month stays listed, so it
+  // can still be unchecked.
+  const vendedorOptionIds = useMemo(() => {
+    const ids = new Set([...vendedorNames.keys(), ...selectedVendedores]);
+    return Array.from(ids).sort((a, b) => (vendedorNames.get(a) ?? a).localeCompare(vendedorNames.get(b) ?? b));
+  }, [vendedorNames, selectedVendedores]);
   // Authoritative per the commissions response itself, not guessed from the entities list - a
   // caller can have 'contracts' yet still be self-vendedor-scoped here if they lack 'commissions'.
   const isSelfVendedor = result?.isSelfVendedor ?? false;
@@ -120,10 +127,10 @@ export function CommissionsPage() {
     setSearchParams(next);
   }
 
-  function handleVendedorChange(value: string) {
+  function handleVendedorChange(ids: string[]) {
     const next = new URLSearchParams(searchParams);
-    if (value) {
-      next.set('vendedor', value);
+    if (ids.length > 0) {
+      next.set('vendedor', ids.join(','));
     } else {
       next.delete('vendedor');
     }
@@ -239,19 +246,16 @@ export function CommissionsPage() {
           />
         ) : null}
         {!isSelfVendedor ? (
-          <select
-            className={styles.select}
-            value={vendedor}
-            onChange={(event) => handleVendedorChange(event.target.value)}
-            aria-label="Filtrar por vendedor"
-          >
-            <option value="">Todos los vendedores</option>
-            {vendedorOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.nombre}
-              </option>
-            ))}
-          </select>
+          <MultiSelectDropdown
+            value={selectedVendedores}
+            options={vendedorOptionIds}
+            onChange={handleVendedorChange}
+            labelForId={(id) => vendedorNames.get(id) ?? id}
+            placeholder="Todos los vendedores"
+            ariaLabel="Filtrar por vendedor"
+            searchable
+            selectedCountLabel="vendedores"
+          />
         ) : null}
         <select
           className={styles.select}

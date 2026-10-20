@@ -144,15 +144,21 @@ async function loadCommissionsData(req: Request): Promise<CommissionsDataResult 
 
   const currency = typeof req.query.currency === 'string' ? req.query.currency.trim() : undefined;
   const restrictSubsidiaries = fullAccess ? subsidiaryRestrictionFor(permissions!) : null;
-  // A full-access caller may optionally narrow the grid down to one vendedor via ?vendedor=<id> -
-  // reuses the exact same restrictVendedorId plumbing the self-vendedor path already relies on
-  // (getCommissionsByVendedor doesn't know or care WHY it's being asked to narrow to one vendedor).
-  // Irrelevant for a self-vendedor caller: they're already forced to their own id regardless of
-  // whatever this query param says, since they can never see anyone else's commissions.
-  const requestedVendedorId =
-    fullAccess && typeof req.query.vendedor === 'string' && req.query.vendedor.trim() !== '' ? req.query.vendedor.trim() : null;
-  const restrictVendedorId = fullAccess ? requestedVendedorId : selfVendedorId;
-  const rawData = await getCommissionsByVendedor(knex, getLegacyDb(), month, year, restrictSubsidiaries, req.query.subsidiary, currency, restrictVendedorId);
+  // A full-access caller may optionally narrow the grid down to one or more vendedores via
+  // ?vendedor=<id>,<id>... (comma-separated, same as ?subsidiary=) - reuses the exact same
+  // restrictVendedorIds plumbing the self-vendedor path already relies on (getCommissionsByVendedor
+  // doesn't know or care WHY it's being asked to narrow). Irrelevant for a self-vendedor caller:
+  // they're already forced to their own id regardless of whatever this query param says, since they
+  // can never see anyone else's commissions.
+  const requestedVendedorIds =
+    fullAccess && typeof req.query.vendedor === 'string'
+      ? req.query.vendedor
+          .split(',')
+          .map((id) => id.trim())
+          .filter(Boolean)
+      : [];
+  const restrictVendedorIds = fullAccess ? requestedVendedorIds : selfVendedorId ? [selfVendedorId] : null;
+  const rawData = await getCommissionsByVendedor(knex, getLegacyDb(), month, year, restrictSubsidiaries, req.query.subsidiary, currency, restrictVendedorIds);
 
   // A self-vendedor always sees their own real amounts - this gate only ever applies to the "see
   // every vendedor" full-access path (see isCommissionsAmountsAllowed's own comment).

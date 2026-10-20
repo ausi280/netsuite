@@ -209,11 +209,11 @@ interface RawMotivoRow {
  * or it already converted to a sale. Both count as "Calificados" (see categorizeNoVenta). */
 const SIN_MOTIVO_LABEL = '(Sin motivo - abierto o ya convertido a venta)';
 
-function emptySummary(): ProspectoQualificationSummary {
+export function emptySummary(): ProspectoQualificationSummary {
   return { calificados: 0, no_contactado: 0, lead_no_calificado: 0, total: 0 };
 }
 
-function addToSummary(target: ProspectoQualificationSummary, categoria: ProspectoQualificationCategory, cantidad: number): void {
+export function addToSummary(target: ProspectoQualificationSummary, categoria: ProspectoQualificationCategory, cantidad: number): void {
   if (categoria === 'No contactado') target.no_contactado += cantidad;
   else if (categoria === 'Lead no calificado') target.lead_no_calificado += cantidad;
   else target.calificados += cantidad;

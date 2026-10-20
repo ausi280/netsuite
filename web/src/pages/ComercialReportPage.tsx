@@ -3,6 +3,7 @@ import { AppShell } from '../components/layout/AppShell';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
+import { MultiSelectDropdown } from '../components/common/MultiSelectDropdown';
 import { SimpleTable } from '../components/table/SimpleTable';
 import type { SimpleColumn } from '../components/table/SimpleTable';
 import { Pagination } from '../components/table/Pagination';
@@ -85,7 +86,10 @@ export function ComercialReportPage() {
   const [view, setView] = useState<ComercialView>('global');
   const [dateFrom, setDateFrom] = useState(defaultDateFrom());
   const [dateTo, setDateTo] = useState(defaultDateTo());
-  const [selectedVendedorKey, setSelectedVendedorKey] = useState<string | null>(null);
+  // Normalized vendedor keys (see normalizeVendedorName) - several selected are combined into one
+  // series in every "Por vendedor" chart and in the Tareas Vencidas table/export.
+  const [selectedVendedorKeys, setSelectedVendedorKeys] = useState<string[]>([]);
+  const hasVendedorSelection = selectedVendedorKeys.length > 0;
   // Defaults to "Todos" - the historical behavior every chart on this page already had before this
   // switch existed. "Activos" filters every chart below to Cryo.dbo.Prospecto.Activo = true only.
   const [activoFilter, setActivoFilter] = useState<ActivoFilter>('all');
@@ -100,29 +104,31 @@ export function ComercialReportPage() {
   // The vendedor-select dropdown's own list never changes with either switch - a vendedor who only
   // has active (or only inactive, or only online/offline) prospectos should stay selectable.
   const vendedores = useMemo(() => listVendedores(data?.porVendedor ?? []), [data]);
+  const vendedorKeys = useMemo(() => vendedores.map((v) => v.key), [vendedores]);
+  const vendedorLabels = useMemo(() => new Map(vendedores.map((v) => [v.key, v.label])), [vendedores]);
   const emptyByCanal = useMemo(() => ({ online: [] as TareasBucket[], offline: [] as TareasBucket[] }), []);
   const emptyStackByCanal = useMemo(() => ({ online: [] as TareasByMonthStack[], offline: [] as TareasByMonthStack[] }), []);
 
   const vendedorBuckets = useMemo(
     () =>
-      selectedVendedorKey !== null
-        ? splitByCanal(filteredPorVendedor, (rows) => bucketTareasCountsForVendedor(rows, selectedVendedorKey))
+      hasVendedorSelection
+        ? splitByCanal(filteredPorVendedor, (rows) => bucketTareasCountsForVendedor(rows, selectedVendedorKeys))
         : emptyByCanal,
-    [filteredPorVendedor, selectedVendedorKey, emptyByCanal],
+    [filteredPorVendedor, selectedVendedorKeys, hasVendedorSelection, emptyByCanal],
   );
   const vendedorByMonth = useMemo(
     () =>
-      selectedVendedorKey !== null
-        ? splitByCanal(filteredPorVendedor, (rows) => bucketTareasByMonthForVendedor(rows, selectedVendedorKey))
+      hasVendedorSelection
+        ? splitByCanal(filteredPorVendedor, (rows) => bucketTareasByMonthForVendedor(rows, selectedVendedorKeys))
         : emptyStackByCanal,
-    [filteredPorVendedor, selectedVendedorKey, emptyStackByCanal],
+    [filteredPorVendedor, selectedVendedorKeys, hasVendedorSelection, emptyStackByCanal],
   );
   const vendedorTotalByMonth = useMemo(
     () =>
-      selectedVendedorKey !== null
-        ? splitByCanal(filteredPorVendedor, (rows) => totalByMonthForVendedor(rows, selectedVendedorKey))
+      hasVendedorSelection
+        ? splitByCanal(filteredPorVendedor, (rows) => totalByMonthForVendedor(rows, selectedVendedorKeys))
         : emptyByCanal,
-    [filteredPorVendedor, selectedVendedorKey, emptyByCanal],
+    [filteredPorVendedor, selectedVendedorKeys, hasVendedorSelection, emptyByCanal],
   );
 
   return (
@@ -229,28 +235,25 @@ export function ComercialReportPage() {
               <div className={styles.panelHeader}>
                 <div>
                   <h2 className={styles.panelTitle}>Por vendedor</h2>
-                  <p className={styles.panelSubtitle}>Selecciona un vendedor para ver sus tareas y prospectos activos.</p>
+                  <p className={styles.panelSubtitle}>Selecciona uno o más vendedores para ver sus tareas y prospectos activos (combinados).</p>
                 </div>
-                <select
-                  className={styles.vendedorSelect}
-                  value={selectedVendedorKey ?? ''}
-                  onChange={(event) => setSelectedVendedorKey(event.target.value || null)}
-                  aria-label="Filtrar por vendedor"
-                >
-                  <option value="">Seleccione un vendedor...</option>
-                  {vendedores.map((v) => (
-                    <option key={v.key} value={v.key}>
-                      {v.label}
-                    </option>
-                  ))}
-                </select>
+                <MultiSelectDropdown
+                  value={selectedVendedorKeys}
+                  options={vendedorKeys}
+                  onChange={setSelectedVendedorKeys}
+                  labelForId={(key) => vendedorLabels.get(key) ?? key}
+                  placeholder="Seleccione vendedores..."
+                  ariaLabel="Filtrar por vendedor"
+                  searchable
+                  selectedCountLabel="vendedores"
+                />
               </div>
 
               <div className={chartStyles.chartCard}>
                 <h2 className={styles.panelTitle}>Tareas por prospecto · Por vendedor</h2>
-                <p className={styles.panelSubtitle}>Distribución de tareas del vendedor seleccionado - separado por canal Online / Offline.</p>
-                {selectedVendedorKey === null ? (
-                  <EmptyState message="Selecciona un vendedor para ver su distribución de tareas." />
+                <p className={styles.panelSubtitle}>Distribución de tareas de los vendedores seleccionados - separado por canal Online / Offline.</p>
+                {!hasVendedorSelection ? (
+                  <EmptyState message="Selecciona uno o más vendedores para ver su distribución de tareas." />
                 ) : (
                   <div className={styles.splitGrid}>
                     {CANALES.map((canal) => (
@@ -270,8 +273,8 @@ export function ComercialReportPage() {
               <div className={chartStyles.chartCard}>
                 <h2 className={styles.panelTitle}>Tareas por prospecto · Por vendedor, por mes</h2>
                 <p className={styles.panelSubtitle}>Misma distribución, por mes de captura - separado por canal Online / Offline.</p>
-                {selectedVendedorKey === null ? (
-                  <EmptyState message="Selecciona un vendedor para ver su distribución de tareas por mes." />
+                {!hasVendedorSelection ? (
+                  <EmptyState message="Selecciona uno o más vendedores para ver su distribución de tareas por mes." />
                 ) : (
                   <div className={styles.splitGrid}>
                     {CANALES.map((canal) => (
@@ -292,11 +295,11 @@ export function ComercialReportPage() {
                 <h2 className={styles.panelTitle}>{activoFilter === 'active' ? 'Prospectos activos' : 'Prospectos'} · Por vendedor, por mes</h2>
                 <p className={styles.panelSubtitle}>
                   {activoFilter === 'active'
-                    ? 'Prospectos del vendedor seleccionado, actualmente activos, por mes de captura - separado por canal Online / Offline.'
-                    : 'Todos los prospectos del vendedor seleccionado, por mes de captura - separado por canal Online / Offline.'}
+                    ? 'Prospectos de los vendedores seleccionados, actualmente activos, por mes de captura - separado por canal Online / Offline.'
+                    : 'Todos los prospectos de los vendedores seleccionados, por mes de captura - separado por canal Online / Offline.'}
                 </p>
-                {selectedVendedorKey === null ? (
-                  <EmptyState message="Selecciona un vendedor para ver sus prospectos." />
+                {!hasVendedorSelection ? (
+                  <EmptyState message="Selecciona uno o más vendedores para ver sus prospectos." />
                 ) : (
                   <div className={styles.splitGrid}>
                     {CANALES.map((canal) => (
@@ -325,7 +328,7 @@ export function ComercialReportPage() {
       <div className={styles.panels}>
         <TareasVencidasSection
           view={view}
-          selectedVendedorKey={selectedVendedorKey}
+          selectedVendedorKeys={selectedVendedorKeys}
           activoFilter={activoFilter}
           dateFrom={dateFrom}
           dateTo={dateTo}
@@ -349,7 +352,7 @@ const TAREAS_VENCIDAS_PAGE_SIZE = 50;
  * `view` is the SAME page-level Global/Por Vendedor switch the rest of ComercialReportPage uses -
  * "Global" shows only the all-vendedores-combined chart, "Por Vendedor" shows that one vendedor's
  * chart AND the detail table/export (the table only ever makes sense filtered to one vendedor, per
- * explicit instruction). `selectedVendedorKey`, `activoFilter`, `dateFrom`/`dateTo` are the SAME
+ * explicit instruction). `selectedVendedorKeys`, `activoFilter`, `dateFrom`/`dateTo` are the SAME
  * page-level state the rest of ComercialReportPage uses too (per explicit instruction: one
  * vendedor selector, one Activos/Todos switch, and one Desde/Hasta filter driving the whole page,
  * not a second independent set just for this section, even though this section's own date range
@@ -359,13 +362,13 @@ const TAREAS_VENCIDAS_PAGE_SIZE = 50;
  */
 function TareasVencidasSection({
   view,
-  selectedVendedorKey,
+  selectedVendedorKeys,
   activoFilter,
   dateFrom,
   dateTo,
 }: {
   view: ComercialView;
-  selectedVendedorKey: string | null;
+  selectedVendedorKeys: string[];
   activoFilter: ActivoFilter;
   dateFrom: string;
   dateTo: string;
@@ -377,21 +380,22 @@ function TareasVencidasSection({
   const [exportError, setExportError] = useState<string | null>(null);
 
   const activoOnly = activoFilter === 'active';
+  const hasVendedorSelection = selectedVendedorKeys.length > 0;
 
   const vendedoresQuery = useTareaVencidaVendedores(dateFrom, dateTo, view === 'vendedor');
   const vendedorGroups = useMemo(() => groupVendedorOptions(vendedoresQuery.data ?? []), [vendedoresQuery.data]);
   const selectedVendedorIds = useMemo(
-    () => vendedorGroups.find((g) => g.key === selectedVendedorKey)?.ids ?? [],
-    [vendedorGroups, selectedVendedorKey],
+    () => vendedorGroups.filter((g) => selectedVendedorKeys.includes(g.key)).flatMap((g) => g.ids),
+    [vendedorGroups, selectedVendedorKeys],
   );
 
-  // selectedVendedorKey/activoFilter/dateFrom/dateTo are all owned by the parent page now (one
+  // selectedVendedorKeys/activoFilter/dateFrom/dateTo are all owned by the parent page now (one
   // shared selector/switch/date-range for the whole page, per explicit instruction) - reset back
   // to page 1 whenever any of them changes out from under this section, same as this section's own
   // pageSize changes already did.
   useEffect(() => {
     setPage(1);
-  }, [selectedVendedorKey, activoFilter, dateFrom, dateTo]);
+  }, [selectedVendedorKeys, activoFilter, dateFrom, dateTo]);
 
   const { data, isLoading, isError, error, refetch } = useTareasVencidas(
     dateFrom,
@@ -400,8 +404,11 @@ function TareasVencidasSection({
     page,
     pageSize,
     activoOnly,
-    view === 'vendedor',
+    // An empty id list means "every vendedor" to the API - never send one for a selection whose
+    // vendedores simply have no tareas vencidas in the period.
+    view === 'vendedor' && selectedVendedorIds.length > 0,
   );
+  const selectionHasNoTareas = hasVendedorSelection && vendedoresQuery.isSuccess && selectedVendedorIds.length === 0;
 
   // Always fetches both breakdowns unfiltered by vendedor (see fetchTareasVencidasByMonth) - the
   // vendedor chart below just slices `porVendedor` by the same selectedVendedorIds the table/export
@@ -473,11 +480,11 @@ function TareasVencidasSection({
             <div className={styles.panelHeader}>
               <div>
                 <h2 className={styles.panelTitle}>Tareas Vencidas · Por vendedor, por mes</h2>
-                <p className={styles.panelSubtitle}>Selecciona un vendedor arriba para ver su distribución de tareas vencidas.</p>
+                <p className={styles.panelSubtitle}>Selecciona uno o más vendedores arriba para ver su distribución de tareas vencidas.</p>
               </div>
             </div>
-            {selectedVendedorKey === null ? (
-              <EmptyState message="Selecciona un vendedor para ver su distribución de tareas vencidas." />
+            {!hasVendedorSelection ? (
+              <EmptyState message="Selecciona uno o más vendedores para ver su distribución de tareas vencidas." />
             ) : byMonthQuery.isLoading ? (
               <LoadingState label="Cargando tareas vencidas..." />
             ) : vendedorByMonth.length === 0 ? (
@@ -496,16 +503,18 @@ function TareasVencidasSection({
             <div className={styles.panelHeader}>
               <div>
                 <h2 className={styles.panelTitle}>Detalle de Tareas Vencidas</h2>
-                <p className={styles.panelSubtitle}>Lista de tareas del vendedor seleccionado arriba.</p>
+                <p className={styles.panelSubtitle}>Lista de tareas de los vendedores seleccionados arriba.</p>
               </div>
-              <button type="button" className={styles.actionButton} onClick={handleExport} disabled={isExporting || selectedVendedorKey === null}>
+              <button type="button" className={styles.actionButton} onClick={handleExport} disabled={isExporting || selectedVendedorIds.length === 0}>
                 {isExporting ? 'Exportando...' : 'Exportar CSV'}
               </button>
             </div>
             {exportError ? <p className={styles.exportError}>{exportError}</p> : null}
 
-            {selectedVendedorKey === null ? (
-              <EmptyState message="Selecciona un vendedor (arriba) para ver el detalle de sus tareas vencidas." />
+            {!hasVendedorSelection ? (
+              <EmptyState message="Selecciona uno o más vendedores (arriba) para ver el detalle de sus tareas vencidas." />
+            ) : selectionHasNoTareas ? (
+              <EmptyState message="Los vendedores seleccionados no tienen tareas vencidas en el periodo." />
             ) : (
               <>
                 {data ? (

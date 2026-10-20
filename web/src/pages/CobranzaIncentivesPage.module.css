@@ -1,0 +1,30 @@
+.notice {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  font-size: 13px;
+}
+
+.narrowInput {
+  width: 80px;
+}
+
+.labelInput {
+  width: 110px;
+}
+
+.rangeCell {
+  white-space: nowrap;
+  color: var(--color-secondary);
+  font-size: 12px;
+}
+
+.saveBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}

@@ -14,6 +14,7 @@ import { ProspectosPage } from './pages/ProspectosPage';
 import { CuentasPage } from './pages/CuentasPage';
 import { CobranzaCommissionsPage } from './pages/CobranzaCommissionsPage';
 import { CobranzaGoalsPage } from './pages/CobranzaGoalsPage';
+import { CobranzaIncentivesPage } from './pages/CobranzaIncentivesPage';
 import { PostventaReportPage } from './pages/PostventaReportPage';
 import { NotasReportPage } from './pages/NotasReportPage';
 import { ContratosReportPage } from './pages/ContratosReportPage';
@@ -31,6 +32,7 @@ const ZammadTicketsAnalyticsPage = lazy(() =>
 );
 const HrReportPage = lazy(() => import('./pages/HrReportPage').then((m) => ({ default: m.HrReportPage })));
 const MarketingReportPage = lazy(() => import('./pages/MarketingReportPage').then((m) => ({ default: m.MarketingReportPage })));
+const MarketingInputsPage = lazy(() => import('./pages/MarketingInputsPage').then((m) => ({ default: m.MarketingInputsPage })));
 const ComercialReportPage = lazy(() => import('./pages/ComercialReportPage').then((m) => ({ default: m.ComercialReportPage })));
 const LogisticaTicketPage = lazy(() => import('./pages/LogisticaTicketPage').then((m) => ({ default: m.LogisticaTicketPage })));
 
@@ -153,6 +155,16 @@ export function App() {
           }
         />
         <Route
+          path="/reports/cobranza-comisiones/incentivos"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <CobranzaIncentivesPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/reports/postventa"
           element={
             <RequireAuth>
@@ -179,6 +191,18 @@ export function App() {
               <PageTransition>
                 <Suspense fallback={<LoadingState label="Cargando reporte de marketing..." />}>
                   <MarketingReportPage />
+                </Suspense>
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/marketing/captura"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <Suspense fallback={<LoadingState label="Cargando..." />}>
+                  <MarketingInputsPage />
                 </Suspense>
               </PageTransition>
             </RequireAuth>

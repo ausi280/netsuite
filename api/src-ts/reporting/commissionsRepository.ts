@@ -622,18 +622,18 @@ export async function getCommissionsByVendedor(
   restrictSubsidiaries: Set<string> | null,
   subsidiary?: unknown,
   currency?: string,
-  /** Set only for a "self-vendedor" caller (see resolveSelfVendedorId) - narrows both display
-   * queries down to that one vendedor's own sales before anything else runs, so every downstream
-   * total/tier/group calculation naturally covers only them. null/undefined for every other
-   * caller (admins and anyone with the 'contracts' grant see every vendedor, as before). */
-  restrictVendedorId?: string | null,
+  /** Narrows both display queries down to these vendedores' own sales before anything else runs,
+   * so every downstream total/tier/group calculation naturally covers only them - a "self-vendedor"
+   * caller's own id (see resolveSelfVendedorId), or the vendedores a full-access caller picked in the
+   * filter. null/undefined/empty = every vendedor. */
+  restrictVendedorIds?: string[] | null,
 ): Promise<VendedorCommissionGroup[]> {
   const displayContractsQb = baseContractsQuery(db, month, year).orderBy('VEND.entityid').orderBy('C.custrecord_cryo_finicio');
   const displayOtrosQb = baseOtrosContratosQuery(db, month, year).orderBy('VEND.entityid').orderBy('O.custrecord_cryo_fecha_otroscontratos');
 
-  if (restrictVendedorId) {
-    displayContractsQb.andWhere('C.custrecord_cryo_vendedor', restrictVendedorId);
-    displayOtrosQb.andWhere('O.custrecord_cryo_vendedor_otroscontratos', restrictVendedorId);
+  if (restrictVendedorIds && restrictVendedorIds.length > 0) {
+    displayContractsQb.whereIn('C.custrecord_cryo_vendedor', restrictVendedorIds);
+    displayOtrosQb.whereIn('O.custrecord_cryo_vendedor_otroscontratos', restrictVendedorIds);
   }
 
   // Permission-based restriction (null = unrestricted/admin) and the caller's requested

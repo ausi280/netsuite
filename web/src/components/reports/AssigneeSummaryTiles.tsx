@@ -12,14 +12,16 @@ const TIPO_LABELS: Record<AsignacionTipo, string> = {
   dueno: 'Dueño',
   cobrador: 'Cobrador',
   bolsa: 'Bolsa',
+  bolsa_domiciliado: 'Bolsa Domiciliado',
   paquete_inicial: 'Paquete Inicial',
 };
 
 const TIPO_ORDER: Record<AsignacionTipo, number> = {
   bolsa: 0,
-  paquete_inicial: 1,
-  cobrador: 2,
-  dueno: 3,
+  bolsa_domiciliado: 1,
+  paquete_inicial: 2,
+  cobrador: 3,
+  dueno: 4,
 };
 
 /** One tile per (Dueño, Cobrador) pair, plus one for "Bolsa" and one for "Paquete inicial de
@@ -41,7 +43,7 @@ export function AssigneeSummaryTiles({ groups }: AssigneeSummaryTilesProps) {
       {summaries.map((summary) => (
         <div
           key={`${summary.tipo}:${summary.name}`}
-          className={`${styles.tile} ${summary.tipo === 'bolsa' ? styles.bolsaTile : ''} ${
+          className={`${styles.tile} ${summary.tipo === 'bolsa' || summary.tipo === 'bolsa_domiciliado' ? styles.bolsaTile : ''} ${
             summary.tipo === 'paquete_inicial' ? styles.paqueteInicialTile : ''
           }`}
         >

@@ -30,6 +30,7 @@ const TIPO_LABELS: Record<AsignacionTipo, string> = {
   dueno: 'Dueño',
   cobrador: 'Cobrador',
   bolsa: 'Bolsa',
+  bolsa_domiciliado: 'Bolsa Domiciliado',
   paquete_inicial: 'Paquete Inicial',
 };
 
@@ -73,9 +74,10 @@ export function CobranzaCommissionsPage() {
     if (!data) return null;
     const partidasCount = data.reduce((sum, group) => sum + group.partidas_count, 0);
     const bolsaCount = data.filter((group) => group.asignado_tipo === 'bolsa').length;
+    const bolsaDomiciliadoCount = data.filter((group) => group.asignado_tipo === 'bolsa_domiciliado').length;
     const cobradorCount = data.filter((group) => group.asignado_tipo === 'cobrador').length;
     const paqueteInicialCount = data.filter((group) => group.asignado_tipo === 'paquete_inicial').length;
-    return { contractsCount: data.length, partidasCount, bolsaCount, cobradorCount, paqueteInicialCount };
+    return { contractsCount: data.length, partidasCount, bolsaCount, bolsaDomiciliadoCount, cobradorCount, paqueteInicialCount };
   }, [data]);
 
   // Grouped by (tipo, name) - not just name - since the same person can be credited as Dueño on
@@ -94,7 +96,7 @@ export function CobranzaCommissionsPage() {
       seen.set(key, { key, label, tipo: group.asignado_tipo });
     }
 
-    const tipoOrder: Record<AsignacionTipo, number> = { dueno: 0, cobrador: 0, paquete_inicial: 1, bolsa: 2 };
+    const tipoOrder: Record<AsignacionTipo, number> = { dueno: 0, cobrador: 0, paquete_inicial: 1, bolsa: 2, bolsa_domiciliado: 3 };
     return Array.from(seen.values()).sort((a, b) => {
       const diff = tipoOrder[a.tipo] - tipoOrder[b.tipo];
       return diff !== 0 ? diff : a.label.localeCompare(b.label);
@@ -224,6 +226,10 @@ export function CobranzaCommissionsPage() {
           <div className={styles.summaryStat}>
             <span className={styles.summaryValue}>{summary.bolsaCount}</span>
             <span className={styles.summaryLabel}>asignados a Bolsa</span>
+          </div>
+          <div className={styles.summaryStat}>
+            <span className={styles.summaryValue}>{summary.bolsaDomiciliadoCount}</span>
+            <span className={styles.summaryLabel}>asignados a Bolsa Domiciliado</span>
           </div>
           <div className={styles.summaryStat}>
             <span className={styles.summaryValue}>{summary.paqueteInicialCount}</span>

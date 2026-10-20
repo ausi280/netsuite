@@ -1,4 +1,5 @@
 import type { Knex } from 'knex';
+import { getAgentIncentiveSchemes, type IncentiveScheme } from './cobranzaIncentivesRepository';
 
 /** Monthly collections goals (metas) per Dueño/Cobrador - a month-wide default plus per-employee
  * overrides, see the migration 20261013000001_create_cobranza_goals_tables.js. Purely app-owned
@@ -17,6 +18,8 @@ export interface CobranzaGoalPerson {
   override_amount: number | null;
   /** override_amount ?? the month's default (null when neither is set). */
   goal_amount: number | null;
+  /** The agent's incentive esquema this month (see cobranzaIncentivesRepository.ts), or null. */
+  scheme: IncentiveScheme | null;
 }
 
 export interface CobranzaGoalExcludedPerson {
@@ -31,6 +34,9 @@ export interface CobranzaGoalsForMonth {
   people: CobranzaGoalPerson[];
   /** Permanently left out of goals (every month) - see cobranza_goal_exclusions. */
   excluded: CobranzaGoalExcludedPerson[];
+  /** The month the esquemas shown were stored for - this month once configured, else the earlier
+   * month they're carried over from (null when none were ever set). */
+  scheme_source: { year: number; month: number } | null;
 }
 
 /** Every active employee who is (or has been) a Dueño or Cobrador on any invoice/contract - the
@@ -64,7 +70,7 @@ async function getCobradorDuenoRoster(db: Knex, year: number, month: number): Pr
 }
 
 export async function getCobranzaGoals(db: Knex, year: number, month: number): Promise<CobranzaGoalsForMonth> {
-  const [defaultRow, overrides, roster, excluded] = await Promise.all([
+  const [defaultRow, overrides, roster, excluded, schemes] = await Promise.all([
     db(DEFAULTS_TABLE).where({ year, month }).select('amount').first() as Promise<{ amount: string | number } | undefined>,
     db(GOALS_TABLE).where({ year, month }).select('employee_id', 'amount') as Promise<Array<{ employee_id: string; amount: string | number }>>,
     getCobradorDuenoRoster(db, year, month),
@@ -72,6 +78,7 @@ export async function getCobranzaGoals(db: Knex, year: number, month: number): P
       .leftJoin('netsuite_employees as E', 'E.netsuite_id', 'X.employee_id')
       .select('X.employee_id', db.raw("COALESCE(E.entityid, X.employee_id) as nombre"))
       .orderBy('nombre') as Promise<CobranzaGoalExcludedPerson[]>,
+    getAgentIncentiveSchemes(db, year, month),
   ]);
 
   const defaultAmount = defaultRow ? Number(defaultRow.amount) : null;
@@ -83,9 +90,15 @@ export async function getCobranzaGoals(db: Knex, year: number, month: number): P
     default_amount: defaultAmount,
     people: roster.map((person) => {
       const override = overrideById.get(person.employee_id) ?? null;
-      return { ...person, override_amount: override, goal_amount: override ?? defaultAmount };
+      return {
+        ...person,
+        override_amount: override,
+        goal_amount: override ?? defaultAmount,
+        scheme: schemes.schemes.get(person.employee_id) ?? null,
+      };
     }),
     excluded,
+    scheme_source: schemes.source,
   };
 }
 

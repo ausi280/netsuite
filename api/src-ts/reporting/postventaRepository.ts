@@ -55,6 +55,13 @@ const ZAMMAD_EMPRESA_BY_CRYO_EMPRESA_ID: Record<string, string> = {
 };
 
 export interface PostventaFilters {
+  /** Zammad group_name to report on - defaults to "Postventa". The same status buckets and
+   * breakdowns are reused for other groups' ticket reports (e.g. Marketing's - see
+   * marketingController.ts). */
+  group?: string;
+  /** Group the by-asunto breakdown by the asunto's top-level category only (the part before
+   * "::") - for groups whose asuntos are "Categoría::Subcategoría" (Marketing). */
+  asuntoTopLevel?: boolean;
   /** YYYY-MM-DD, inclusive - filters on the ticket's own created_at_zammad. */
   dateFrom?: string;
   /** YYYY-MM-DD, inclusive. */
@@ -157,7 +164,7 @@ function exclusiveUpperBound(dateOnly: string): string {
 }
 
 function baseQuery(db: Knex, filters: PostventaFilters): Knex.QueryBuilder {
-  const qb = db('zammad_tickets').where('group_name', POSTVENTA_GROUP);
+  const qb = db('zammad_tickets').where('group_name', filters.group ?? POSTVENTA_GROUP);
   if (filters.dateFrom) qb.andWhere('created_at_zammad', '>=', filters.dateFrom);
   if (filters.dateTo) qb.andWhere('created_at_zammad', '<', exclusiveUpperBound(filters.dateTo));
   if (filters.ownerId) qb.andWhere('owner_id', filters.ownerId);
@@ -260,8 +267,14 @@ export interface PostventaResueltoMonthRow {
  * that close_at_zammad is populated on every Resuelto ticket (and every Cerrado one too - Zammad
  * sets it whenever a ticket reaches any closed-type state, not just literal "Cerrado"), so this is
  * a reliable "fecha resuelto" source despite Zammad having no dedicated resolved-at field. */
-export async function getPostventaResueltosByMonth(db: Knex, filters: PostventaFilters): Promise<PostventaResueltoMonthRow[]> {
-  const rows = (await baseQuery(db, filters).where('state_name', 'Resuelto').select('close_at_zammad')) as Array<{
+export async function getPostventaResueltosByMonth(
+  db: Knex,
+  filters: PostventaFilters,
+  /** Which closed state(s) to count - 'Resuelto' for Postventa; both for Marketing, which reports
+   * Cerrado + Resuelto as one combined bucket. close_at_zammad is set for both. */
+  closedStates: Array<'Resuelto' | 'Cerrado'> = ['Resuelto'],
+): Promise<PostventaResueltoMonthRow[]> {
+  const rows = (await baseQuery(db, filters).whereIn('state_name', closedStates).select('close_at_zammad')) as Array<{
     close_at_zammad: Date | string | null;
   }>;
 
@@ -292,9 +305,12 @@ export interface PostventaAsuntoRow {
   por_agente: Array<{ agente: string; cantidad: number }>;
 }
 
-function normalizeAsunto(raw: string | null): string {
+/** Strips the group's own "<Group>::" prefix from Zammad's asunto (e.g. "Postventa::Reembolso"),
+ * and with topLevel keeps only the first "::" segment ("Diseño gráfico::Flyers" -> "Diseño gráfico"). */
+function normalizeAsunto(raw: string | null, group: string, topLevel = false): string {
   if (!raw || raw.trim() === '') return 'Sin asunto';
-  return raw.replace(/^Postventa::/, '').trim();
+  const stripped = raw.startsWith(`${group}::`) ? raw.slice(group.length + 2).trim() : raw.trim();
+  return topLevel ? stripped.split('::')[0].trim() : stripped;
 }
 
 /** Ticket counts per (normalized) asunto, across the whole filtered range - not broken down by
@@ -311,7 +327,7 @@ export async function getPostventaByAsunto(db: Knex, filters: PostventaFilters):
 
   const counts = new Map<string, Map<string, number>>();
   for (const row of rows) {
-    const asunto = normalizeAsunto(row.asunto);
+    const asunto = normalizeAsunto(row.asunto, filters.group ?? POSTVENTA_GROUP, filters.asuntoTopLevel);
     const agente = !row.owner_id || row.owner_id === SIN_OWNER_ID ? SIN_ASIGNAR_LABEL : ownerLabel(row.owner_name);
     const byAgente = counts.get(asunto) ?? new Map<string, number>();
     byAgente.set(agente, (byAgente.get(agente) ?? 0) + 1);

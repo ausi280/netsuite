@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import type { CobranzaGoalPerson } from '../api/types';
+import { Link, useSearchParams } from 'react-router-dom';
+import { INCENTIVE_SCHEME_LABELS, type CobranzaGoalPerson, type IncentiveScheme } from '../api/types';
 import { AppShell } from '../components/layout/AppShell';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
@@ -10,6 +10,7 @@ import {
   useSetCobranzaGoalDefault,
   useSetCobranzaGoalExclusion,
   useSetCobranzaGoalOverride,
+  useSetCobranzaAgentScheme,
 } from '../hooks/useCobranzaGoals';
 import chartStyles from '../components/charts/charts.module.css';
 import styles from './CommissionsPage.module.css';
@@ -145,6 +146,41 @@ function DefaultGoalForm({ month, year, defaultAmount, overrideCount }: { month:
   );
 }
 
+/** The agent's incentive esquema for this month - which rate column of the Incentivos tier table
+ * (or the Proyecto thresholds) pays them. Saved for this month only, on change. */
+function SchemeSelect({ person, month, year }: { person: CobranzaGoalPerson; month: number; year: number }) {
+  const save = useSetCobranzaAgentScheme();
+
+  return (
+    <div className={goalStyles.goalCell}>
+      <select
+        className={goalStyles.input}
+        value={person.scheme ?? ''}
+        disabled={save.isPending}
+        onChange={(event) =>
+          save.mutate({
+            employeeId: person.employee_id,
+            input: { month, year, scheme: event.target.value === '' ? null : (event.target.value as IncentiveScheme) },
+          })
+        }
+        aria-label={`Esquema de ${person.nombre}`}
+      >
+        <option value="">Sin esquema</option>
+        {(Object.keys(INCENTIVE_SCHEME_LABELS) as IncentiveScheme[]).map((scheme) => (
+          <option key={scheme} value={scheme}>
+            {INCENTIVE_SCHEME_LABELS[scheme]}
+          </option>
+        ))}
+      </select>
+      {save.isError ? (
+        <span className={goalStyles.statusError} role="status">
+          {save.error instanceof Error ? save.error.message : 'No se pudo guardar'}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 /** Removes (or restores) a person from the goals list for every month - for placeholder/shared
  * employees ("COBRADOR 1", "OFICINA"...) who show up as Dueño/Cobrador but shouldn't have a goal. */
 function ExclusionButton({ employeeId, nombre, excluded }: { employeeId: string; nombre: string; excluded: boolean }) {
@@ -190,6 +226,9 @@ export function CobranzaGoalsPage() {
   }, [goals, search]);
 
   const overrideCount = goals?.people.filter((p) => p.override_amount !== null).length ?? 0;
+  // Esquemas shown from an earlier month (this month has none stored yet).
+  const schemeSource = goals?.scheme_source ?? null;
+  const schemesCarriedFrom = schemeSource && (schemeSource.year !== year || schemeSource.month !== month) ? schemeSource : null;
 
   function handlePeriodChange(key: 'month' | 'year', value: string) {
     const next = new URLSearchParams(searchParams);
@@ -259,6 +298,15 @@ export function CobranzaGoalsPage() {
               <p className={goalStyles.subtitle}>
                 {goals.people.length} personas · {overrideCount} con meta individual o sin meta
               </p>
+              {schemesCarriedFrom ? (
+                <p className={goalStyles.subtitle}>
+                  Esquemas tomados de {MONTH_NAMES[schemesCarriedFrom.month - 1]} {schemesCarriedFrom.year} - al cambiar uno se guardan
+                  todos para este mes.
+                </p>
+              ) : null}
+              <Link to={`/reports/cobranza-comisiones/incentivos?month=${month}&year=${year}`} className={goalStyles.configLink}>
+                Tablas de incentivos
+              </Link>
             </div>
             <DefaultGoalForm
               key={`${year}-${month}-${goals.default_amount}`}
@@ -276,6 +324,7 @@ export function CobranzaGoalsPage() {
                   <tr>
                     <th>Persona</th>
                     <th>Meta</th>
+                    <th>Esquema</th>
                     <th aria-label="Acciones" />
                   </tr>
                 </thead>
@@ -287,7 +336,7 @@ export function CobranzaGoalsPage() {
                         {person.override_amount === 0 ? (
                           <span className={goalStyles.overrideBadge}>sin meta</span>
                         ) : person.override_amount !== null ? (
-                          <span className={goalStyles.overrideBadge}>individual</span>
+                          <span className={goalStyles.overrideBadge}>Proyecto</span>
                         ) : null}
                       </td>
                       <td>
@@ -298,6 +347,9 @@ export function CobranzaGoalsPage() {
                           year={year}
                           defaultAmount={goals.default_amount}
                         />
+                      </td>
+                      <td>
+                        <SchemeSelect person={person} month={month} year={year} />
                       </td>
                       <td>
                         <ExclusionButton employeeId={person.employee_id} nombre={person.nombre} excluded={false} />

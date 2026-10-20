@@ -26,6 +26,9 @@
   --color-secondary-tint1: #8d92a2;
   --color-secondary-tint2: #adb1bd;
   --color-neutral-300: #b3b4b6;
+  /* Referenced by the Postventa/Reembolsos charts' "Cerrados"/"Sin Reembolso" series but never
+     defined, so those bars fell back to black - the gray between neutral-300 and secondary-tint1. */
+  --color-neutral-400: #9a9ca3;
 
   /* Darkened from #d64545 - the original cleared only ~3.8-4.4:1 against white/the soft tint,
      below WCAG AA (4.5:1) for small badge/error text. This clears 4.9:1+ against both. */

@@ -13,6 +13,9 @@ export interface PaymentRow {
   /** NetSuite Invoice internal id this payment is applied to - confirmed live as a plain scalar
    * custom field mirroring NetSuite's native "apply" sublist, for the cobranza commissions report. */
   custbody_cryo_associated_invoices_item: string | null;
+  /** NetSuite "Forma pago" list id - 110/111 (Tarjeta domiciliada / AMEX) route the invoices this
+   * payment settles to "Bolsa Domiciliado" in the cobranza commissions report. */
+  custbody_cryo_formapago: string | null;
   raw_data: string;
 }
 

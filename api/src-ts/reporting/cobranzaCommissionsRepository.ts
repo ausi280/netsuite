@@ -33,6 +33,11 @@ import { parseNetSuiteDate } from '../mappers/utils';
  * `asignado_a`/`asignado_tipo` (see computeAsignacion) is the collections-assignment rule given
  * directly by the business, checked in this order:
  *
+ * 0. Bolsa Domiciliado - any contract whose invoice was paid this month by a payment whose forma de
+ *    pago (netsuite_payments.custbody_cryo_formapago) is a domiciliated card - 110 "Tarjeta
+ *    domiciliada" or 111 "Tarjeta domiciliada AMEX" - goes to its own pool, ahead of every rule
+ *    below (per explicit instruction): an automatic card charge isn't anyone's collections work.
+ *    Only the paquete-inicial short-circuit (see getCobranzaCommissionsReport) still wins over it.
  * 1. Cobrador - a contract paid STRICTLY in advance (its earliest paid-this-month partida's
  *    custrecord_cryo_fechalimitepago is AFTER the selected period - e.g. paying in October for a
  *    November-or-later due date) AND with NO other past debt sitting anywhere else on the contract
@@ -69,6 +74,10 @@ import { parseNetSuiteDate } from '../mappers/utils';
  */
 
 const BOLSA = 'Bolsa';
+const BOLSA_DOMICILIADO = 'Bolsa Domiciliado';
+// netsuite_payments.custbody_cryo_formapago values: 110 "Tarjeta domiciliada", 111 "Tarjeta
+// domiciliada AMEX".
+const FORMAS_PAGO_DOMICILIADO = ['110', '111'];
 // Not a real person - the placeholder NetSuite employee name used when a Dueño or Cobrador was
 // never actually set. Must never receive an assignment, same as a genuinely null name.
 const SIN_ASIGNAR_PLACEHOLDER = 'POR DEFINIR';
@@ -79,7 +88,7 @@ const PROCESAMIENTO_PATTERN = /procesamiento/i;
 // instruction, that reads as if it needed collections follow-up, which it doesn't).
 const PAQUETE_INICIAL_LABEL = 'Paquete inicial de anualidades';
 
-export type AsignacionTipo = 'dueno' | 'cobrador' | 'bolsa' | 'paquete_inicial';
+export type AsignacionTipo = 'dueno' | 'cobrador' | 'bolsa' | 'bolsa_domiciliado' | 'paquete_inicial';
 
 export interface CobranzaCommissionPartidaRow {
   netsuite_id: string;
@@ -136,6 +145,9 @@ export interface CobranzaCommissionContractGroup {
   asignado_tipo: AsignacionTipo;
   /** The resolved Dueño's/Cobrador's employee netsuite_id - null for Bolsa / Paquete inicial. */
   asignado_id: string | null;
+  /** True when any of this contract's invoices was paid this month by a domiciliated-card payment
+   * (see FORMAS_PAGO_DOMICILIADO) - drives the Bolsa Domiciliado rule. */
+  pagado_domiciliado: boolean;
   years: CobranzaCommissionYearGroup[];
   partidas_count: number;
 }
@@ -162,6 +174,8 @@ interface RawRow {
   dueno_nombre: string | null;
   cobrador_id: string | null;
   cobrador_nombre: string | null;
+  // 0/1 from a CASE expression.
+  pagado_domiciliado: number;
 }
 
 const SUBSIDIARY_COLUMN = 'P.custrecord_cryo_subsidiaria_partida';
@@ -204,7 +218,7 @@ const SELECT_COLUMNS = [
  * confirmed live the correlated-OR form made SQL Server abandon its index seeks entirely: a single
  * month's query went from >120s (timed out) to ~1s once rewritten as a join against this
  * precomputed set. */
-function paidInvoicesThisMonth(db: Knex, month: number, year: number): Knex.QueryBuilder {
+function paidInvoicesThisMonth(db: Knex, month: number, year: number, formasPago?: string[]): Knex.QueryBuilder {
   const viaCustomField = db('netsuite_payments as PAY')
     .whereNotNull('PAY.custbody_cryo_associated_invoices_item')
     .whereRaw('MONTH(PAY.trandate) = ?', [month])
@@ -216,6 +230,13 @@ function paidInvoicesThisMonth(db: Knex, month: number, year: number): Knex.Quer
     .whereRaw('MONTH(PAY.trandate) = ?', [month])
     .whereRaw('YEAR(PAY.trandate) = ?', [year])
     .select('LINK.invoice_id as invoice_id');
+
+  // Narrowed to payments with one of these formas de pago - e.g. the Bolsa Domiciliado rule's
+  // "paid this month by a domiciliated card".
+  if (formasPago) {
+    viaCustomField.whereIn('PAY.custbody_cryo_formapago', formasPago);
+    viaNativeLink.whereIn('PAY.custbody_cryo_formapago', formasPago);
+  }
 
   // Plain UNION (not UNION ALL) - deliberately deduplicates to one row per invoice_id, so joining
   // this into baseQuery below can never multiply a partida's row just because its invoice happens
@@ -235,6 +256,8 @@ function baseQuery(
     .innerJoin('netsuite_invoices as INVOICE', 'INVOICE.netsuite_id', 'P.custrecord_cryo_facturarelacionada')
     .innerJoin('netsuite_contracts as CONTRACT', 'CONTRACT.netsuite_id', 'P.custrecord_cryo_numcontrato')
     .innerJoin(paidInvoicesThisMonth(db, month, year).as('PAID'), 'PAID.invoice_id', 'INVOICE.netsuite_id')
+    // Same deduplicated one-row-per-invoice set, so this left join never multiplies rows either.
+    .leftJoin(paidInvoicesThisMonth(db, month, year, FORMAS_PAGO_DOMICILIADO).as('DOMI'), 'DOMI.invoice_id', 'INVOICE.netsuite_id')
     .leftJoin('netsuite_employees as DUENIO', function (this: Knex.JoinClause) {
       this.on(db.raw('DUENIO.netsuite_id = COALESCE(INVOICE.custbody_cryo_duenio, CONTRACT.custrecord_cryo_duenio)'));
     })
@@ -266,6 +289,7 @@ export async function getCobranzaCommissionsReport(
 ): Promise<CobranzaCommissionContractGroup[]> {
   const rows: RawRow[] = await baseQuery(db, month, year, subsidiary, restrictSubsidiaries)
     .select(SELECT_COLUMNS)
+    .select(db.raw('CASE WHEN DOMI.invoice_id IS NULL THEN 0 ELSE 1 END as pagado_domiciliado'))
     .orderBy('CONTRACT.name', 'asc')
     .orderBy('P.custrecord_cryo_aniopartida', 'asc')
     .orderBy('P.custrecord_cryo_iniciovigencia', 'asc');
@@ -288,12 +312,14 @@ export async function getCobranzaCommissionsReport(
         asignado_a: BOLSA,
         asignado_tipo: 'bolsa',
         asignado_id: null,
+        pagado_domiciliado: false,
         years: [],
         partidas_count: 0,
       };
       contractsById.set(row.contract_id, contract);
       yearGroupsByContract.set(row.contract_id, new Map());
     }
+    if (Number(row.pagado_domiciliado) === 1) contract.pagado_domiciliado = true;
 
     const yearKey = row.anio ?? 'sin-anio';
     const yearGroups = yearGroupsByContract.get(row.contract_id)!;
@@ -334,6 +360,8 @@ export async function getCobranzaCommissionsReport(
     const isOnlyOpeningPackage = contract.years.every((y) => y.partidas.every((p) => p.es_paquete_inicial));
     const asignacion = isOnlyOpeningPackage
       ? { nombre: PAQUETE_INICIAL_LABEL, tipo: 'paquete_inicial' as const }
+      : contract.pagado_domiciliado
+      ? { nombre: BOLSA_DOMICILIADO, tipo: 'bolsa_domiciliado' as const }
       : computeAsignacion(contract, year, month, pastDebtContractIds.has(contract.contract_id));
     contract.asignado_a = asignacion.nombre;
     contract.asignado_tipo = asignacion.tipo;
@@ -401,21 +429,30 @@ export async function resolveSelfCobradorDuenoSubsidiarias(db: Knex, employeeId:
  * '1'/Pagado - a partida this report's own payment just settled is already back to Pagado by now,
  * so it never counts here) whose due date is strictly before the selected period - i.e. real,
  * separate lingering arrears, not anything to do with what just got paid. Required for the Cobrador
- * rule's "no past debt" condition. */
+ * rule's "no past debt" condition.
+ *
+ * Chunked - a full month (no subsidiary filter) easily has more paid contracts than SQL Server's
+ * 2,100-parameters-per-request cap, and each id in the whereIn is its own parameter. */
+const PAST_DEBT_CHUNK_SIZE = 1000;
+
 async function findContractsWithPastDebt(db: Knex, contractIds: string[], year: number, month: number): Promise<Set<string>> {
-  if (contractIds.length === 0) return new Set();
-
   const referenceDate = `${year}-${String(month).padStart(2, '0')}-01`;
-  const rows: Array<{ contract_id: string }> = await db('netsuite_partidas')
-    .whereIn('custrecord_cryo_numcontrato', contractIds)
-    .andWhere('isinactive', 'F')
-    .andWhere(function (this: Knex.QueryBuilder) {
-      this.whereNull('custrecord_cryo_estatuspartida').orWhereNot('custrecord_cryo_estatuspartida', '1');
-    })
-    .andWhereRaw("TRY_CONVERT(date, custrecord_cryo_fechalimitepago, 103) < ?", [referenceDate])
-    .distinct('custrecord_cryo_numcontrato as contract_id');
+  const result = new Set<string>();
 
-  return new Set(rows.map((r) => r.contract_id));
+  for (let i = 0; i < contractIds.length; i += PAST_DEBT_CHUNK_SIZE) {
+    const chunk = contractIds.slice(i, i + PAST_DEBT_CHUNK_SIZE);
+    const rows: Array<{ contract_id: string }> = await db('netsuite_partidas')
+      .whereIn('custrecord_cryo_numcontrato', chunk)
+      .andWhere('isinactive', 'F')
+      .andWhere(function (this: Knex.QueryBuilder) {
+        this.whereNull('custrecord_cryo_estatuspartida').orWhereNot('custrecord_cryo_estatuspartida', '1');
+      })
+      .andWhereRaw("TRY_CONVERT(date, custrecord_cryo_fechalimitepago, 103) < ?", [referenceDate])
+      .distinct('custrecord_cryo_numcontrato as contract_id');
+    for (const row of rows) result.add(row.contract_id);
+  }
+
+  return result;
 }
 
 /** Mutates `contract.years` in place: drops every procesamiento-concept partida, and - only when

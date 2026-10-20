@@ -6,6 +6,8 @@ import styles from './charts.module.css';
 interface PostventaByMonthChartProps {
   rows: PostventaMonthRow[];
   formatValue: (value: number) => string;
+  /** Show Cerrados + Resueltos as a single green "Cerrados / Resueltos" series (Marketing report). */
+  mergeClosed?: boolean;
 }
 
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -33,14 +35,21 @@ const SERIES_COLORS: Record<string, string> = {
 
 /** Postventa tickets (Nuevos/En Proceso/Cerrados/Resueltos), per year/month by created_at_zammad -
  * stacked bar, mirroring MarketingQualificationChart's month-bucketing convention. */
-export function PostventaByMonthChart({ rows, formatValue }: PostventaByMonthChartProps) {
+export function PostventaByMonthChart({ rows, formatValue, mergeClosed = false }: PostventaByMonthChartProps) {
   const data = rows.map((row) => ({
     key: `${row.anio}-${row.mes}`,
     nuevos: row.nuevos,
     enProceso: row.enProceso,
-    cerrados: row.cerrados,
-    resueltos: row.resueltos,
+    cerrados: mergeClosed ? 0 : row.cerrados,
+    resueltos: mergeClosed ? row.cerrados + row.resueltos : row.resueltos,
   }));
+  const seriesLabels: Record<string, string> = mergeClosed
+    ? {
+        nuevos: SERIES_LABELS.nuevos,
+        enProceso: SERIES_LABELS.enProceso,
+        resueltos: 'Cerrados / Resueltos',
+      }
+    : SERIES_LABELS;
 
   return (
     <>
@@ -62,7 +71,7 @@ export function PostventaByMonthChart({ rows, formatValue }: PostventaByMonthCha
             <YAxis tickFormatter={formatValue} tick={{ fill: 'var(--chart-muted)', fontSize: 12 }} axisLine={false} tickLine={false} width={48} />
             <Tooltip
               cursor={{ fill: 'var(--color-primary-soft)' }}
-              content={<StackedChartTooltip formatLabel={formatMonthKey} formatValue={formatValue} seriesLabel={(key) => SERIES_LABELS[key] ?? key} />}
+              content={<StackedChartTooltip formatLabel={formatMonthKey} formatValue={formatValue} seriesLabel={(key) => seriesLabels[key] ?? key} />}
             />
             <Bar dataKey="nuevos" name="nuevos" stackId="estado" fill={SERIES_COLORS.nuevos} radius={[0, 0, 0, 0]} maxBarSize={28} animationDuration={450} />
             <Bar
@@ -74,15 +83,17 @@ export function PostventaByMonthChart({ rows, formatValue }: PostventaByMonthCha
               maxBarSize={28}
               animationDuration={450}
             />
-            <Bar
-              dataKey="cerrados"
-              name="cerrados"
-              stackId="estado"
-              fill={SERIES_COLORS.cerrados}
-              radius={[0, 0, 0, 0]}
-              maxBarSize={28}
-              animationDuration={450}
-            />
+            {mergeClosed ? null : (
+              <Bar
+                dataKey="cerrados"
+                name="cerrados"
+                stackId="estado"
+                fill={SERIES_COLORS.cerrados}
+                radius={[0, 0, 0, 0]}
+                maxBarSize={28}
+                animationDuration={450}
+              />
+            )}
             <Bar
               dataKey="resueltos"
               name="resueltos"
@@ -96,10 +107,10 @@ export function PostventaByMonthChart({ rows, formatValue }: PostventaByMonthCha
         </ResponsiveContainer>
       </div>
       <div className={styles.legendRow}>
-        {(Object.keys(SERIES_LABELS) as Array<keyof typeof SERIES_LABELS>).map((key) => (
+        {Object.keys(seriesLabels).map((key) => (
           <span className={styles.legendItem} key={key}>
             <span className={styles.legendSwatch} style={{ backgroundColor: SERIES_COLORS[key] }} aria-hidden="true" />
-            {SERIES_LABELS[key]}
+            {seriesLabels[key]}
           </span>
         ))}
       </div>

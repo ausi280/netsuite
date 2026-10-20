@@ -79,8 +79,15 @@ function normalizeVendedorName(nombre: string | null): string {
     .toUpperCase();
 }
 
-export function bucketTareasCountsForVendedor(rows: TareasByVendedorRow[], vendedorKey: string): TareasBucket[] {
-  return bucketTareasCounts(rows.filter((row) => normalizeVendedorName(row.vendedor) === vendedorKey));
+/** Rows belonging to any of the selected vendedores (normalized keys - see normalizeVendedorName),
+ * so several selected vendedores are combined into one series. */
+function rowsForVendedores(rows: TareasByVendedorRow[], vendedorKeys: string[]): TareasByVendedorRow[] {
+  const keys = new Set(vendedorKeys);
+  return rows.filter((row) => keys.has(normalizeVendedorName(row.vendedor)));
+}
+
+export function bucketTareasCountsForVendedor(rows: TareasByVendedorRow[], vendedorKeys: string[]): TareasBucket[] {
+  return bucketTareasCounts(rowsForVendedores(rows, vendedorKeys));
 }
 
 function hasAccent(s: string): boolean {
@@ -171,21 +178,20 @@ export function bucketTareasByMonth(rows: TareasCountRow[]): TareasByMonthStack[
   return bucketTareasByMonthRows(rows);
 }
 
-export function bucketTareasByMonthForVendedor(rows: TareasByVendedorRow[], vendedorKey: string): TareasByMonthStack[] {
-  return bucketTareasByMonthRows(rows.filter((row) => normalizeVendedorName(row.vendedor) === vendedorKey));
+export function bucketTareasByMonthForVendedor(rows: TareasByVendedorRow[], vendedorKeys: string[]): TareasByMonthStack[] {
+  return bucketTareasByMonthRows(rowsForVendedores(rows, vendedorKeys));
 }
 
-/** One vendedor's prospectos by (año, mes), ignoring the tareas dimension entirely - a single
+/** The selected vendedores' prospectos by (año, mes), ignoring the tareas dimension entirely - a single
  * count series, reusing ComercialTareasChart (fed a plain month label as its x-axis key instead
- * of a tareas bucket). Combines every id_vendedor that normalizes to vendedorKey (see
+ * of a tareas bucket). Combines every id_vendedor that normalizes to any of vendedorKeys (see
  * normalizeVendedorName) into one (año, mes) total rather than one series per underlying id.
  * Callers pre-filter rows by the Activos/Todos switch via filterByActivo before calling this, so
  * it reads "prospectos activos por mes" when fed activo-only rows, or "prospectos totales por
  * mes" when fed everything. */
-export function totalByMonthForVendedor(rows: TareasByVendedorRow[], vendedorKey: string): TareasBucket[] {
+export function totalByMonthForVendedor(rows: TareasByVendedorRow[], vendedorKeys: string[]): TareasBucket[] {
   const totals = new Map<string, number>();
-  for (const row of rows) {
-    if (normalizeVendedorName(row.vendedor) !== vendedorKey) continue;
+  for (const row of rowsForVendedores(rows, vendedorKeys)) {
     const monthKey = `${row.anio}-${row.mes}`;
     totals.set(monthKey, (totals.get(monthKey) ?? 0) + row.cantidad);
   }

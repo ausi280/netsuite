@@ -9,14 +9,28 @@ interface MultiSelectDropdownProps {
   /** Shown on the trigger button when nothing is selected. */
   placeholder: string;
   ariaLabel: string;
+  /** Shows a filter box above the options - for longer lists (e.g. vendedores). */
+  searchable?: boolean;
+  /** Trigger text when several are selected, after the count - defaults to "seleccionadas". */
+  selectedCountLabel?: string;
 }
 
 /** A checkbox-list dropdown for selecting zero or more of a small set of ids (subsidiaries) -
  * a native `<select multiple>` requires ctrl/cmd-click, which isn't discoverable, so this rolls
  * its own popover instead. Selecting toggles immediately, same as every other filter in the app -
  * there's no separate "apply" step. */
-export function MultiSelectDropdown({ options, value, onChange, labelForId, placeholder, ariaLabel }: MultiSelectDropdownProps) {
+export function MultiSelectDropdown({
+  options,
+  value,
+  onChange,
+  labelForId,
+  placeholder,
+  ariaLabel,
+  searchable = false,
+  selectedCountLabel = 'seleccionadas',
+}: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const label = labelForId ?? ((id: string) => id);
 
@@ -45,7 +59,9 @@ export function MultiSelectDropdown({ options, value, onChange, labelForId, plac
   }
 
   const buttonLabel =
-    value.length === 0 ? placeholder : value.length === 1 ? label(value[0]) : `${value.length} seleccionadas`;
+    value.length === 0 ? placeholder : value.length === 1 ? label(value[0]) : `${value.length} ${selectedCountLabel}`;
+  const term = search.trim().toLowerCase();
+  const visibleOptions = term ? options.filter((id) => label(id).toLowerCase().includes(term)) : options;
 
   return (
     <div className={styles.container} ref={containerRef}>
@@ -64,18 +80,29 @@ export function MultiSelectDropdown({ options, value, onChange, labelForId, plac
       </button>
       {isOpen ? (
         <div className={styles.panel} role="listbox" aria-label={ariaLabel}>
+          {searchable ? (
+            <input
+              type="search"
+              className={styles.search}
+              placeholder="Buscar"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              aria-label={`Buscar en ${ariaLabel}`}
+              autoFocus
+            />
+          ) : null}
           {value.length > 0 ? (
             <button type="button" className={styles.clearButton} onClick={() => onChange([])}>
               Limpiar selección
             </button>
           ) : null}
-          {options.map((id) => (
+          {visibleOptions.map((id) => (
             <label key={id} className={styles.option}>
               <input type="checkbox" checked={value.includes(id)} onChange={() => toggle(id)} />
               {label(id)}
             </label>
           ))}
-          {options.length === 0 ? <p className={styles.empty}>Sin opciones</p> : null}
+          {visibleOptions.length === 0 ? <p className={styles.empty}>{options.length === 0 ? 'Sin opciones' : 'Sin coincidencias'}</p> : null}
         </div>
       ) : null}
     </div>

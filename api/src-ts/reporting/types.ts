@@ -48,6 +48,9 @@ export type ReportEntityKey =
  * 'cobranza_goals' is a further gate on top of 'cobranza_commissions' - it lets the caller capture
  * (edit) the monthly Dueño/Cobrador goals; without it, goals are view-only. See
  * isCobranzaGoalsEditAllowed in cobranzaCommissionsController.ts.
+ * 'marketing_inputs' is a further gate on top of 'prospectos' - it lets the caller capture the
+ * Reporte de Marketing's monthly inversión digital and funnel metas; without it they're view-only.
+ * See marketingController.ts.
  * 'postventa' is likewise its own standalone grant for the bespoke Postventa status-tiles report
  * (new/en proceso/cerrado/resuelto counts over zammad_tickets, group "Postventa" only) - NOT an
  * additional gate on top of 'zammad-tickets', which is the separate, generic Zammad Tickets table
@@ -62,6 +65,7 @@ export type PermissionKey =
   | 'tareas_vencidas'
   | 'cobranza_commissions'
   | 'cobranza_goals'
+  | 'marketing_inputs'
   | 'postventa';
 
 export interface SortConfig {
