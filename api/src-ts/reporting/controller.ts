@@ -5,7 +5,7 @@ import { buildExportQuery, getEntitySummaries, getPagedRows, getRowById, getSubs
 import { getPartidaBreakdown, PARTIDA_DIMENSIONS } from './partidaAnalyticsRepository';
 import type { PartidaDimension } from './partidaAnalyticsRepository';
 import { buildEnrichedPartidaExportQuery, getEnrichedPartidaRows, PARTIDA_LIST_EXPORT_COLUMNS } from './partidaListRepository';
-import { getPaymentsList } from './paymentsListRepository';
+import { buildPaymentsExportQuery, getPaymentsList, PAYMENTS_EXPORT_COLUMNS, PAYMENTS_EXPORT_HEADERS, selectColumns as paymentsSelectColumns } from './paymentsListRepository';
 import { buildVendorTransactionsExportQuery, getVendorTransactionsList, VENDOR_TRANSACTIONS_EXPORT_COLUMNS } from './vendorTransactionsListRepository';
 import { buildOtrosContratoExportQuery, getEnrichedOtrosContratoRows, OTROS_CONTRATO_EXPORT_COLUMNS } from './otrosContratoListRepository';
 import { buildFcellsContratoExportQuery, getEnrichedFcellsContratoRows, FCELLS_CONTRATO_EXPORT_COLUMNS } from './fcellsContratoListRepository';
@@ -253,6 +253,8 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
   const isVendorTransactions = entityKey === 'vendor-transactions';
   const isOtrosContratos = entityKey === 'otros-contratos';
   const isFcellsContratos = entityKey === 'fcells-contratos';
+  const isPayments = entityKey === 'payments';
+  const paymentsColumns = isPayments ? await paymentsSelectColumns(knex) : [];
   const exportColumns = isPartidas
     ? PARTIDA_LIST_EXPORT_COLUMNS
     : isVendorTransactions
@@ -261,14 +263,16 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
         ? OTROS_CONTRATO_EXPORT_COLUMNS
         : isFcellsContratos
           ? FCELLS_CONTRATO_EXPORT_COLUMNS
-          : config.listColumns;
+          : isPayments
+            ? PAYMENTS_EXPORT_COLUMNS
+            : config.listColumns;
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${entityKey}.csv"`);
   // UTF-8 BOM so Excel (which otherwise guesses the system codepage) renders accented
   // characters/ñ correctly instead of mangling them.
   res.write('﻿');
-  res.write(csvRow(exportColumns.map(humanizeColumnName)));
+  res.write(csvRow(exportColumns.map((column) => (isPayments ? PAYMENTS_EXPORT_HEADERS[column] : humanizeColumnName(column)))));
 
   let offset = 0;
   for (;;) {
@@ -280,7 +284,9 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
           ? buildOtrosContratoExportQuery(knex, { search, sortBy, sortDir, subsidiary, dateFrom, dateTo }, restrictSubsidiaries)
           : isFcellsContratos
             ? buildFcellsContratoExportQuery(knex, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
-            : buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
+            : isPayments
+              ? buildPaymentsExportQuery(knex, { search, subsidiary, dateFrom, dateTo }, restrictSubsidiaries, paymentsColumns)
+              : buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
 
     const batch = (await query.offset(offset).limit(EXPORT_BATCH_SIZE)) as Array<Record<string, unknown>>;
 

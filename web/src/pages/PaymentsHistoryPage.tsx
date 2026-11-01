@@ -7,9 +7,10 @@ import { Pagination } from '../components/table/Pagination';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
 import { usePaymentsList } from '../hooks/usePaymentsList';
-import { chargeDomiciled } from '../api/reportsApi';
+import { chargeDomiciled, fetchPaymentsExportCsv } from '../api/reportsApi';
 import { useApiToken } from '../auth/useApiToken';
 import { formatDateTime } from '../utils/format';
+import { downloadBlob } from '../utils/downloadBlob';
 import { KNOWN_SUBSIDIARY_IDS } from '../config/subsidiaries';
 import type { PaymentRow } from '../api/types';
 import styles from './PaymentsHistoryPage.module.css';
@@ -57,6 +58,20 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
 
 function StatusBadge({ status }: { status: string }) {
   const config = STATUS_LABELS[status] ?? { label: status, className: styles.badgeGray };
+  return <span className={`${styles.badge} ${config.className}`}>{config.label}</span>;
+}
+
+// app_payments.domiciliacion_synced - whether the contract's "pago automático" was set in NetSuite
+// (api/src-ts/services/domiciliacionPushService.ts, every 15 min). Keep in sync with csvExport.ts.
+const DOMICILIACION_LABELS: Record<string, { label: string; className: string }> = {
+  pending: { label: 'Pendiente', className: styles.badgeYellow },
+  completed: { label: 'Sincronizado', className: styles.badgeGreen },
+  error: { label: 'Error', className: styles.badgeRed },
+};
+
+function DomiciliacionBadge({ status }: { status: string | null }) {
+  if (!status) return <>—</>;
+  const config = DOMICILIACION_LABELS[status] ?? { label: status, className: styles.badgeGray };
   return <span className={`${styles.badge} ${config.className}`}>{config.label}</span>;
 }
 
@@ -153,6 +168,23 @@ export function PaymentsHistoryPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [chargingRow, setChargingRow] = useState<PaymentRow | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const { getAccessToken } = useApiToken();
+
+  async function handleExport() {
+    setIsExporting(true);
+    setExportError(null);
+    try {
+      const token = await getAccessToken();
+      const blob = await fetchPaymentsExportCsv(token, { search, subsidiary, dateFrom, dateTo });
+      downloadBlob(blob, 'pagos.csv');
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'No se pudo exportar el CSV.');
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   const { data, isLoading, isError, error, refetch } = usePaymentsList({ page, pageSize, search, subsidiary, dateFrom, dateTo });
   // Defaults true so the column doesn't flash empty while the real value is still in flight - the
@@ -189,12 +221,14 @@ export function PaymentsHistoryPage() {
   const columns: SimpleColumn<PaymentRow>[] = [
     { key: 'created_at', header: 'Fecha', render: (r) => formatDateTime(r.created_at) },
     { key: 'contract', header: 'Contrato', render: (r) => r.contract_name ?? '—' },
+    { key: 'folio_sistema_anterior', header: 'Folio sistema anterior', render: (r) => r.folio_sistema_anterior || '—' },
     { key: 'payment_id', header: 'ID Pago', render: (r) => r.payment_id },
     { key: 'description', header: 'Descripción', render: (r) => r.description ?? '—' },
     { key: 'amount', header: 'Monto', render: (r) => formatAmount(r.transaction_amount) },
     { key: 'payer_email', header: 'Email', render: (r) => r.payer_email ?? '—' },
     { key: 'payment_method_id', header: 'Método', render: (r) => r.payment_method_id ?? '—' },
     { key: 'status', header: 'Estatus', render: (r) => <StatusBadge status={r.status} /> },
+    { key: 'domiciliacion_synced', header: 'Domiciliación NetSuite', render: (r) => <DomiciliacionBadge status={r.domiciliacion_synced} /> },
     {
       key: 'action',
       header: 'Acción',
@@ -259,11 +293,14 @@ export function PaymentsHistoryPage() {
           </button>
         ) : null}
       </div>
+      {exportError ? <ErrorState message={exportError} /> : null}
       <ReportToolbar
         initialSearch={search}
         onSearchChange={handleSearchChange}
         totalLabel={totalLabel}
         subsidiaryFilter={{ value: subsidiary, options: KNOWN_SUBSIDIARY_IDS, onChange: handleSubsidiaryChange }}
+        onExport={handleExport}
+        isExporting={isExporting}
       />
       {isLoading ? <LoadingState label="Cargando pagos..." /> : null}
       {isError ? (

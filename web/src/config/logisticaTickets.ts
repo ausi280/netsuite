@@ -61,6 +61,8 @@ export interface CampoConfig {
   /** Only rendered/validated once another field in the same subform has this value - the "¿Qué
    * envías?" -> Medidas y peso and "¿Requiere seguro?" -> Monto reveals. */
   dependsOn?: { field: string; value: string };
+  /** Groups consecutive fields under a titled block - Remitente / Destinatario render side by side. */
+  section?: 'remitente' | 'destinatario' | 'paquete';
 }
 
 export interface SubformConfig {
@@ -70,18 +72,46 @@ export interface SubformConfig {
   note?: string;
 }
 
+// Zammad's "Zona" ticket field options (key = display) - keep in sync with ZONAS in
+// api/src-ts/reporting/logisticaTicketController.ts, which rejects anything else.
+export const ZONAS = [
+  'AGS', 'CANCUN', 'CDMX', 'CDMX/Ingenes', 'CDMX/Norte', 'CDMX/Poniente', 'CDMX/Sur', 'CHIHUAHUA', 'GDL',
+  'HERMOSILLO', 'LEON', 'MORELIA', 'MTY', 'MTY/Operaciones', 'PUEBLA', 'QRO', 'TIJUANA',
+];
+
+/** Recolección / Envío de kit - syncs to the ticket's foliocontrato field. Free text for now. */
+const ID_CLIENTE_FIELD: CampoConfig = { name: 'id_cliente', label: 'Id Cliente', type: 'text' };
+/** Kit para stock / Material / Regalos - syncs to the ticket's zona field. */
+const ZONA_FIELD: CampoConfig = { name: 'zona', label: 'Zona', type: 'select', options: ZONAS, required: true };
+
+const REMITENTE_FIELDS: CampoConfig[] = [
+  { name: 'remitente_nombre', label: 'Nombre', type: 'text', required: true, section: 'remitente' },
+  { name: 'remitente_telefono', label: 'Teléfono', type: 'text', required: true, section: 'remitente' },
+  { name: 'remitente_correo', label: 'Correo', type: 'text', section: 'remitente' },
+  { name: 'remitente_domicilio', label: 'Domicilio', type: 'text', required: true, section: 'remitente' },
+];
+
+const DESTINATARIO_FIELDS: CampoConfig[] = [
+  { name: 'destinatario_nombre', label: 'Nombre', type: 'text', required: true, section: 'destinatario' },
+  { name: 'destinatario_telefono', label: 'Teléfono', type: 'text', required: true, section: 'destinatario' },
+  { name: 'destinatario_correo', label: 'Correo', type: 'text', section: 'destinatario' },
+  { name: 'destinatario_domicilio', label: 'Domicilio', type: 'text', required: true, section: 'destinatario' },
+  { name: 'destinatario_entre_calles', label: 'Entre calles', type: 'text', required: true, section: 'destinatario' },
+];
+
 const PAQUETE_ENVIO_FIELDS: CampoConfig[] = [
-  { name: 'que_envias', label: '¿Qué envías?', type: 'select', options: ['Caja', 'Sobre'], required: true },
-  { name: 'medidas_peso', label: 'Medidas y peso', type: 'text', required: true, dependsOn: { field: 'que_envias', value: 'Caja' } },
-  { name: 'requiere_seguro', label: '¿Requiere seguro?', type: 'select', options: ['Si', 'No'], required: true },
-  { name: 'monto', label: 'Monto del seguro', type: 'number', required: true, dependsOn: { field: 'requiere_seguro', value: 'Si' } },
-  { name: 'urgente', label: 'Urgente', type: 'select', options: ['Día siguiente', '3 a 5 días'], required: true },
+  { name: 'que_envias', label: '¿Qué envías?', type: 'select', options: ['Caja', 'Sobre'], required: true, section: 'paquete' },
+  { name: 'medidas_peso', label: 'Medidas y peso', type: 'text', required: true, dependsOn: { field: 'que_envias', value: 'Caja' }, section: 'paquete' },
+  { name: 'requiere_seguro', label: '¿Requiere seguro?', type: 'select', options: ['Si', 'No'], required: true, section: 'paquete' },
+  { name: 'monto', label: 'Monto del seguro', type: 'number', required: true, dependsOn: { field: 'requiere_seguro', value: 'Si' }, section: 'paquete' },
+  { name: 'urgente', label: 'Urgente', type: 'select', options: ['Día siguiente', '3 a 5 días'], required: true, section: 'paquete' },
 ];
 
 export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   recoleccion: {
     title: 'Datos de recolección',
     fields: [
+      ID_CLIENTE_FIELD,
       { name: 'nombre_mama', label: 'Nombre de mamá y celular', type: 'text', required: true },
       { name: 'nombre_papa', label: 'Nombre de papá o contacto y celular', type: 'text' },
       { name: 'paquete_contratado', label: 'Paquete contratado', type: 'text', required: true },
@@ -93,6 +123,7 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   recoleccion_nipt: {
     title: 'Datos de recolección NIPT',
     fields: [
+      ID_CLIENTE_FIELD,
       { name: 'clarix_privado', label: 'Clarix o Privado', type: 'select', options: ['Clarix', 'Privado'], required: true },
       { name: 'ciudad', label: 'Ciudad', type: 'text', required: true },
       { name: 'via', label: 'Vía', type: 'text', required: true },
@@ -105,6 +136,7 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   recoleccion_medico: {
     title: 'Datos de recolección',
     fields: [
+      ID_CLIENTE_FIELD,
       { name: 'nombre_medico', label: 'Nombre Médico', type: 'text', required: true },
       { name: 'nombre_paciente', label: 'Nombre Paciente', type: 'text', required: true },
       { name: 'servicio_contratado', label: 'Servicio contratado', type: 'text', required: true },
@@ -116,6 +148,7 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   kit_stock: {
     title: 'Kit para stock',
     fields: [
+      ZONA_FIELD,
       { name: 'cantidad', label: 'Cantidad', type: 'number', required: true },
       { name: 'tipo_kit', label: 'Tipo de kit', type: 'text', required: true },
       { name: 'domicilio_entrega', label: 'Domicilio de entrega', type: 'text', required: true },
@@ -125,6 +158,7 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   kit_stock_nipt: {
     title: 'Kit para stock (Clarix / NIPT)',
     fields: [
+      ZONA_FIELD,
       { name: 'cantidad', label: 'Cantidad', type: 'number', required: true },
       { name: 'tubos_extra', label: 'Tubos extra', type: 'text' },
       { name: 'formulario', label: 'Formulario', type: 'text' },
@@ -134,6 +168,7 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   envio_kit: {
     title: 'Envío de kit a cliente',
     fields: [
+      ID_CLIENTE_FIELD,
       { name: 'nombre_mama', label: 'Nombre de mamá y celular', type: 'text', required: true },
       { name: 'nombre_papa', label: 'Nombre de papá o contacto y celular', type: 'text' },
       { name: 'paquete_contratado', label: 'Paquete contratado', type: 'text', required: true },
@@ -145,6 +180,7 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   envio_kit_nipt: {
     title: 'Envío de kit a cliente (Clarix / NIPT)',
     fields: [
+      ID_CLIENTE_FIELD,
       { name: 'nombre_mama', label: 'Nombre de mamá y celular', type: 'text', required: true },
       { name: 'domicilio_entrega', label: 'Domicilio de entrega', type: 'text', required: true },
       { name: 'entre_calles', label: 'Entre calles', type: 'text', required: true },
@@ -154,6 +190,7 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   envio_kit_medico: {
     title: 'Envío de kit al médico',
     fields: [
+      ID_CLIENTE_FIELD,
       { name: 'nombre_medico', label: 'Nombre de médico', type: 'text', required: true },
       { name: 'telefono_contacto', label: 'Teléfono de contacto', type: 'text', required: true },
       { name: 'cantidad', label: 'Cantidad', type: 'number', required: true },
@@ -166,31 +203,18 @@ export const SUBFORMS: Record<SubformKey, SubformConfig> = {
   material_regalos: {
     title: 'Material / Regalos',
     fields: [
-      { name: 'remitente_nombre', label: 'Remitente - Nombre', type: 'text', required: true },
-      { name: 'remitente_telefono', label: 'Remitente - Teléfono', type: 'text', required: true },
-      { name: 'remitente_correo', label: 'Remitente - Correo', type: 'text' },
-      { name: 'remitente_domicilio', label: 'Remitente - Domicilio', type: 'text', required: true },
-      { name: 'remitente_notas', label: 'Remitente - Notas', type: 'textarea' },
-      { name: 'destinatario_nombre', label: 'Destinatario - Nombre', type: 'text', required: true },
-      { name: 'destinatario_telefono', label: 'Destinatario - Teléfono', type: 'text', required: true },
-      { name: 'destinatario_correo', label: 'Destinatario - Correo', type: 'text' },
-      { name: 'destinatario_domicilio', label: 'Destinatario - Domicilio', type: 'text', required: true },
-      { name: 'destinatario_entre_calles', label: 'Destinatario - Entre calles', type: 'text', required: true },
+      ZONA_FIELD,
+      ...REMITENTE_FIELDS,
+      { name: 'remitente_notas', label: 'Notas', type: 'textarea', section: 'remitente' },
+      ...DESTINATARIO_FIELDS,
       ...PAQUETE_ENVIO_FIELDS,
     ],
   },
   solicitud_guia: {
     title: 'Solicitud de guía',
     fields: [
-      { name: 'remitente_nombre', label: 'Remitente - Nombre', type: 'text', required: true },
-      { name: 'remitente_telefono', label: 'Remitente - Teléfono', type: 'text', required: true },
-      { name: 'remitente_correo', label: 'Remitente - Correo', type: 'text' },
-      { name: 'remitente_domicilio', label: 'Remitente - Domicilio', type: 'text', required: true },
-      { name: 'destinatario_nombre', label: 'Destinatario - Nombre', type: 'text', required: true },
-      { name: 'destinatario_telefono', label: 'Destinatario - Teléfono', type: 'text', required: true },
-      { name: 'destinatario_correo', label: 'Destinatario - Correo', type: 'text' },
-      { name: 'destinatario_domicilio', label: 'Destinatario - Domicilio', type: 'text', required: true },
-      { name: 'destinatario_entre_calles', label: 'Destinatario - Entre calles', type: 'text', required: true },
+      ...REMITENTE_FIELDS,
+      ...DESTINATARIO_FIELDS,
       ...PAQUETE_ENVIO_FIELDS,
     ],
   },

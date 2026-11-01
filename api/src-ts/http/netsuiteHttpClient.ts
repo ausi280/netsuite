@@ -163,6 +163,16 @@ export class NetSuiteHttpClient {
     return typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
   }
 
+  /** POST counterpart of callRestlet, for RESTlets that write (e.g. contractPagoAutomaticoRestlet.js). */
+  async postRestlet<T = any>(scriptId: string, deployId: string, body: Record<string, unknown>): Promise<T> {
+    const query = new URLSearchParams({ script: scriptId, deploy: deployId }).toString();
+    const url = `https://${this.signer.accountRealmHost}.restlets.api.netsuite.com/app/site/hosting/restlet.nl?${query}`;
+    const response = await this.limiter.schedule(() =>
+      withRetry(() => this.postSigned(url, body), this.erpConfig.SYNC.RETRY, this.logger),
+    );
+    return typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
+  }
+
   private getSigned(url: string): Promise<AxiosResponse<any>> {
     const headers = this.signer.sign({ url, method: 'GET' });
     return this.http.get(url, {

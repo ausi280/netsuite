@@ -29,6 +29,8 @@ const ENTITY_CONFIG_KEY: Record<SyncEntityName, keyof ErpSyncConfig> = {
   zammadTicket: 'ZAMMAD_TICKET',
   paymentInvoiceLink: 'PAYMENT_INVOICE_LINK',
   lead: 'LEAD',
+  currency: 'CURRENCY',
+  domiciliacion: 'DOMICILIACION',
 };
 
 /**

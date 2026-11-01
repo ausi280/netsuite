@@ -28,7 +28,9 @@ export type SyncEntityName =
   | 'customerAddress'
   | 'zammadTicket'
   | 'paymentInvoiceLink'
-  | 'lead';
+  | 'lead'
+  | 'currency'
+  | 'domiciliacion';
 
 export interface RetryConfig {
   MAX_ATTEMPTS: number;
@@ -74,6 +76,8 @@ export interface ErpSyncConfig {
   ZAMMAD_TICKET: EntitySyncConfig;
   PAYMENT_INVOICE_LINK: EntitySyncConfig;
   LEAD: EntitySyncConfig;
+  CURRENCY: EntitySyncConfig;
+  DOMICILIACION: EntitySyncConfig;
 }
 
 export interface ErpConfig {
@@ -84,6 +88,8 @@ export interface ErpConfig {
   TOKEN_SECRET: string;
   REALM: string;
   SYNC: ErpSyncConfig;
+  /** contractPagoAutomaticoRestlet.js deployment - null until it's deployed (SCRIPT left empty). */
+  PAGO_AUTOMATICO_RESTLET: { SCRIPT: string; DEPLOY: string } | null;
 }
 
 export interface AppConfig {

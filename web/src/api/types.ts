@@ -710,6 +710,11 @@ export interface PaymentRow {
   created_at: string;
   /** Resolved via netsuite_contracts - the original page only ever showed the raw internal id. */
   contract_name: string | null;
+  /** custrecord_cryo_contratosistemaanterior - the linked contract's legacy CryoCell folio, when it has one. */
+  folio_sistema_anterior: string | null;
+  /** 'pending' | 'completed' | 'error' - whether this payment's domiciliación has been pushed to the
+   * contract's "pago automático" in NetSuite (see domiciliacionPushService.ts); null = not a domiciliación. */
+  domiciliacion_synced: string | null;
   /** The linked contract's own subsidiary id (custrecord_cryo_subsidiariacontrato) - null if the contract couldn't be resolved. */
   subsidiary_id: string | null;
 }

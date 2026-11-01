@@ -39,6 +39,13 @@ const CONTRACT_STATUS_LABELS: Record<string, string> = {
   '13': 'Retirado del Tanque',
 };
 
+// app_payments.domiciliacion_synced - see domiciliacionPushService.ts. Same labels as PaymentsHistoryPage.
+const DOMICILIACION_LABELS: Record<string, string> = {
+  pending: 'Pendiente',
+  completed: 'Sincronizado',
+  error: 'Error',
+};
+
 /** Column name -> label map, for every synced column that holds a NetSuite list/lookup id across all exportable entities. */
 const LOOKUP_COLUMNS: Record<string, Record<string, string>> = {
   custrecord_cryo_subsidiariacontrato: SUBSIDIARY_LABELS,
@@ -46,6 +53,8 @@ const LOOKUP_COLUMNS: Record<string, Record<string, string>> = {
   custrecord_hospitales_subsidiria: SUBSIDIARY_LABELS,
   item_subsidiary_id: SUBSIDIARY_LABELS,
   custrecord_cryo_subsidiariamedico: SUBSIDIARY_LABELS,
+  subsidiary_id: SUBSIDIARY_LABELS, // payments export (the joined contract's subsidiary)
+  domiciliacion_synced: DOMICILIACION_LABELS, // payments export
   custrecord_cryo_moneda: CURRENCY_LABELS,
   custrecord_cryo_monedapartida: CURRENCY_LABELS,
   custrecord_cryo_monedaserv: CURRENCY_LABELS,

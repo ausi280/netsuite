@@ -4,6 +4,7 @@ import { useMsal } from '@azure/msal-react';
 import { AppShell } from '../components/layout/AppShell';
 import { MARCAS, MARCA_TIPOS, SUBFORMS, resolveSubformKey } from '../config/logisticaTickets';
 import type { CampoConfig, Marca } from '../config/logisticaTickets';
+import { DIRECCIONES_CONOCIDAS, DIRECCION_GRUPOS, direccionKey } from '../config/logisticaDirecciones';
 import { useSubmitLogisticaTicket } from '../hooks/useLogisticaTicket';
 import styles from './LogisticaTicketPage.module.css';
 
@@ -11,6 +12,8 @@ function isFieldVisible(field: CampoConfig, campos: Record<string, string>): boo
   if (!field.dependsOn) return true;
   return campos[field.dependsOn.field] === field.dependsOn.value;
 }
+
+type ShipSection = 'remitente' | 'destinatario';
 
 export function LogisticaTicketPage() {
   const { accounts } = useMsal();
@@ -21,6 +24,8 @@ export function LogisticaTicketPage() {
   const [campos, setCampos] = useState<Record<string, string>>({});
   const [comentarios, setComentarios] = useState('');
   const [files, setFiles] = useState<File[]>([]);
+  // Known address ("Grupo / Sede") picked per card - '' = typed by hand. Sent as <section>_sede.
+  const [sedes, setSedes] = useState<Record<ShipSection, string>>({ remitente: '', destinatario: '' });
 
   const mutation = useSubmitLogisticaTicket();
 
@@ -28,17 +33,105 @@ export function LogisticaTicketPage() {
   const subformKey = marca && tipoSolicitud ? resolveSubformKey(marca, tipoSolicitud) : null;
   const subform = subformKey ? SUBFORMS[subformKey] : null;
   const visibleFields = subform ? subform.fields.filter((field) => isFieldVisible(field, campos)) : [];
+  const remitenteFields = visibleFields.filter((field) => field.section === 'remitente');
+  const destinatarioFields = visibleFields.filter((field) => field.section === 'destinatario');
+  const paqueteFields = visibleFields.filter((field) => field.section === 'paquete');
+
+  function renderField(field: CampoConfig) {
+    return (
+      <div className={styles.field} key={field.name}>
+        <label className={styles.label} htmlFor={field.name}>
+          {field.label}
+        </label>
+        {field.type === 'textarea' ? (
+          <textarea
+            id={field.name}
+            className={styles.textarea}
+            rows={3}
+            required={field.required}
+            value={campos[field.name] ?? ''}
+            onChange={(e) => handleCampoChange(field.name, e.target.value)}
+          />
+        ) : field.type === 'select' ? (
+          <select
+            id={field.name}
+            className={styles.select}
+            required={field.required}
+            value={campos[field.name] ?? ''}
+            onChange={(e) => handleCampoChange(field.name, e.target.value)}
+          >
+            <option value="">Seleccione...</option>
+            {(field.options ?? []).map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input
+            id={field.name}
+            className={styles.input}
+            type={field.type}
+            required={field.required}
+            value={campos[field.name] ?? ''}
+            onChange={(e) => handleCampoChange(field.name, e.target.value)}
+          />
+        )}
+      </div>
+    );
+  }
 
   function handleMarcaChange(event: ChangeEvent<HTMLSelectElement>) {
     const value = event.target.value as Marca | '';
     setMarca(value);
     setTipoSolicitud('');
     setCampos({});
+    setSedes({ remitente: '', destinatario: '' });
   }
 
   function handleTipoChange(event: ChangeEvent<HTMLSelectElement>) {
     setTipoSolicitud(event.target.value);
     setCampos({});
+    setSedes({ remitente: '', destinatario: '' });
+  }
+
+  /** Picking a known address fills that card's contact fields (left editable); fields the sheet
+   * has no value for are cleared rather than keeping a previous sede's data. "Escribir manualmente"
+   * leaves whatever is typed as-is. */
+  function handleSedeChange(section: ShipSection, key: string) {
+    setSedes((prev) => ({ ...prev, [section]: key }));
+    const direccion = DIRECCIONES_CONOCIDAS.find((d) => direccionKey(d) === key);
+    if (!direccion) return;
+    setCampos((prev) => ({
+      ...prev,
+      [`${section}_nombre`]: direccion.contacto ?? `${direccion.grupo} ${direccion.sede}`,
+      [`${section}_telefono`]: direccion.telefono ?? '',
+      [`${section}_correo`]: direccion.correo ?? '',
+      [`${section}_domicilio`]: direccion.direccion,
+    }));
+  }
+
+  function renderSedePicker(section: ShipSection) {
+    const id = `${section}_sede`;
+    return (
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor={id}>
+          Dirección conocida (Grupo / Sede)
+        </label>
+        <select id={id} className={styles.select} value={sedes[section]} onChange={(e) => handleSedeChange(section, e.target.value)}>
+          <option value="">Escribir manualmente</option>
+          {DIRECCION_GRUPOS.map((grupo) => (
+            <optgroup key={grupo} label={grupo}>
+              {DIRECCIONES_CONOCIDAS.filter((d) => d.grupo === grupo).map((d) => (
+                <option key={direccionKey(d)} value={direccionKey(d)}>
+                  {direccionKey(d)}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+    );
   }
 
   function handleCampoChange(name: string, value: string) {
@@ -53,6 +146,7 @@ export function LogisticaTicketPage() {
     setMarca('');
     setTipoSolicitud('');
     setCampos({});
+    setSedes({ remitente: '', destinatario: '' });
     setComentarios('');
     setFiles([]);
   }
@@ -68,6 +162,9 @@ export function LogisticaTicketPage() {
     for (const field of visibleFields) {
       if (campos[field.name]) visibleCampos[field.name] = campos[field.name];
     }
+    // Which known address each card came from, so the ticket shows "Sede: Ingenes / Toluca".
+    if (remitenteFields.length > 0 && sedes.remitente) visibleCampos.remitente_sede = sedes.remitente;
+    if (destinatarioFields.length > 0 && sedes.destinatario) visibleCampos.destinatario_sede = sedes.destinatario;
 
     const formData = new FormData();
     formData.append('marca', marca);
@@ -125,47 +222,29 @@ export function LogisticaTicketPage() {
           <div className={styles.subform}>
             <h2 className={styles.subformTitle}>{subform.title}</h2>
 
-            {visibleFields.map((field) => (
-              <div className={styles.field} key={field.name}>
-                <label className={styles.label} htmlFor={field.name}>
-                  {field.label}
-                </label>
-                {field.type === 'textarea' ? (
-                  <textarea
-                    id={field.name}
-                    className={styles.textarea}
-                    rows={3}
-                    required={field.required}
-                    value={campos[field.name] ?? ''}
-                    onChange={(e) => handleCampoChange(field.name, e.target.value)}
-                  />
-                ) : field.type === 'select' ? (
-                  <select
-                    id={field.name}
-                    className={styles.select}
-                    required={field.required}
-                    value={campos[field.name] ?? ''}
-                    onChange={(e) => handleCampoChange(field.name, e.target.value)}
-                  >
-                    <option value="">Seleccione...</option>
-                    {(field.options ?? []).map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    id={field.name}
-                    className={styles.input}
-                    type={field.type}
-                    required={field.required}
-                    value={campos[field.name] ?? ''}
-                    onChange={(e) => handleCampoChange(field.name, e.target.value)}
-                  />
-                )}
+            {visibleFields.filter((field) => !field.section).map(renderField)}
+
+            {remitenteFields.length > 0 || destinatarioFields.length > 0 ? (
+              <div className={styles.shipGrid}>
+                <fieldset className={styles.sectionCard}>
+                  <legend className={styles.sectionTitle}>Remitente</legend>
+                  {renderSedePicker('remitente')}
+                  {remitenteFields.map(renderField)}
+                </fieldset>
+                <fieldset className={styles.sectionCard}>
+                  <legend className={styles.sectionTitle}>Destinatario</legend>
+                  {renderSedePicker('destinatario')}
+                  {destinatarioFields.map(renderField)}
+                </fieldset>
               </div>
-            ))}
+            ) : null}
+
+            {paqueteFields.length > 0 ? (
+              <fieldset className={styles.sectionCard}>
+                <legend className={styles.sectionTitle}>Paquete</legend>
+                {paqueteFields.map(renderField)}
+              </fieldset>
+            ) : null}
 
             {subform.note ? <p className={styles.hint}>{subform.note}</p> : null}
           </div>

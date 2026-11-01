@@ -38,7 +38,10 @@
         "DATABASE" : "DwhCryoholdcoLatam_Prod"
     },
     "ZAMMAD" : {
-        "GROUP" : "Operaciones::Logística"
+        "GROUP" : "Operaciones::Logística",
+        "MODE" : "direct",
+        "URL" : "https://tickets.cryoholdco.com",
+        "FALLBACK_TO_RELAY" : true
     },
     "SERVICES" : {
         "TEST" : {
@@ -52,6 +55,7 @@
         "ERP" : {
             "NAME" : "NetSuite",
             "SLUG" : "/erp",
+            "PAGO_AUTOMATICO_RESTLET" : { "SCRIPT" : "", "DEPLOY" : "1" },
             "SYNC": {
                 "OVERLAP_BUFFER_MINUTES": 15,
                 "MAX_CONCURRENT_ENTITIES": 2,
@@ -84,7 +88,9 @@
                 "CUSTOMER_ADDRESS": { "ENABLED": true, "CRON": "10 3,7,11,15,19,23 * * *" },
                 "ZAMMAD_TICKET": { "ENABLED": true, "CRON": "*/15 * * * *" },
                 "PAYMENT_INVOICE_LINK": { "ENABLED": true, "CRON": "*/30 * * * *" },
-                "LEAD": { "ENABLED": true, "CRON": "15 3,7,11,15,19,23 * * *" }
+                "LEAD": { "ENABLED": true, "CRON": "15 3,7,11,15,19,23 * * *" },
+                "CURRENCY": { "ENABLED": true, "CRON": "25 3,7,11,15,19,23 * * *" },
+                "DOMICILIACION": { "ENABLED": true, "CRON": "*/15 * * * *" }
             }
         },
         "META" : {

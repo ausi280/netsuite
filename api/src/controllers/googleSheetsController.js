@@ -5,6 +5,7 @@ const { google } = require('googleapis');
 const path = require('path');
 const fs = require('fs');
 const leadNetsuiteService = require('../services/leadNetsuiteService');
+const renewLeadNetsuiteService = require('../services/renewLeadNetsuiteService');
 
 /**
  * Database Configuration
@@ -50,7 +51,6 @@ const getMotivoNoVenta = async (phoneNumber) => {
     if (!phoneNumber) {
         return null;
     }
-    console.log(`[DB Lookup] Searching for "Motivo No Venta" for phone: ${phoneNumber}`);
     try {
         // 1. Find Id_Prospecto from ProspectoTelefono
         const prospectoTelefonoResult = await db.raw(
@@ -58,11 +58,9 @@ const getMotivoNoVenta = async (phoneNumber) => {
             [phoneNumber]
         );
         if (!prospectoTelefonoResult || prospectoTelefonoResult.length === 0) {
-            console.log(`[DB Lookup] No Id_Prospecto found for phone: ${phoneNumber}`);
             return null;
         }
         const idProspecto = prospectoTelefonoResult[0].Id_Prospecto;
-        console.log(`[DB Lookup] Found Id_Prospecto: ${idProspecto} for phone: ${phoneNumber}`);
 
         // 2. Find ID_NoVenta from Prospecto
         const prospectoResult = await db.raw(
@@ -70,11 +68,9 @@ const getMotivoNoVenta = async (phoneNumber) => {
             [idProspecto]
         );
         if (!prospectoResult || prospectoResult.length === 0 || prospectoResult[0].ID_NoVenta === null) {
-            console.log(`[DB Lookup] No valid ID_NoVenta associated with Id_Prospecto: ${idProspecto}`);
             return null;
         }
         const idNoVenta = prospectoResult[0].ID_NoVenta;
-        console.log(`[DB Lookup] Found ID_NoVenta: ${idNoVenta} for Id_Prospecto: ${idProspecto}`);
 
         // 3. Find Nombre from NoVenta
         const noVentaResult = await db.raw(
@@ -82,10 +78,8 @@ const getMotivoNoVenta = async (phoneNumber) => {
             [idNoVenta]
         );
         if (!noVentaResult || noVentaResult.length === 0) {
-            console.log(`[DB Lookup] No record found in NoVenta table for ID: ${idNoVenta}`);
             return null;
         }
-        console.log(`[DB Lookup] Successfully retrieved Motivo No Venta: ${noVentaResult[0].Nombre}`);
         return noVentaResult[0].Nombre;
 
     } catch (error) {
@@ -99,7 +93,6 @@ const getContratoStatus = async (phoneNumber) => {
     if (!phoneNumber) {
         return null;
     }
-    console.log(`[DB Lookup] Checking "Contrato" status for phone: ${phoneNumber}`);
     try {
         // 1. Find Id_Prospecto from ProspectoTelefono
         const ptRes = await db.raw(
@@ -107,7 +100,6 @@ const getContratoStatus = async (phoneNumber) => {
             [phoneNumber]
         );
         if (!ptRes || ptRes.length === 0) {
-            console.log(`[DB Lookup] No Id_Prospecto found for phone: ${phoneNumber}`);
             return null;
         }
         const idProspecto = ptRes[0].Id_Prospecto;
@@ -119,21 +111,17 @@ const getContratoStatus = async (phoneNumber) => {
         );
         
         if (!pRes || pRes.length === 0) {
-            console.log(`[DB Lookup] No record found in Prospecto for ID: ${idProspecto}`);
             return "No";
         }
 
         const { Activo, id_contrato } = pRes[0];
-        console.log(`[DB Lookup] Retrieved Activo: ${Activo}, id_contrato: ${id_contrato} for Id_Prospecto: ${idProspecto}`);
 
         // Validation: If Active, skip update
         if (Activo) {
-            console.log(`[DB Lookup] Prospecto ${idProspecto} is Active (Activo=1). Skipping "Contrato" status update.`);
             return null;
         }
 
         const hasContrato = id_contrato != null ? "Si" : "No";
-        console.log(`[DB Lookup] Successfully retrieved Contrato status: ${hasContrato}`);
         return hasContrato;
 
     } catch (error) {
@@ -334,6 +322,186 @@ const syncGoogleLeads = async () => {
     return { totalProcessedCount, results };
 };
 
+// Meta lead-ads exports synced to NetSuite only (see renewLeadNetsuiteService.js) - newest leads
+// are at the top of each sheet. Every sheet uses the same NetSuite lead form (741, subsidiary 10);
+// only the marca differs. `minCreated` is a hard floor: rows Meta created before it are never
+// synced, even without a status (FCELLS' sheet has ~375 older un-statused leads that must stay out).
+const META_LEAD_SHEETS = {
+    renew: {
+        label: 'RENEW',
+        spreadsheetId: '19rDmsUpfTlGCrEjvKI2Z5Ut0VSRU2-oy6uwcBHjqLLU',
+        marcaId: renewLeadNetsuiteService.MARCA_IDS.RENEW,
+        minCreated: null,
+    },
+    // "Fcells prospectos" sheet - connected 2026-10-22, synced from 2026-10-16 on per explicit instruction.
+    fcells: {
+        label: 'FCELLS',
+        spreadsheetId: '1TMbdOz-SY9MZOo9nqw5zHRvKjoSvnPgWoaFRNHP66yo',
+        marcaId: renewLeadNetsuiteService.MARCA_IDS.FCELLS,
+        minCreated: new Date('2026-10-16T00:00:00-06:00'),
+    },
+};
+const META_STATUS_HEADER = 'Sync Status';
+const META_NETSUITE_ID_HEADER = 'NetSuite ID';
+
+/** First matching header - Meta exports have used both the Spanish and English column names. */
+const findHeader = (headers, ...names) => {
+    for (const name of names) {
+        const idx = headers.indexOf(name);
+        if (idx !== -1) return idx;
+    }
+    return -1;
+};
+
+/**
+ * One Meta lead sheet (a META_LEAD_SHEETS entry): every row of every tab without a status gets
+ * created as a NetSuite lead with that sheet's marca, then marked PROCESSED with its NetSuite id.
+ * A failed row is marked "ERROR: ..." and skipped by later runs unless `retryErrors` is set.
+ * `limit` caps how many rows one run processes (for testing); `since` (a Date) skips rows whose
+ * Meta created_time is earlier (on top of the sheet's own `minCreated`).
+ */
+const syncMetaLeadSheet = async (sheetConfig, { limit = Infinity, since = null, retryErrors = false } = {}) => {
+    const { label, spreadsheetId, marcaId, minCreated } = sheetConfig;
+    const floor = [since, minCreated].filter(Boolean).reduce((a, b) => (a > b ? a : b), null);
+
+    const auth = new google.auth.GoogleAuth({
+        credentials: CREDENTIALS,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const metadata = await sheets.spreadsheets.get({ spreadsheetId });
+    const results = [];
+    let totalProcessedCount = 0;
+
+    for (const sheet of metadata.data.sheets || []) {
+        const sheetName = sheet.properties.title;
+        const response = await sheets.spreadsheets.values.get({ spreadsheetId, range: `${sheetName}!A:ZZ` });
+        const rows = response.data.values || [];
+        if (rows.length < 2) continue;
+        const headers = rows[0];
+
+        // Status / NetSuite id columns are appended at the end the first time a tab is seen.
+        const ensureColumn = async (name) => {
+            let idx = headers.indexOf(name);
+            if (idx === -1) {
+                idx = headers.length;
+                headers.push(name);
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId,
+                    range: `${sheetName}!${getColumnLetter(idx)}1`,
+                    valueInputOption: 'RAW',
+                    resource: { values: [[name]] },
+                });
+            }
+            return idx;
+        };
+        const statusIdx = await ensureColumn(META_STATUS_HEADER);
+        const netsuiteIdIdx = await ensureColumn(META_NETSUITE_ID_HEADER);
+
+        const col = {
+            id: findHeader(headers, 'id'),
+            createdTime: findHeader(headers, 'created_time'),
+            campaignName: findHeader(headers, 'campaign_name'),
+            platform: findHeader(headers, 'platform'),
+            fullName: findHeader(headers, 'nombre_completo', 'full_name'),
+            firstName: findHeader(headers, 'first_name'),
+            lastName: findHeader(headers, 'last_name'),
+            email: findHeader(headers, 'correo_electrónico', 'email'),
+            phone: findHeader(headers, 'número_de_teléfono', 'phone_number'),
+            interes: headers.findIndex((h) => String(h).startsWith('para_orientarle_mejor')),
+            tratamientoPrevio: headers.findIndex((h) => String(h).includes('has_recibido_anteriormente')),
+            disposicion: headers.findIndex((h) => String(h).includes('qué_tan_dispuesto')),
+        };
+        const cell = (row, idx) => (idx === -1 ? null : row[idx] || null);
+
+        let sheetProcessedCount = 0;
+        for (let i = 1; i < rows.length && totalProcessedCount < limit; i++) {
+            const row = rows[i];
+            const prevStatus = cell(row, statusIdx);
+            // PROCESSED is always skipped; a previous ERROR only when retryErrors is off.
+            if (prevStatus && !(retryErrors && String(prevStatus).startsWith('ERROR'))) continue;
+            if (!cell(row, col.email) && !cell(row, col.phone)) continue;
+            if (floor) {
+                const created = new Date(cell(row, col.createdTime));
+                if (Number.isNaN(created.getTime()) || created < floor) continue;
+            }
+
+            let status;
+            let netsuiteId = '';
+            try {
+                const result = await renewLeadNetsuiteService.upsertRenewLeadInNetsuite({
+                    marcaId,
+                    metaLeadId: cell(row, col.id),
+                    createdTime: cell(row, col.createdTime),
+                    // FCELLS' form asks first/last name separately; Renew's asks one full name.
+                    fullName: cell(row, col.fullName),
+                    firstName: cell(row, col.firstName),
+                    lastName: cell(row, col.lastName),
+                    email: cell(row, col.email),
+                    phone: cell(row, col.phone),
+                    platform: cell(row, col.platform),
+                    campaignName: cell(row, col.campaignName),
+                    interes: cell(row, col.interes),
+                    tratamientoPrevio: cell(row, col.tratamientoPrevio),
+                    disposicion: cell(row, col.disposicion),
+                });
+                status = 'PROCESSED';
+                netsuiteId = result.id || '';
+                console.log(`[${label} SYNC] NetSuite lead ${result.created ? 'created' : 'updated'} (id ${result.id}) for row ${i + 1} in ${sheetName}`);
+            } catch (error) {
+                status = `ERROR: ${String(error.message).slice(0, 200)}`;
+                console.error(`[${label} SYNC] Row ${i + 1} in ${sheetName} failed:`, error.message);
+            }
+
+            // Write status and NetSuite ID separately - they aren't adjacent on every sheet (FCELLS'
+            // sheet already had its own Sync Status column before NetSuite ID was appended).
+            await sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId,
+                resource: {
+                    valueInputOption: 'RAW',
+                    data: [
+                        { range: `${sheetName}!${getColumnLetter(statusIdx)}${i + 1}`, values: [[status]] },
+                        { range: `${sheetName}!${getColumnLetter(netsuiteIdIdx)}${i + 1}`, values: [[netsuiteId]] },
+                    ],
+                },
+            });
+
+            sheetProcessedCount++;
+            totalProcessedCount++;
+        }
+        results.push({ sheet: sheetName, processed: sheetProcessedCount });
+    }
+
+    return { totalProcessedCount, results };
+};
+
+const syncRenewLeads = (options) => syncMetaLeadSheet(META_LEAD_SHEETS.renew, options);
+const syncFcellsLeads = (options) => syncMetaLeadSheet(META_LEAD_SHEETS.fcells, options);
+
+/** Shared ?limit=N&since=YYYY-MM-DD&retryErrors=1 handler - `since` is read as midnight Mexico City time. */
+const metaLeadSyncRoute = (sheetKey) => async (req, res) => {
+    const sheetConfig = META_LEAD_SHEETS[sheetKey];
+    try {
+        const limit = Number(req.query.limit) > 0 ? Number(req.query.limit) : Infinity;
+        const since = req.query.since ? new Date(`${req.query.since}T00:00:00-06:00`) : null;
+        if (since && Number.isNaN(since.getTime())) {
+            return res.status(400).json({ success: false, message: 'since must be YYYY-MM-DD.' });
+        }
+        const retryErrors = req.query.retryErrors === '1' || req.query.retryErrors === 'true';
+        const { totalProcessedCount, results } = await syncMetaLeadSheet(sheetConfig, { limit, since, retryErrors });
+        return res.status(200).json({ success: true, totalProcessed: totalProcessedCount, details: results });
+    } catch (error) {
+        console.error(`[${sheetConfig.label} SYNC] Error:`, error);
+        return res.status(500).json({ success: false, message: `Internal server error processing ${sheetConfig.label} sheet.`, error: error.message });
+    }
+};
+
+/** GET /api/google-sheets/sync-renew - Renew Therapies sheet -> NetSuite (marca RENEW), manually. */
+router.get('/sync-renew', metaLeadSyncRoute('renew'));
+/** GET /api/google-sheets/sync-fcells - "Fcells prospectos" sheet -> NetSuite (marca FCELLS), manually. */
+router.get('/sync-fcells', metaLeadSyncRoute('fcells'));
+
 /**
  * Endpoint to trigger the lead synchronization process manually
  * GET /api/google-sheets/sync
@@ -360,5 +528,7 @@ router.get('/sync', async (req, res) => {
 
 module.exports = {
     router,
+    syncRenewLeads,
+    syncFcellsLeads,
     syncGoogleLeads
 };

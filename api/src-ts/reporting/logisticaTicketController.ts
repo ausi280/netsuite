@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
-import axios from 'axios';
+import axios, { type AxiosResponse } from 'axios';
 import multer from 'multer';
-import { getZammadConfig } from '../config';
+import { getZammadConfig, getZammadDirectConfig, type ZammadDirectConfig } from '../config';
 
 // Same branching the Logística form's own UI enforces client-side (see MARCA_TIPOS in
 // web/src/config/logisticaTickets.ts - keep both in sync) - re-checked here so a crafted request
@@ -21,6 +21,11 @@ const MARCA_TIPOS: Record<string, string[]> = {
 // frontend uses in its `campos` JSON blob. Kept generic (label lookup + fallback) rather than one
 // body string per subform, same convention the original PHP prototype used.
 const FIELD_LABELS: Record<string, string> = {
+  id_cliente: 'Id Cliente',
+  zona: 'Zona',
+  // Known address picked in the form (web/src/config/logisticaDirecciones.ts), e.g. "Ingenes / Toluca".
+  remitente_sede: 'Remitente - Sede',
+  destinatario_sede: 'Destinatario - Sede',
   nombre_mama: 'Nombre de mamá / celular',
   nombre_papa: 'Nombre de papá o contacto / celular',
   paquete_contratado: 'Paquete contratado',
@@ -85,26 +90,115 @@ export const logisticaUpload = multer({
   },
 });
 
+// Zammad "Zona" ticket field options (select, key = display) - keep in sync with ZONAS in
+// web/src/config/logisticaTickets.ts. Re-checked here so a crafted request can't send a value
+// Zammad's select wouldn't accept.
+const ZONAS = new Set([
+  'AGS', 'CANCUN', 'CDMX', 'CDMX/Ingenes', 'CDMX/Norte', 'CDMX/Poniente', 'CDMX/Sur', 'CHIHUAHUA', 'GDL',
+  'HERMOSILLO', 'LEON', 'MORELIA', 'MTY', 'MTY/Operaciones', 'PUEBLA', 'QRO', 'TIJUANA',
+]);
+
+// Sections the article body groups fields into, by field-name prefix/membership - everything else
+// lands in "Detalle de la solicitud". Remitente/Destinatario render side by side.
+const PAQUETE_FIELDS = new Set(['que_envias', 'medidas_peso', 'requiere_seguro', 'monto', 'urgente']);
+type BodySection = 'detalle' | 'remitente' | 'destinatario' | 'paquete';
+
+function sectionOf(key: string): BodySection {
+  if (key.startsWith('remitente_')) return 'remitente';
+  if (key.startsWith('destinatario_')) return 'destinatario';
+  if (PAQUETE_FIELDS.has(key)) return 'paquete';
+  return 'detalle';
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/\n/g, '<br>');
+}
+
+const CELL = 'padding:4px 10px;border-bottom:1px solid #e5e7eb;vertical-align:top;';
+const LABEL_CELL = `${CELL}color:#6b7280;white-space:nowrap;`;
+const HEADING = 'margin:16px 0 6px;font-size:14px;color:#111827;';
+
+function htmlTable(rows: Array<[string, string]>): string {
+  const body = rows.map(([label, value]) => `<tr><td style="${LABEL_CELL}">${escapeHtml(label)}</td><td style="${CELL}">${escapeHtml(value)}</td></tr>`).join('');
+  return `<table style="border-collapse:collapse;font-size:13px;">${body}</table>`;
+}
+
+/**
+ * HTML article body (content_type text/html): a summary block, then one table per section. Inline
+ * styles only - Zammad sanitizes <style> blocks out of articles. Remitente and Destinatario share a
+ * two-column row so a shipment reads "from -> to" at a glance instead of 10 interleaved lines.
+ */
 function buildBody(auditUser: Request['auditUser'], marca: string, tipoSolicitud: string, campos: Record<string, unknown>, comentarios: string): string {
-  const lines = [
-    `Solicitante: ${auditUser?.name ?? ''} <${auditUser?.username ?? ''}>`,
-    `Marca: ${marca}`,
-    `Tipo de solicitud: ${tipoSolicitud}`,
-    '',
-  ];
+  const sections: Record<BodySection, Array<[string, string]>> = { detalle: [], remitente: [], destinatario: [], paquete: [] };
 
   for (const [key, rawValue] of Object.entries(campos)) {
     const value = typeof rawValue === 'string' ? rawValue.trim() : '';
     if (!value) continue;
-    const label = FIELD_LABELS[key] ?? key;
-    lines.push(`${label}: ${value}`);
+    const section = sectionOf(key);
+    // Inside its own section, "Remitente - Nombre" reads better as just "Nombre".
+    const label = (FIELD_LABELS[key] ?? key).replace(/^(Remitente|Destinatario) - /, '');
+    sections[section].push([label, value]);
+  }
+
+  const parts = [
+    htmlTable([
+      ['Solicitante', `${auditUser?.name ?? ''} <${auditUser?.username ?? ''}>`],
+      ['Marca', marca],
+      ['Tipo de solicitud', tipoSolicitud],
+    ]),
+  ];
+
+  if (sections.detalle.length > 0) {
+    parts.push(`<h3 style="${HEADING}">Detalle de la solicitud</h3>`, htmlTable(sections.detalle));
+  }
+
+  if (sections.remitente.length > 0 || sections.destinatario.length > 0) {
+    const column = (title: string, rows: Array<[string, string]>) =>
+      `<td style="vertical-align:top;padding-right:24px;"><h3 style="${HEADING}">${title}</h3>${rows.length > 0 ? htmlTable(rows) : '—'}</td>`;
+    parts.push(`<table style="border-collapse:collapse;"><tr>${column('📦 Remitente', sections.remitente)}${column('📍 Destinatario', sections.destinatario)}</tr></table>`);
+  }
+
+  if (sections.paquete.length > 0) {
+    parts.push(`<h3 style="${HEADING}">Paquete</h3>`, htmlTable(sections.paquete));
   }
 
   if (comentarios.trim()) {
-    lines.push('', `Comentarios adicionales: ${comentarios.trim()}`);
+    parts.push(`<h3 style="${HEADING}">Comentarios adicionales</h3>`, `<p style="font-size:13px;margin:0;">${escapeHtml(comentarios.trim())}</p>`);
   }
 
-  return lines.join('\n');
+  return parts.join('\n');
+}
+
+function fieldValue(campos: Record<string, unknown>, key: string): string {
+  const value = campos[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * ZAMMAD.MODE = "direct": the same payload the relay would forward, POSTed straight to Zammad's
+ * /api/v1/tickets with this app's own token (see getZammadDirectConfig). Falls back to the relay
+ * only when Zammad returned no HTTP response at all (connection refused/reset/dropped - what the
+ * host firewall does to this app's IP); any real Zammad response, including an error, is final so
+ * a ticket Zammad may already have created is never submitted twice.
+ */
+async function postDirect(
+  direct: ZammadDirectConfig,
+  data: Record<string, unknown>,
+  postViaRelay: () => Promise<AxiosResponse>,
+): Promise<AxiosResponse> {
+  try {
+    return await axios.post(`${direct.url}/api/v1/tickets`, data, {
+      headers: {
+        Authorization: `Token token=${direct.token}`,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    });
+  } catch (error: any) {
+    if (error?.response || !direct.fallbackToRelay) throw error;
+    console.warn(`[logistica] direct Zammad call got no response (${error?.code ?? error?.message}), falling back to relay`);
+    return postViaRelay();
+  }
 }
 
 /**
@@ -137,6 +231,13 @@ export async function createLogisticaTicketRoute(req: Request, res: Response): P
     return;
   }
 
+  const idCliente = fieldValue(campos, 'id_cliente');
+  const zona = fieldValue(campos, 'zona');
+  if (zona && !ZONAS.has(zona)) {
+    res.status(400).json({ success: false, message: 'Zona inválida.' });
+    return;
+  }
+
   const files = Array.isArray(req.files) ? req.files : [];
   const attachments = files.map((file) => ({
     filename: file.originalname,
@@ -144,7 +245,17 @@ export async function createLogisticaTicketRoute(req: Request, res: Response): P
     data: file.buffer.toString('base64'),
   }));
 
-  const { relayUrl, relaySecret, group } = getZammadConfig();
+  let relayConfig: ReturnType<typeof getZammadConfig>;
+  let direct: ZammadDirectConfig;
+  try {
+    relayConfig = getZammadConfig();
+    direct = getZammadDirectConfig();
+  } catch (error: any) {
+    console.error(`[logistica] ${error?.message}`);
+    res.status(500).json({ success: false, message: 'El servicio de tickets no está configurado correctamente.' });
+    return;
+  }
+  const { relayUrl, relaySecret, group } = relayConfig;
 
   const requesterName = req.auditUser?.name ?? '';
   const requesterEmail = req.auditUser?.username ?? '';
@@ -157,9 +268,14 @@ export async function createLogisticaTicketRoute(req: Request, res: Response): P
       firstname: requesterName,
       email: requesterEmail,
     },
+    // Ticket-level custom fields (confirmed on live Logística tickets): Id Cliente -> foliocontrato
+    // (Recolección / Envío de kit), Zona -> zona (Kit para stock / Material / Regalos).
+    ...(idCliente ? { foliocontrato: idCliente } : {}),
+    ...(zona ? { zona } : {}),
     article: {
       subject: asunto,
       body: buildBody(req.auditUser, marca, tipoSolicitud, campos, comentarios),
+      content_type: 'text/html',
       type: 'note',
       // See the function comment above - without this the article shows up authored by the
       // service account, not by whoever actually filled out the form.
@@ -173,16 +289,19 @@ export async function createLogisticaTicketRoute(req: Request, res: Response): P
     state_id: 2,
   };
 
-  try {
-    // Goes through zammad-relay.php (see getZammadConfig's comment) instead of calling Zammad
-    // directly - this app's outbound IP is rejected by Zammad's own host firewall.
-    const response = await axios.post(relayUrl, data, {
+  // Goes through zammad-relay.php (see getZammadConfig's comment) instead of calling Zammad
+  // directly - this app's outbound IP is rejected by Zammad's own host firewall.
+  const postViaRelay = () =>
+    axios.post(relayUrl, data, {
       headers: {
         'X-Relay-Secret': relaySecret,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
     });
+
+  try {
+    const response = direct.mode === 'direct' ? await postDirect(direct, data, postViaRelay) : await postViaRelay();
 
     res.status(200).json({
       success: true,
@@ -192,6 +311,10 @@ export async function createLogisticaTicketRoute(req: Request, res: Response): P
   } catch (error: any) {
     const status = error?.response?.status || 502;
     const message = error?.response?.data ? JSON.stringify(error.response.data) : error?.message || 'No se pudo contactar al servicio de tickets.';
-    res.status(status).json({ success: false, message });
+    // Which host actually answered (direct Zammad vs zammad-relay.php) - both sit behind host-level
+    // bot protection, and the error body alone doesn't say which one blocked us.
+    const via = error?.config?.url ?? null;
+    console.error(`[logistica] ticket creation failed (${status}) via ${via}: ${message}`);
+    res.status(status).json({ success: false, message, mode: direct.mode, via });
   }
 }

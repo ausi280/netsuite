@@ -47,6 +47,11 @@ const DEFAULT_CRON: Record<SyncEntityName, string> = {
   // NetSuite leads (Argentina's prospectos for the Reporte de Marketing) - same 4-hour batch as
   // the other ERP entities.
   lead: '15 3,7,11,15,19,23 * * *',
+  // Exchange rates (NetSuite `currency` table) - a tiny full pull, same 4-hour batch.
+  currency: '25 3,7,11,15,19,23 * * *',
+  // Pushes app_payments' pending domiciliación flags to the contract's custrecord_cryo_mx_pagoautomatico
+  // (a write TO NetSuite, see domiciliacionPushService.ts) - cheap and customer-facing, so every 15 minutes.
+  domiciliacion: '*/15 * * * *',
 };
 
 function defaultEntityConfig(entity: SyncEntityName): EntitySyncConfig {
@@ -102,6 +107,8 @@ function buildSyncConfig(raw: Partial<ErpSyncConfig> | undefined): ErpSyncConfig
     ZAMMAD_TICKET: mergeEntityConfig('zammadTicket', raw?.ZAMMAD_TICKET),
     PAYMENT_INVOICE_LINK: mergeEntityConfig('paymentInvoiceLink', raw?.PAYMENT_INVOICE_LINK),
     LEAD: mergeEntityConfig('lead', raw?.LEAD),
+    CURRENCY: mergeEntityConfig('currency', raw?.CURRENCY),
+    DOMICILIACION: mergeEntityConfig('domiciliacion', raw?.DOMICILIACION),
   };
 }
 
@@ -129,6 +136,9 @@ function loadConfig(): AppConfig {
       TOKEN_SECRET: erpRaw.TOKEN_SECRET,
       REALM: erpRaw.REALM,
       SYNC: buildSyncConfig(erpRaw.SYNC),
+      PAGO_AUTOMATICO_RESTLET: erpRaw.PAGO_AUTOMATICO_RESTLET?.SCRIPT
+        ? { SCRIPT: String(erpRaw.PAGO_AUTOMATICO_RESTLET.SCRIPT), DEPLOY: String(erpRaw.PAGO_AUTOMATICO_RESTLET.DEPLOY || '1') }
+        : null,
     },
   };
 }
@@ -259,6 +269,42 @@ export function getZammadConfig(): ZammadConfig {
   }
 
   return { relayUrl: raw.RELAY_URL, relaySecret: raw.RELAY_SECRET, group: raw.GROUP };
+}
+
+export type ZammadTicketMode = 'relay' | 'direct';
+
+export interface ZammadDirectConfig {
+  mode: ZammadTicketMode;
+  /** Zammad base URL, e.g. https://tickets.cryoholdco.com (no trailing slash). */
+  url: string | null;
+  /** Zammad API token (Authorization: Token token=...) - gitignored env.json only. */
+  token: string | null;
+  /** In direct mode, retry through the relay when Zammad gave no HTTP response at all (the
+   * firewall-drop case getZammadConfig()'s doc comment describes). */
+  fallbackToRelay: boolean;
+  group: string;
+}
+
+/**
+ * Opt-in alternative to the relay above: ZAMMAD.MODE = "direct" makes the Logística ticket route
+ * call Zammad's /api/v1/tickets itself with ZAMMAD.TOKEN, skipping zammad-relay.php. MODE defaults
+ * to "relay", so nothing changes until both MODE and TOKEN are set - and since this app's outbound
+ * IP has been firewalled before, FALLBACK_TO_RELAY (default true) keeps the relay as a safety net.
+ */
+export function getZammadDirectConfig(): ZammadDirectConfig {
+  const raw = (legacyConfig.env && legacyConfig.env.ZAMMAD) || {};
+  const mode: ZammadTicketMode = raw.MODE === 'direct' ? 'direct' : 'relay';
+  const url = raw.URL ? String(raw.URL).replace(/\/+$/, '') : null;
+  const token = raw.TOKEN ? String(raw.TOKEN) : null;
+
+  if (mode === 'direct' && (!url || !token)) {
+    throw new Error('ZAMMAD.MODE is "direct" but ZAMMAD.URL/ZAMMAD.TOKEN are missing in config/env.json.');
+  }
+  if (!raw.GROUP) {
+    throw new Error('Missing ZAMMAD.GROUP configuration in config/env.json.');
+  }
+
+  return { mode, url, token, fallbackToRelay: raw.FALLBACK_TO_RELAY !== false, group: raw.GROUP };
 }
 
 export * from './types';

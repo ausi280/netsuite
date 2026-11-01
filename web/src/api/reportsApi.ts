@@ -551,6 +551,20 @@ export async function fetchPaymentsList(token: string | null, params: PaymentsLi
   return apiFetch<PaginatedRows<PaymentRow>>(`/reports/payments?${query.toString()}`, { token });
 }
 
+/** Payments CSV - same search/subsidiary/date-range filters as fetchPaymentsList, every page. */
+export async function fetchPaymentsExportCsv(
+  token: string | null,
+  params: Pick<PaymentsListParams, 'search' | 'subsidiary' | 'dateFrom' | 'dateTo'>,
+): Promise<Blob> {
+  const query = new URLSearchParams();
+  if (params.search) query.set('search', params.search);
+  if (params.subsidiary && params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
+
+  return apiFetchBlob(`/reports/payments/export?${query.toString()}`, { token });
+}
+
 /** Proxies the "cobro domiciliado" action to the live payment.cryoholdco.com API through our own
  * backend - this app never talks to MercadoPago/that API directly. */
 export async function chargeDomiciled(token: string | null, body: ChargeDomiciledRequest): Promise<ChargeDomiciledResponse> {

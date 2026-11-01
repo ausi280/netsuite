@@ -267,6 +267,7 @@ async function upsertLeadInNetsuite(lead) {
 
 module.exports = {
   upsertLeadInNetsuite,
+  splitFullName,
   findExistingCustomerId,
   resolveLeadEntityStatusId,
 };

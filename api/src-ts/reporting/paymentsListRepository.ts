@@ -36,8 +36,22 @@ const SELECT_COLUMNS = [
   'P.payloadRequest',
   'P.created_at',
   'CONTRACT.name as contract_name',
+  'CONTRACT.custrecord_cryo_contratosistemaanterior as folio_sistema_anterior',
   'CONTRACT.custrecord_cryo_subsidiariacontrato as subsidiary_id',
 ];
+
+// app_payments.domiciliacion_synced is added by the separate `payment` project and isn't in every
+// environment's database yet (missing in Dev as of 2026-10-22) - selected only when it exists, else
+// returned as NULL, so the grid works either way. Checked once per process.
+let hasDomiciliacionColumn: Promise<boolean> | null = null;
+
+export async function selectColumns(db: Knex): Promise<Array<string | Knex.Raw>> {
+  hasDomiciliacionColumn ??= db.schema.hasColumn('app_payments', 'domiciliacion_synced').catch(() => false);
+  return [
+    ...SELECT_COLUMNS,
+    (await hasDomiciliacionColumn) ? 'P.domiciliacion_synced' : db.raw('NULL as domiciliacion_synced'),
+  ];
+}
 
 /** Turns a "YYYY-MM-DD" dateTo into the next day, so the range filter can use an exclusive `<`
  * and still include every payment made anytime during dateTo itself (created_at carries a time-of-day). */
@@ -63,6 +77,7 @@ function buildBaseQuery(
     qb.where((builder) => {
       builder
         .orWhereRaw(`${CONTRACT_ID_EXPR} LIKE ?`, [`%${search}%`])
+        .orWhere('CONTRACT.custrecord_cryo_contratosistemaanterior', 'like', `%${search}%`)
         .orWhere('P.payer_email', 'like', `%${search}%`)
         .orWhere('P.payment_id', 'like', `%${search}%`)
         .orWhere('P.description', 'like', `%${search}%`);
@@ -109,7 +124,7 @@ export async function getPaymentsList(
 
   const [rows, countRow] = await Promise.all([
     buildBaseQuery(db, search, subsidiary, dateFrom, dateTo, restrictSubsidiaries)
-      .select(SELECT_COLUMNS)
+      .select(await selectColumns(db))
       .orderBy('P.created_at', 'desc')
       .offset((page - 1) * pageSize)
       .limit(pageSize),
@@ -121,3 +136,61 @@ export async function getPaymentsList(
 
   return { data: rows as Record<string, unknown>[], page, pageSize, total, totalPages };
 }
+
+/** Same filters as getPaymentsList, unpaginated (the export route batches it) - newest first, with
+ * P.id as a tie-breaker so offset batching never skips/repeats rows sharing a created_at. Takes
+ * selectColumns()'s result rather than awaiting it here - this must stay sync, since awaiting a
+ * knex builder would execute it. */
+export function buildPaymentsExportQuery(
+  db: Knex,
+  params: Pick<PaymentsListParams, 'search' | 'subsidiary' | 'dateFrom' | 'dateTo'>,
+  restrictSubsidiaries: Set<string> | null,
+  columns: Array<string | Knex.Raw>,
+): Knex.QueryBuilder {
+  const search = typeof params.search === 'string' ? params.search.trim() : '';
+  const subsidiary = parseSubsidiaryFilter(params.subsidiary);
+  const dateFrom = typeof params.dateFrom === 'string' ? params.dateFrom.trim() : '';
+  const dateTo = typeof params.dateTo === 'string' ? params.dateTo.trim() : '';
+
+  return buildBaseQuery(db, search, subsidiary, dateFrom, dateTo, restrictSubsidiaries)
+    .select([...columns.filter((c) => c !== 'P.payloadRequest'), db.raw(`${CONTRACT_ID_EXPR} as contract_id`)])
+    .orderBy('P.created_at', 'desc')
+    .orderBy('P.id', 'desc');
+}
+
+/** Export column order - payloadRequest (raw JSON) is left out; contract_id is its extracted contractId. */
+export const PAYMENTS_EXPORT_COLUMNS = [
+  'created_at',
+  'contract_id',
+  'contract_name',
+  'folio_sistema_anterior',
+  'payment_id',
+  'description',
+  'transaction_amount',
+  'payer_email',
+  'payment_method_id',
+  'installments',
+  'status',
+  'status_detail',
+  'domiciliacion_synced',
+  'subsidiary_id',
+];
+
+/** Spanish headers matching PaymentsHistoryPage's own column labels (humanizeColumnName would
+ * produce English ones like "Transaction Amount" for these app_payments columns). */
+export const PAYMENTS_EXPORT_HEADERS: Record<string, string> = {
+  created_at: 'Fecha',
+  contract_id: 'ID Contrato NetSuite',
+  contract_name: 'Contrato',
+  folio_sistema_anterior: 'Folio sistema anterior',
+  payment_id: 'ID Pago',
+  description: 'Descripción',
+  transaction_amount: 'Monto',
+  payer_email: 'Email',
+  payment_method_id: 'Método',
+  installments: 'Mensualidades',
+  status: 'Estatus',
+  status_detail: 'Detalle estatus',
+  domiciliacion_synced: 'Domiciliación NetSuite',
+  subsidiary_id: 'Subsidiaria',
+};
