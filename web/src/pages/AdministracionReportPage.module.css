@@ -1,0 +1,103 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sectionTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  margin: 12px 0 0;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.accent {
+  color: var(--color-primary-text);
+}
+
+.sectionMeta {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-secondary);
+}
+
+.twoCol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-primary-text);
+  margin: 0 0 12px;
+  text-align: center;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cardHeader .cardTitle {
+  margin: 0;
+}
+
+.statusHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.subTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-neutral-900);
+  margin: 20px 0 8px;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  margin-top: 16px;
+}
+
+.center {
+  text-align: center;
+  color: var(--color-neutral-900);
+  margin: 0;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-secondary);
+  margin: 8px 0 0;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+
+.notes {
+  margin: 16px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--color-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}

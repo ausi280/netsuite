@@ -55,6 +55,8 @@ export type ReportEntityKey =
  * (new/en proceso/cerrado/resuelto counts over zammad_tickets, group "Postventa" only) - NOT an
  * additional gate on top of 'zammad-tickets', which is the separate, generic Zammad Tickets table
  * view (every group) - see postventaController.ts.
+ * 'administracion' is its own standalone grant for the Reporte Administración (storage counts and
+ * abandonment from NetSuite servicios) - see administracionController.ts.
  */
 export type PermissionKey =
   | ReportEntityKey
@@ -66,7 +68,8 @@ export type PermissionKey =
   | 'cobranza_commissions'
   | 'cobranza_goals'
   | 'marketing_inputs'
-  | 'postventa';
+  | 'postventa'
+  | 'administracion';
 
 export interface SortConfig {
   column: string;

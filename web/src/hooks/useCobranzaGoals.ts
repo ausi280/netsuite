@@ -6,6 +6,7 @@ import {
   setCobranzaGoalOverride,
   setCobranzaAgentScheme,
   type CobranzaGoalDefaultInput,
+  type CobranzaGoalExclusionInput,
   type CobranzaGoalOverrideInput,
 } from '../api/reportsApi';
 import type { IncentiveScheme } from '../api/types';
@@ -58,12 +59,12 @@ export function useSetCobranzaGoalExclusion() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ employeeId, excluded }: { employeeId: string; excluded: boolean }) => {
+    mutationFn: async ({ employeeId, input }: { employeeId: string; input: CobranzaGoalExclusionInput }) => {
       const token = await getAccessToken();
-      await setCobranzaGoalExclusion(token, employeeId, excluded);
+      await setCobranzaGoalExclusion(token, employeeId, input);
     },
     onSuccess: () => {
-      // Exclusions apply to every month, so every cached month's goals are stale.
+      // Later months not edited yet show this month's exclusions, so they're stale too.
       queryClient.invalidateQueries({ queryKey: ['cobranza-goals'] });
     },
   });

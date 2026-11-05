@@ -1,6 +1,9 @@
 import type { Request, Response } from 'express';
+import knex from '../db/connection';
 import { getLegacyDb } from '../db/legacyDbConnection';
 import { getProspectosPorTareas } from './comercialRepository';
+import { getVentas } from './comercialVentasRepository';
+import { isContractsAllowed, subsidiaryRestrictionFor } from './contractReportsController';
 import { isProspectosAllowed } from './prospectosController';
 
 function isDateOnly(value: unknown): value is string {
@@ -28,5 +31,26 @@ export async function getComercialReportRoute(req: Request, res: Response): Prom
   }
 
   const result = await getProspectosPorTareas(getLegacyDb(), range.dateFrom, range.dateTo);
+  res.status(200).json({ success: true, ...result });
+}
+
+/** GET /api/reports/comercial/ventas?dateFrom=YYYY-MM-DD&dateTo=YYYY-MM-DD - core and genetics sales
+ * per zona and ejecutivo (see comercialVentasRepository.ts), for the same date range as the rest of
+ * the Comercial report. Contract sales amounts, so on top of seeing the Comercial report
+ * ('prospectos') it takes the 'contracts' grant, and the caller's subsidiary restriction applies
+ * like in every other contract report. */
+export async function getVentasRoute(req: Request, res: Response): Promise<void> {
+  if (!isProspectosAllowed(req.permissions) || !isContractsAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver las ventas.' });
+    return;
+  }
+
+  const range = parseDateRange(req);
+  if (!range) {
+    res.status(400).json({ success: false, message: 'Provide a valid ?dateFrom=YYYY-MM-DD and ?dateTo=YYYY-MM-DD (dateFrom <= dateTo).' });
+    return;
+  }
+
+  const result = await getVentas(knex, getLegacyDb(), range.dateFrom, range.dateTo, subsidiaryRestrictionFor(req.permissions!));
   res.status(200).json({ success: true, ...result });
 }

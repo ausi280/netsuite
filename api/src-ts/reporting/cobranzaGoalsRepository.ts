@@ -32,18 +32,45 @@ export interface CobranzaGoalsForMonth {
   month: number;
   default_amount: number | null;
   people: CobranzaGoalPerson[];
-  /** Permanently left out of goals (every month) - see cobranza_goal_exclusions. */
+  /** Left out of goals this month - see getExclusions. */
   excluded: CobranzaGoalExcludedPerson[];
+  /** The month the exclusions shown were stored for - this month once edited, else the earlier
+   * month they're carried over from (null when none were ever set). */
+  exclusion_source: { year: number; month: number } | null;
   /** The month the esquemas shown were stored for - this month once configured, else the earlier
    * month they're carried over from (null when none were ever set). */
   scheme_source: { year: number; month: number } | null;
 }
 
+/** The latest month at or before (year, month) with an exclusions snapshot of its own. */
+async function findExclusionSnapshotMonth(db: Knex, year: number, month: number): Promise<{ year: number; month: number } | null> {
+  const row = (await db(EXCLUSIONS_TABLE)
+    .where('year', '<', year)
+    .orWhere((b) => b.where('year', year).andWhere('month', '<=', month))
+    .orderBy('year', 'desc')
+    .orderBy('month', 'desc')
+    .select('year', 'month')
+    .first()) as { year: number; month: number } | undefined;
+  return row ?? null;
+}
+
+/** Who's left out of goals for (year, month). Same snapshot scheme as the esquemas
+ * (cobranzaIncentivesRepository.ts): every edited month stores its own complete list - a row with
+ * `excluded` false marks someone restored that month - and a month nobody has edited yet shows the
+ * latest earlier month's list, so placeholder employees ("COBRADOR 1", "OFICINA") don't have to be
+ * removed again every month. */
+async function getExclusions(db: Knex, year: number, month: number): Promise<{ ids: string[]; source: { year: number; month: number } | null }> {
+  const source = await findExclusionSnapshotMonth(db, year, month);
+  if (!source) return { ids: [], source };
+  const rows = (await db(EXCLUSIONS_TABLE).where({ ...source, excluded: true }).select('employee_id')) as Array<{ employee_id: string }>;
+  return { ids: rows.map((r) => r.employee_id), source };
+}
+
 /** Every active employee who is (or has been) a Dueño or Cobrador on any invoice/contract - the
  * roster goals are assigned to - plus anyone who already has an override stored for this month
- * (so an override never silently disappears if that person later goes inactive) - minus anyone in
- * cobranza_goal_exclusions, which always wins. */
-async function getCobradorDuenoRoster(db: Knex, year: number, month: number): Promise<Array<{ employee_id: string; nombre: string }>> {
+ * (so an override never silently disappears if that person later goes inactive) - minus anyone
+ * excluded this month, which always wins. */
+async function getCobradorDuenoRoster(db: Knex, year: number, month: number, excludedIds: string[]): Promise<Array<{ employee_id: string; nombre: string }>> {
   const referencedIds = db
     .select('custbody_cryo_cobrador as employee_id')
     .from('netsuite_invoices')
@@ -51,13 +78,15 @@ async function getCobradorDuenoRoster(db: Knex, year: number, month: number): Pr
     .union((qb) => qb.select('custbody_cryo_duenio').from('netsuite_invoices').whereNotNull('custbody_cryo_duenio'))
     .union((qb) => qb.select('custrecord_cryo_duenio').from('netsuite_contracts').whereNotNull('custrecord_cryo_duenio'));
 
-  const rows = (await db('netsuite_employees as E')
+  const query = db('netsuite_employees as E')
     .leftJoin(GOALS_TABLE + ' as G', function (this: Knex.JoinClause) {
       this.on('G.employee_id', 'E.netsuite_id').andOn('G.year', db.raw('?', [year])).andOn('G.month', db.raw('?', [month]));
     })
     .whereNotNull('E.entityid')
-    .whereNot('E.entityid', SIN_ASIGNAR_PLACEHOLDER)
-    .whereNotIn('E.netsuite_id', db(EXCLUSIONS_TABLE).select('employee_id'))
+    .whereNot('E.entityid', SIN_ASIGNAR_PLACEHOLDER);
+  if (excludedIds.length > 0) query.whereNotIn('E.netsuite_id', excludedIds);
+
+  const rows = (await query
     .andWhere((builder) => {
       builder
         .where((active) => active.whereIn('E.netsuite_id', referencedIds).andWhere((b) => b.whereNull('E.isinactive').orWhere('E.isinactive', false)))
@@ -70,14 +99,18 @@ async function getCobradorDuenoRoster(db: Knex, year: number, month: number): Pr
 }
 
 export async function getCobranzaGoals(db: Knex, year: number, month: number): Promise<CobranzaGoalsForMonth> {
+  const exclusions = await getExclusions(db, year, month);
   const [defaultRow, overrides, roster, excluded, schemes] = await Promise.all([
     db(DEFAULTS_TABLE).where({ year, month }).select('amount').first() as Promise<{ amount: string | number } | undefined>,
     db(GOALS_TABLE).where({ year, month }).select('employee_id', 'amount') as Promise<Array<{ employee_id: string; amount: string | number }>>,
-    getCobradorDuenoRoster(db, year, month),
-    db(EXCLUSIONS_TABLE + ' as X')
-      .leftJoin('netsuite_employees as E', 'E.netsuite_id', 'X.employee_id')
-      .select('X.employee_id', db.raw("COALESCE(E.entityid, X.employee_id) as nombre"))
-      .orderBy('nombre') as Promise<CobranzaGoalExcludedPerson[]>,
+    getCobradorDuenoRoster(db, year, month, exclusions.ids),
+    exclusions.source
+      ? (db(EXCLUSIONS_TABLE + ' as X')
+          .leftJoin('netsuite_employees as E', 'E.netsuite_id', 'X.employee_id')
+          .where({ 'X.year': exclusions.source.year, 'X.month': exclusions.source.month, 'X.excluded': true })
+          .select('X.employee_id', db.raw('COALESCE(E.entityid, X.employee_id) as nombre'))
+          .orderBy('nombre') as Promise<CobranzaGoalExcludedPerson[]>)
+      : Promise.resolve([]),
     getAgentIncentiveSchemes(db, year, month),
   ]);
 
@@ -98,6 +131,7 @@ export async function getCobranzaGoals(db: Knex, year: number, month: number): P
       };
     }),
     excluded,
+    exclusion_source: exclusions.source,
     scheme_source: schemes.source,
   };
 }
@@ -143,13 +177,24 @@ export async function setCobranzaGoalOverride(
   });
 }
 
-/** Adds an employee to (or removes them from) the permanent goals exclusion list. Their individual
- * overrides are kept, so restoring them brings their goals back as they were. */
-export async function setCobranzaGoalExclusion(db: Knex, employeeId: string, excluded: boolean): Promise<void> {
-  if (!excluded) {
-    await db(EXCLUSIONS_TABLE).where({ employee_id: employeeId }).delete();
-    return;
-  }
-  const existing = await db(EXCLUSIONS_TABLE).where({ employee_id: employeeId }).first();
-  if (!existing) await db(EXCLUSIONS_TABLE).insert({ employee_id: employeeId });
+/** Removes an employee from (or restores them to) the goals for (year, month) only. If the month has
+ * no snapshot of its own yet, the one it was showing (latest earlier month) is first copied into it,
+ * so the month becomes self-contained and edits to other months never change it. Their individual
+ * overrides are kept, so restoring them brings their goal back as it was. */
+export async function setCobranzaGoalExclusion(db: Knex, employeeId: string, year: number, month: number, excluded: boolean): Promise<void> {
+  await db.transaction(async (trx) => {
+    const source = await findExclusionSnapshotMonth(trx, year, month);
+    if (source && (source.year !== year || source.month !== month)) {
+      const inherited = (await trx(EXCLUSIONS_TABLE).where(source).select('employee_id', 'excluded')) as Array<{ employee_id: string; excluded: boolean }>;
+      // Chunked - 4 parameters per row, under SQL Server's 2,100-per-request cap.
+      for (let i = 0; i < inherited.length; i += 400) {
+        const chunk = inherited.slice(i, i + 400);
+        await trx(EXCLUSIONS_TABLE).insert(chunk.map((row) => ({ employee_id: row.employee_id, year, month, excluded: row.excluded })));
+      }
+    }
+
+    const where = { employee_id: employeeId, year, month };
+    const updated = await trx(EXCLUSIONS_TABLE).where(where).update({ excluded, updated_at: new Date() });
+    if (!updated) await trx(EXCLUSIONS_TABLE).insert({ ...where, excluded });
+  });
 }

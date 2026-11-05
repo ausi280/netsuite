@@ -7,7 +7,7 @@ import { Pagination } from '../components/table/Pagination';
 import { LoadingState } from '../components/common/LoadingState';
 import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
-import { entityColumns, getIdColumnKey, getSubsidiaryColumnKey } from '../config/entityColumns';
+import { CONTRACT_FACTURA_COLUMNS, entityColumns, getIdColumnKey, getSubsidiaryColumnKey } from '../config/entityColumns';
 import { PARTIDA_STATUS_LABELS } from '../config/labels';
 import { useEntities } from '../hooks/useEntities';
 import { useEntityRows } from '../hooks/useEntityRows';
@@ -46,10 +46,14 @@ export function ReportPage() {
   const estatus = isPartidas ? searchParams.get('estatus') ?? '' : '';
   const isVendorTransactions = entityKey === 'vendor-transactions';
   const vendorId = isVendorTransactions ? searchParams.get('vendorId') ?? '' : '';
-  // Otros Contratos is the only entity with a date-range filter (on its own Fecha).
-  const hasDateRangeFilter = entityKey === 'otros-contratos';
+  const isContracts = entityKey === 'contracts';
+  // Otros Contratos (its own Fecha) and Contratos (Fecha de alta) have a date-range filter.
+  const hasDateRangeFilter = entityKey === 'otros-contratos' || isContracts;
   const dateFrom = hasDateRangeFilter ? searchParams.get('dateFrom') ?? '' : '';
   const dateTo = hasDateRangeFilter ? searchParams.get('dateTo') ?? '' : '';
+  // Contratos-only: saldo inicial filter + the "factura inicial" columns, same as Reporte Contratos.
+  const saldoInicial = isContracts ? searchParams.get('saldoInicial') ?? '' : '';
+  const showFactura = isContracts && searchParams.get('factura') === '1';
   const subsidiaryColumn = getSubsidiaryColumnKey(entityKey);
   // vendor-transactions' subsidiary comes from the joined vendor (netsuite_vendors.subsidiary),
   // not a plain column on netsuite_vendor_transactions itself, so it has no format:'subsidiary'
@@ -63,7 +67,11 @@ export function ReportPage() {
     isError,
     error,
     refetch,
-  } = useEntityRows(entityKey, { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo }, { enabled: isValid });
+  } = useEntityRows(
+    entityKey,
+    { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo, saldoInicial, factura: showFactura },
+    { enabled: isValid },
+  );
 
   const { data: subsidiaryOptions } = useSubsidiaryOptions(entityKey, { enabled: isValid && hasSubsidiaryFilter });
   // 'contracts' access alone no longer implies commissions access - canAccessCommissions is the
@@ -102,6 +110,10 @@ export function ReportPage() {
 
   function handleEstatusChange(value: string) {
     updateParams({ estatus: value || null, page: '1' });
+  }
+
+  function handleSaldoInicialChange(value: string) {
+    updateParams({ saldoInicial: value || null, page: '1' });
   }
 
   function handleDateRangeChange(range: { from: string; to: string }) {
@@ -156,7 +168,18 @@ export function ReportPage() {
     setExportError(null);
     try {
       const token = await getAccessToken();
-      const blob = await fetchEntityExportCsv(token, entityKey, { search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo });
+      const blob = await fetchEntityExportCsv(token, entityKey, {
+        search,
+        sortBy,
+        sortDir,
+        subsidiary,
+        estatus,
+        vendorId,
+        dateFrom,
+        dateTo,
+        saldoInicial,
+        factura: showFactura,
+      });
       downloadBlob(blob, `${entityKey}.csv`);
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'No se pudo exportar el CSV.');
@@ -164,6 +187,10 @@ export function ReportPage() {
       setIsExporting(false);
     }
   }
+
+  const columns = showFactura
+    ? config.columns.flatMap((column) => (column.key === 'custrecord_cryo_finicio' ? [column, ...CONTRACT_FACTURA_COLUMNS] : [column]))
+    : config.columns;
 
   const numberFormatter = new Intl.NumberFormat('es-MX');
   const totalLabel = data ? `${numberFormatter.format(data.total)} registros` : '';
@@ -269,12 +296,29 @@ export function ReportPage() {
                 ariaLabel: 'Filtrar por estatus',
                 allLabel: 'Todos los estatus',
               }
-            : undefined
+            : isContracts
+              ? {
+                  value: saldoInicial,
+                  options: [
+                    { value: 'no', label: 'Saldo inicial: No' },
+                    { value: 'si', label: 'Saldo inicial: Sí (solo anualidades)' },
+                  ],
+                  onChange: handleSaldoInicialChange,
+                  ariaLabel: 'Filtrar por saldo inicial',
+                  allLabel: 'Saldo inicial: Todos',
+                }
+              : undefined
         }
         dateRangeFilter={hasDateRangeFilter ? { from: dateFrom, to: dateTo, onChange: handleDateRangeChange } : undefined}
         onExport={handleExport}
         isExporting={isExporting}
       />
+      {isContracts ? (
+        <label className={styles.facturaToggle}>
+          <input type="checkbox" checked={showFactura} onChange={(event) => updateParams({ factura: event.target.checked ? '1' : null })} />
+          Mostrar factura inicial (cuota de procesamiento)
+        </label>
+      ) : null}
       {exportError ? (
         <ErrorState message={exportError} onRetry={() => handleExport()} />
       ) : null}
@@ -289,7 +333,7 @@ export function ReportPage() {
         data.data.length > 0 ? (
           <>
             <ReportTable
-              columns={config.columns}
+              columns={columns}
               rows={data.data}
               sortBy={sortBy}
               sortDir={sortDir}

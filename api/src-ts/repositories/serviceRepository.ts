@@ -26,6 +26,8 @@ export interface ServiceRow {
   custrecord_cryo_serviciocontratado: string | null;
   custrecord_cryo_statuspagoserv: string | null;
   custrecord_cryo_tipodeserv: string | null;
+  /** "Viales" (free text) - null until our integration role can read the field in NetSuite. */
+  custrecord_cryo_viales: string | null;
   isinactive: string | null;
   lastmodifiedby: string | null;
   owner: string | null;

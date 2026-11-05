@@ -36,6 +36,15 @@ export interface EntityColumnConfig {
   idColumn?: string;
 }
 
+/** Contratos' optional "factura inicial" columns (the processing-fee invoice), inserted after Fecha
+ * de alta when the "Mostrar factura inicial" checkbox is on - same as Reporte Contratos. */
+export const CONTRACT_FACTURA_COLUMNS: EntityColumn[] = [
+  { key: 'factura_inicial', header: 'Factura inicial' },
+  { key: 'factura_sin_iva', header: 'Monto sin IVA', format: 'currency', currencyColumn: 'custrecord_cryo_moneda' },
+  { key: 'factura_con_iva', header: 'Monto con IVA', format: 'currency', currencyColumn: 'custrecord_cryo_moneda' },
+  { key: 'docs_completos', header: 'Documentos completos', format: 'boolean' },
+];
+
 export function getIdColumnKey(entityKey: ReportEntityKey): string {
   return entityColumns[entityKey].idColumn ?? 'netsuite_id';
 }
@@ -49,8 +58,9 @@ export const entityColumns: Record<ReportEntityKey, EntityColumnConfig> = {
       { key: 'custrecord_cryo_contratosistemaanterior', header: 'Contrato Sistema Anterior' },
       { key: 'custrecord_cryo_titularcontrato', header: 'Titular' },
       { key: 'custrecord_cryo_estatus', header: 'Estatus', format: 'contract-status' },
-      { key: 'custrecord_cryo_saldo_inicial', header: 'Saldo Inicial', format: 'currency', currencyColumn: 'custrecord_cryo_moneda' },
-      { key: 'custrecord_cryo_finicio', header: 'Fecha Inicio', format: 'date' },
+      // A T/F flag (migrated anualidades), not an amount.
+      { key: 'custrecord_cryo_saldo_inicial', header: 'Saldo Inicial', format: 'boolean' },
+      { key: 'custrecord_cryo_finicio', header: 'Fecha de alta', format: 'date' },
       { key: 'custrecord_cryo_subsidiariacontrato', header: 'Subsidiaria', format: 'subsidiary' },
       { key: 'isinactive', header: 'Activo', format: 'boolean-inverted' },
       { key: 'lastmodifieddate_dt', header: 'Última Modificación', format: 'datetime', sortable: true },

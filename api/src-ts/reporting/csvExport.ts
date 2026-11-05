@@ -76,6 +76,14 @@ export function formatExportValue(column: string, value: unknown): string {
     return isTruthyFlag(value) ? 'Inactivo' : 'Activo';
   }
 
+  // custrecord_cryo_saldo_inicial is a T/F flag (migrated anualidades), not an amount.
+  if (column === 'custrecord_cryo_saldo_inicial' || column === 'docs_completos') {
+    return isTruthyFlag(value) ? 'Sí' : 'No';
+  }
+  if ((column === 'factura_sin_iva' || column === 'factura_con_iva') && typeof value === 'number') {
+    return value.toFixed(2);
+  }
+
   const lookup = LOOKUP_COLUMNS[column];
   if (lookup) {
     const label = lookup[String(value)];
@@ -96,6 +104,10 @@ export function formatExportValue(column: string, value: unknown): string {
 const HEADER_OVERRIDES: Record<string, string> = {
   contract_name: 'Contrato',
   dueno_nombre: 'Dueño',
+  factura_inicial: 'Factura inicial (procesamiento)',
+  factura_sin_iva: 'Monto factura sin IVA',
+  factura_con_iva: 'Monto factura con IVA',
+  docs_completos: 'Documentos completos',
 };
 
 /** Strips the custrecord_/cryo_ prefixes and title-cases, matching the web app's humanizeKey(). */

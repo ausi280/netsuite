@@ -1,12 +1,13 @@
 import type { Request, Response } from 'express';
 import knex from '../db/connection';
+import { getLegacyDb } from '../db/legacyDbConnection';
 import { getContratosReportForExport, getContratosReportPaged, UNAVAILABLE_COLUMNS } from './contratosReportRepository';
 import type { ContratoReportRow } from './contratosReportRepository';
 import { csvRow, formatExportValue } from './csvExport';
 import type { UserPermissions } from './permissionsRepository';
 import { isContractsAllowed, subsidiaryRestrictionFor } from './contractReportsController';
 
-/** GET /api/reports/contratos-report?page=&pageSize=&search=&subsidiary= */
+/** GET /api/reports/contratos-report?page=&pageSize=&search=&subsidiary=&dateFrom=&dateTo=&saldoInicial=si|no&factura=1 */
 export async function listContratosReportRoute(req: Request, res: Response): Promise<void> {
   const permissions = req.permissions;
   if (!isContractsAllowed(permissions)) {
@@ -14,8 +15,13 @@ export async function listContratosReportRoute(req: Request, res: Response): Pro
     return;
   }
 
-  const { page, pageSize, search, subsidiary } = req.query;
-  const result = await getContratosReportPaged(knex, { page, pageSize, search, subsidiary }, subsidiaryRestrictionFor(permissions as UserPermissions));
+  const { page, pageSize, search, subsidiary, dateFrom, dateTo, saldoInicial, factura } = req.query;
+  const result = await getContratosReportPaged(
+    knex,
+    getLegacyDb(),
+    { page, pageSize, search, subsidiary, dateFrom, dateTo, saldoInicial, factura },
+    subsidiaryRestrictionFor(permissions as UserPermissions),
+  );
   res.status(200).json({ success: true, ...result, unavailableColumns: UNAVAILABLE_COLUMNS });
 }
 
@@ -82,18 +88,33 @@ const EXPORT_COLUMNS: Array<{ key: keyof ContratoReportRow; header: string }> = 
   { key: 'pago_automatico', header: 'Pago Automático' },
 ];
 
+/** Only with ?factura=1 ("Mostrar factura inicial"), same as on screen. */
+const FACTURA_EXPORT_COLUMNS: Array<{ key: keyof ContratoReportRow; header: string }> = [
+  { key: 'factura_inicial', header: 'Factura inicial (procesamiento)' },
+  { key: 'factura_sin_iva', header: 'Monto factura sin IVA' },
+  { key: 'factura_con_iva', header: 'Monto factura con IVA' },
+  { key: 'docs_completos', header: 'Documentos completos' },
+  { key: 'saldo_inicial', header: 'Saldo inicial' },
+];
+
+const YES_NO_COLUMNS = new Set<keyof ContratoReportRow>(['pago_automatico', 'docs_completos', 'saldo_inicial']);
+const MONEY_COLUMNS = new Set<keyof ContratoReportRow>(['factura_sin_iva', 'factura_con_iva']);
+
 function formatContratoValue(key: keyof ContratoReportRow, value: unknown): string {
   if (key === 'scu' || key === 'tcu') {
     return value ? 'SI' : '';
   }
-  if (key === 'pago_automatico') {
+  if (YES_NO_COLUMNS.has(key)) {
     return value === null || value === undefined ? '' : value ? 'Sí' : 'No';
+  }
+  if (MONEY_COLUMNS.has(key)) {
+    return typeof value === 'number' ? value.toFixed(2) : '';
   }
   return formatExportValue(key, value);
 }
 
-/** GET /api/reports/contratos-report/export?search=&subsidiary= - same filtered rows
- * listContratosReportRoute would page through, streamed out as one CSV file. */
+/** GET /api/reports/contratos-report/export?search=&subsidiary=&dateFrom=&dateTo=&saldoInicial=&factura= -
+ * same filtered rows listContratosReportRoute would page through, streamed out as one CSV file. */
 export async function exportContratosReportRoute(req: Request, res: Response): Promise<void> {
   const permissions = req.permissions;
   if (!isContractsAllowed(permissions)) {
@@ -101,15 +122,21 @@ export async function exportContratosReportRoute(req: Request, res: Response): P
     return;
   }
 
-  const { search, subsidiary } = req.query;
-  const rows = await getContratosReportForExport(knex, { search, subsidiary }, subsidiaryRestrictionFor(permissions as UserPermissions));
+  const { search, subsidiary, dateFrom, dateTo, saldoInicial, factura } = req.query;
+  const rows = await getContratosReportForExport(
+    knex,
+    getLegacyDb(),
+    { search, subsidiary, dateFrom, dateTo, saldoInicial, factura },
+    subsidiaryRestrictionFor(permissions as UserPermissions),
+  );
+  const columns = factura === '1' ? [...EXPORT_COLUMNS, ...FACTURA_EXPORT_COLUMNS] : EXPORT_COLUMNS;
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="reporte-contratos.csv"');
   res.write('﻿');
-  res.write(csvRow(EXPORT_COLUMNS.map((c) => c.header)));
+  res.write(csvRow(columns.map((c) => c.header)));
   for (const row of rows) {
-    res.write(csvRow(EXPORT_COLUMNS.map((c) => formatContratoValue(c.key, row[c.key]))));
+    res.write(csvRow(columns.map((c) => formatContratoValue(c.key, row[c.key]))));
   }
   res.end();
 }

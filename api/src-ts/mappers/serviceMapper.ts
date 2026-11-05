@@ -22,6 +22,7 @@ export function mapService(raw: Record<string, any>): ServiceRow {
     custrecord_cryo_serviciocontratado: toStringOrNull(raw.custrecord_cryo_serviciocontratado),
     custrecord_cryo_statuspagoserv: toStringOrNull(raw.custrecord_cryo_statuspagoserv),
     custrecord_cryo_tipodeserv: toStringOrNull(raw.custrecord_cryo_tipodeserv),
+    custrecord_cryo_viales: toStringOrNull(raw.custrecord_cryo_viales),
     isinactive: toStringOrNull(raw.isinactive),
     lastmodifiedby: toStringOrNull(raw.lastmodifiedby),
     owner: toStringOrNull(raw.owner),

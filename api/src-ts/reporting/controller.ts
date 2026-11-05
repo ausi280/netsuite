@@ -9,6 +9,8 @@ import { buildPaymentsExportQuery, getPaymentsList, PAYMENTS_EXPORT_COLUMNS, PAY
 import { buildVendorTransactionsExportQuery, getVendorTransactionsList, VENDOR_TRANSACTIONS_EXPORT_COLUMNS } from './vendorTransactionsListRepository';
 import { buildOtrosContratoExportQuery, getEnrichedOtrosContratoRows, OTROS_CONTRATO_EXPORT_COLUMNS } from './otrosContratoListRepository';
 import { buildFcellsContratoExportQuery, getEnrichedFcellsContratoRows, FCELLS_CONTRATO_EXPORT_COLUMNS } from './fcellsContratoListRepository';
+import { addContractFacturaColumns, CONTRACT_FACTURA_COLUMNS, contractListFilter } from './contractListRepository';
+import { getLegacyDb } from '../db/legacyDbConnection';
 import type { UserPermissions } from './permissionsRepository';
 import type { EntityConfig } from './types';
 import { csvRow, formatExportValue, humanizeColumnName } from './csvExport';
@@ -16,7 +18,9 @@ import { isHrAllowed } from './hrController';
 import { isProspectosAllowed } from './prospectosController';
 import { isCobranzaCommissionsFullAccessAllowed } from './cobranzaCommissionsController';
 import { isPostventaAllowed } from './postventaController';
+import { isAdministracionAllowed } from './administracionController';
 import { resolveSelfVendedorId } from './commissionsRepository';
+import { resolveSelfPlanVendedorId } from './salesWorkPlanRepository';
 import { resolveSelfCobradorDuenoId, resolveSelfCobradorDuenoSubsidiarias } from './cobranzaCommissionsRepository';
 
 /** Express 5's ParamsDictionary types named params as `string | string[]` to account for wildcard segments; our routes only ever use simple `:name` segments, which are always plain strings at runtime. */
@@ -74,6 +78,13 @@ async function resolveCanAccessCommissions(permissions: UserPermissions, email: 
   return Boolean(await resolveSelfVendedorId(knex, email));
 }
 
+/** Plan de trabajo: same full-access gate as commissions, or a vendedor planning their own (which
+ * also covers a new vendedor with a nivel but no sales yet - see resolveSelfPlanVendedorId). */
+async function resolveCanAccessWorkPlan(permissions: UserPermissions, email: string | null): Promise<boolean> {
+  if (permissions.isAdmin || (permissions.allowedEntities.has('contracts') && permissions.allowedEntities.has('commissions'))) return true;
+  return Boolean(await resolveSelfPlanVendedorId(knex, email));
+}
+
 /** GET /api/reports/entities — one summary row per entity the caller may see, in registry order. */
 export async function listEntitySummaries(req: Request, res: Response): Promise<void> {
   // req.permissions is always set by buildPermissionsMiddleware for any request reaching this
@@ -93,7 +104,7 @@ export async function listEntitySummaries(req: Request, res: Response): Promise<
   // restriction, same as resolveEntityAccess's own explicit-grant-wins ordering.
   const includeSelfPayments = Boolean(selfCobradorDuenoId) && !explicitConfigs.some((c) => c.key === 'payments');
 
-  const [explicitData, selfPaymentsData, canAccessCommissions] = await Promise.all([
+  const [explicitData, selfPaymentsData, canAccessCommissions, canAccessWorkPlan] = await Promise.all([
     getEntitySummaries(knex, explicitConfigs, subsidiaryRestrictionFor(permissions)),
     includeSelfPayments
       ? resolveSelfCobradorDuenoSubsidiarias(knex, selfCobradorDuenoId!).then((subsidiarias) =>
@@ -101,6 +112,7 @@ export async function listEntitySummaries(req: Request, res: Response): Promise<
         )
       : Promise.resolve([]),
     resolveCanAccessCommissions(permissions, email),
+    resolveCanAccessWorkPlan(permissions, email),
   ]);
   const data = [...explicitData, ...selfPaymentsData];
   res.status(200).json({
@@ -109,9 +121,11 @@ export async function listEntitySummaries(req: Request, res: Response): Promise<
     isAdmin: permissions.isAdmin,
     canAccessHr: isHrAllowed(permissions),
     canAccessCommissions,
+    canAccessWorkPlan,
     canAccessProspectos: isProspectosAllowed(permissions),
     canAccessCobranzaCommissions,
     canAccessPostventa: isPostventaAllowed(permissions),
+    canAccessAdministracion: isAdministracionAllowed(permissions),
   });
 }
 
@@ -135,8 +149,9 @@ export async function listEntityRows(req: Request, res: Response): Promise<void>
     return;
   }
 
-  const { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo } = req.query;
+  const { page, pageSize, search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo, saldoInicial, factura } = req.query;
   const restrictSubsidiaries = access.selfSubsidiarias ?? subsidiaryRestrictionFor(permissions);
+  const isContracts = entityKey === 'contracts';
 
   // Partidas gets the parent contract's name/dueño joined in, Payments gets its JSON_VALUE-
   // extracted contract id resolved to a real name (plus that contract's own subsidiary/a date
@@ -154,7 +169,16 @@ export async function listEntityRows(req: Request, res: Response): Promise<void>
             ? await getEnrichedOtrosContratoRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary, dateFrom, dateTo }, restrictSubsidiaries)
             : entityKey === 'fcells-contratos'
               ? await getEnrichedFcellsContratoRows(knex, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
-              : await getPagedRows(knex, config, { page, pageSize, search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
+              : await getPagedRows(
+                  knex,
+                  config,
+                  { page, pageSize, search, sortBy, sortDir, subsidiary },
+                  restrictSubsidiaries,
+                  isContracts ? contractListFilter({ dateFrom, dateTo, saldoInicial }) : undefined,
+                );
+
+  // Contratos' optional "factura inicial" columns (same as Reporte Contratos' checkbox).
+  if (isContracts && factura === '1') await addContractFacturaColumns(knex, getLegacyDb(), result.data);
 
   // Only meaningful for 'payments' - whether this caller may actually charge (the "Cobrar" button/
   // chargeDomiciledRoute), as opposed to merely viewing the list (which a self cobrador/dueño may
@@ -247,9 +271,11 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
     return;
   }
 
-  const { search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo } = req.query;
+  const { search, sortBy, sortDir, subsidiary, estatus, vendorId, dateFrom, dateTo, saldoInicial, factura } = req.query;
   const restrictSubsidiaries = access.selfSubsidiarias ?? subsidiaryRestrictionFor(permissions);
   const isPartidas = entityKey === 'partidas';
+  const isContracts = entityKey === 'contracts';
+  const withFactura = isContracts && factura === '1';
   const isVendorTransactions = entityKey === 'vendor-transactions';
   const isOtrosContratos = entityKey === 'otros-contratos';
   const isFcellsContratos = entityKey === 'fcells-contratos';
@@ -265,7 +291,9 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
           ? FCELLS_CONTRATO_EXPORT_COLUMNS
           : isPayments
             ? PAYMENTS_EXPORT_COLUMNS
-            : config.listColumns;
+            : withFactura
+              ? [...config.listColumns, ...CONTRACT_FACTURA_COLUMNS]
+              : config.listColumns;
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${entityKey}.csv"`);
@@ -286,15 +314,24 @@ export async function exportEntityRows(req: Request, res: Response): Promise<voi
             ? buildFcellsContratoExportQuery(knex, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries)
             : isPayments
               ? buildPaymentsExportQuery(knex, { search, subsidiary, dateFrom, dateTo }, restrictSubsidiaries, paymentsColumns)
-              : buildExportQuery(knex, config, { search, sortBy, sortDir, subsidiary }, restrictSubsidiaries);
+              : buildExportQuery(
+                  knex,
+                  config,
+                  { search, sortBy, sortDir, subsidiary },
+                  restrictSubsidiaries,
+                  isContracts ? contractListFilter({ dateFrom, dateTo, saldoInicial }) : undefined,
+                );
 
-    const batch = (await query.offset(offset).limit(EXPORT_BATCH_SIZE)) as Array<Record<string, unknown>>;
+    // With factura columns the whole set is read at once instead of batched, so the CryoWeb
+    // Docs Completos lookup runs once (a full-table read past its threshold) rather than per batch.
+    const batch = (await (withFactura ? query : query.offset(offset).limit(EXPORT_BATCH_SIZE))) as Array<Record<string, unknown>>;
+    if (withFactura) await addContractFacturaColumns(knex, getLegacyDb(), batch);
 
     for (const row of batch) {
       res.write(csvRow(exportColumns.map((column) => formatExportValue(column, row[column]))));
     }
 
-    if (batch.length < EXPORT_BATCH_SIZE) break;
+    if (withFactura || batch.length < EXPORT_BATCH_SIZE) break;
     offset += batch.length;
   }
 

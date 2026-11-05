@@ -6,11 +6,13 @@ import { useHrSummary } from '../../hooks/useHrSummary';
 import { Tile } from './Tile';
 import { HrTile } from './HrTile';
 import { CommissionsTile } from './CommissionsTile';
+import { WorkPlanTile } from './WorkPlanTile';
 import { CobranzaCommissionsTile } from './CobranzaCommissionsTile';
 import { ProspectosTile } from './ProspectosTile';
 import { ComercialTile } from './ComercialTile';
 import { LogisticaTile } from './LogisticaTile';
 import { PostventaTile } from './PostventaTile';
+import { AdministracionTile } from './AdministracionTile';
 import styles from './TileGrid.module.css';
 
 const containerVariants: Variants = {
@@ -50,6 +52,8 @@ interface TileGridProps {
    * already has 'contracts' reaches commissions from within that entity's page instead, so this
    * tile is skipped whenever 'contracts' is already in `entities`. */
   canAccessCommissions?: boolean;
+  /** Shows the Plan de trabajo tile - gerentes and vendedores (see EntitiesResult.canAccessWorkPlan). */
+  canAccessWorkPlan?: boolean;
   /** Shows the Prospectos tile for anyone granted 'prospectos' (or an admin) - Prospectos pulls
    * from the legacy Cryo.dbo database and has no ReportEntityKey/ENTITY_REGISTRY entry (see
    * ProspectosPage.tsx), so it can't come back from the entities API like every other tile does. */
@@ -65,15 +69,19 @@ interface TileGridProps {
    * within that entity's page instead, so this tile is skipped whenever 'partidas' is already in
    * `entities` - same shape as showCommissionsTile above. */
   canAccessCobranzaCommissions?: boolean;
+  /** Shows the Reporte Administración tile - the standalone 'administracion' grant (or admin). */
+  canAccessAdministracion?: boolean;
 }
 
 export function TileGrid({
   entities,
   canAccessHr,
   canAccessCommissions,
+  canAccessWorkPlan,
   canAccessProspectos,
   canAccessPostventa,
   canAccessCobranzaCommissions,
+  canAccessAdministracion,
 }: TileGridProps) {
   const reduceMotion = usePrefersReducedMotion();
   // enabled: canAccessHr so this gated request never fires (and never 403s) for anyone without it.
@@ -93,10 +101,12 @@ export function TileGrid({
       ))}
       {canAccessHr ? <HrTile activeCount={hrSummaryQuery.data?.active} reduceMotion={reduceMotion} /> : null}
       {showCommissionsTile ? <CommissionsTile reduceMotion={reduceMotion} /> : null}
+      {canAccessWorkPlan ? <WorkPlanTile reduceMotion={reduceMotion} /> : null}
       {showCobranzaCommissionsTile ? <CobranzaCommissionsTile reduceMotion={reduceMotion} /> : null}
       {canAccessProspectos ? <ProspectosTile reduceMotion={reduceMotion} /> : null}
       {canAccessProspectos ? <ComercialTile reduceMotion={reduceMotion} /> : null}
       {canAccessPostventa ? <PostventaTile reduceMotion={reduceMotion} /> : null}
+      {canAccessAdministracion ? <AdministracionTile reduceMotion={reduceMotion} /> : null}
       <LogisticaTile reduceMotion={reduceMotion} />
     </motion.div>
   );

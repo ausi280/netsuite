@@ -1,8 +1,24 @@
 import type { Request, Response } from 'express';
 import knex from '../db/connection';
 import { getLegacyDb } from '../db/legacyDbConnection';
-import { getProspectoQualification, getSalesByMonth } from './marketingRepository';
-import { ARGENTINA_MARCA_IDS, getArgentinaLeadQualification, getArgentinaSalesByMonth, type ArgentinaMarca } from './argentinaMarketingRepository';
+import {
+  filterLeadDetails,
+  getLeadDetails,
+  getProspectoQualification,
+  getSalesByMonth,
+  type LeadDetailFilters,
+  type LeadDetailRow,
+  type ProspectoQualificationCategory,
+} from './marketingRepository';
+import {
+  ARGENTINA_MARCA_IDS,
+  getArgentinaLeadDetails,
+  getArgentinaLeadQualification,
+  getArgentinaSalesByMonth,
+  type ArgentinaMarca,
+} from './argentinaMarketingRepository';
+import { clampPage, clampPageSize } from './prospectosRepository';
+import { csvRow, formatExportValue } from './csvExport';
 import {
   getMarketingInputsBetween,
   getMarketingInputsForYear,
@@ -98,6 +114,113 @@ export async function getMarketingReportRoute(req: Request, res: Response): Prom
     funnelInputs,
     canEditInputs: isMarketingInputsEditAllowed(req.permissions),
   });
+}
+
+const LEAD_CATEGORIES: ProspectoQualificationCategory[] = [
+  'Prospecto',
+  'Contactado: datos incompletos',
+  'En intento',
+  'No contactado',
+  'No calificado',
+  'Lead inválido',
+];
+
+/** The lead grid's rows for this request, classified and filtered - shared by the page and the CSV.
+ * Answers the request itself and returns null when it's not allowed or not valid. */
+async function loadLeadDetails(req: Request, res: Response): Promise<LeadDetailRow[] | null> {
+  if (!isProspectosAllowed(req.permissions)) {
+    res.status(403).json({ success: false, message: 'No tienes permiso para ver este reporte.' });
+    return null;
+  }
+
+  const range = parseDateRange(req);
+  const pais = parsePais(req.query.pais);
+  if (!range || !pais) {
+    res.status(400).json({ success: false, message: 'Provide a valid ?dateFrom=YYYY-MM-DD, ?dateTo=YYYY-MM-DD (dateFrom <= dateTo) and ?pais=MX|AR.' });
+    return null;
+  }
+
+  const rawMarca = req.query.marca;
+  const marca = rawMarca === undefined || rawMarca === '' ? null : (rawMarca as ArgentinaMarca);
+  if (marca !== null && (pais !== 'AR' || !ARGENTINA_MARCA_IDS.includes(marca))) {
+    res.status(400).json({ success: false, message: `Provide a valid ?marca= (${ARGENTINA_MARCA_IDS.join('|')}), Argentina only.` });
+    return null;
+  }
+
+  const { categoria, canal } = req.query;
+  if ((categoria && !LEAD_CATEGORIES.includes(categoria as ProspectoQualificationCategory)) || (canal && canal !== 'online' && canal !== 'offline')) {
+    res.status(400).json({ success: false, message: 'Provide a valid ?categoria= and ?canal=online|offline.' });
+    return null;
+  }
+  const filters: LeadDetailFilters = {
+    categoria: categoria ? (categoria as ProspectoQualificationCategory) : null,
+    canal: canal ? (canal as 'online' | 'offline') : null,
+  };
+
+  const rows =
+    pais === 'AR'
+      ? await getArgentinaLeadDetails(knex, range.dateFrom, range.dateTo, marca)
+      : await getLeadDetails(getLegacyDb(), range.dateFrom, range.dateTo);
+  return filterLeadDetails(rows, filters);
+}
+
+/** GET /api/reports/marketing/leads?dateFrom=&dateTo=&pais=&marca=&categoria=&canal=&page=&pageSize= -
+ * one row per lead with its category and why, same classification as the charts. */
+export async function listMarketingLeadsRoute(req: Request, res: Response): Promise<void> {
+  const rows = await loadLeadDetails(req, res);
+  if (!rows) return;
+
+  const page = clampPage(req.query.page);
+  const pageSize = clampPageSize(req.query.pageSize);
+  res.status(200).json({
+    success: true,
+    data: rows.slice((page - 1) * pageSize, page * pageSize),
+    page,
+    pageSize,
+    total: rows.length,
+    totalPages: Math.max(1, Math.ceil(rows.length / pageSize)),
+  });
+}
+
+const LEAD_EXPORT_COLUMNS: Array<{ key: keyof LeadDetailRow; header: string }> = [
+  { key: 'id', header: 'ID' },
+  { key: 'fecha_captura', header: 'Fecha Captura' },
+  { key: 'lead', header: 'Lead' },
+  { key: 'empresa', header: 'Empresa / Marca' },
+  { key: 'canal', header: 'Online / Offline' },
+  { key: 'canal_nombre', header: 'Canal' },
+  { key: 'categoria', header: 'Clasificación' },
+  { key: 'razon', header: 'Razón' },
+  { key: 'motivo', header: 'Motivo de cierre' },
+  { key: 'etapa', header: 'Etapa' },
+  { key: 'intentos', header: 'Intentos' },
+  { key: 'fecha_probable', header: 'FPP' },
+  { key: 'ciudad', header: 'Ciudad' },
+  { key: 'vendedor', header: 'Vendedor' },
+];
+
+/** GET /api/reports/marketing/leads/export - the same filtered rows as listMarketingLeadsRoute, as
+ * one CSV file (same convention as exportProspectosRoute). */
+export async function exportMarketingLeadsRoute(req: Request, res: Response): Promise<void> {
+  const rows = await loadLeadDetails(req, res);
+  if (!rows) return;
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="clasificacion-leads.csv"');
+  // UTF-8 BOM so Excel renders accented characters/ñ correctly, same as exportEntityRows.
+  res.write('﻿');
+  res.write(csvRow(LEAD_EXPORT_COLUMNS.map((c) => c.header)));
+  for (const row of rows) {
+    res.write(
+      csvRow(
+        LEAD_EXPORT_COLUMNS.map((c) => {
+          const value = row[c.key];
+          return value instanceof Date ? value.toISOString().slice(0, 10) : formatExportValue(c.key, value);
+        }),
+      ),
+    );
+  }
+  res.end();
 }
 
 /** GET /api/reports/marketing/inputs?year=YYYY&pais=MX|AR - all 12 months of that year for the capture page. */

@@ -1,10 +1,12 @@
 import { apiFetch, apiFetchBlob } from './apiClient';
 import type {
+  AdministracionReport,
   AdminUserSummary,
   ApiSuccess,
   ChargeDomiciledRequest,
   ChargeDomiciledResponse,
   ComercialReportResponse,
+  ComercialVentasResponse,
   CobranzaCommissionContractGroup,
   CobranzaCommissionsResponse,
   CobranzaGoalsForMonth,
@@ -55,6 +57,7 @@ import type {
   PostventaTicketRow,
   PostventaTicketsResponse,
   ProspectoRow,
+  MarketingLeadsResponse,
   ProspectosResponse,
   ReembolsoByCausaResponse,
   ReembolsoByMonthResponse,
@@ -80,10 +83,14 @@ import type {
   SortDir,
   UpdateContractInput,
   UserPermissionUpdate,
+  PricingRow,
   VendedorCommissionGroup,
   VendedorOption,
   ZammadTicketsByMonthResponse,
   ZammadTicketsMonthRow,
+  WorkPlanActivityInput,
+  WorkPlanCatalogOption,
+  WorkPlanResponse,
 } from './types';
 
 export interface EntitiesResult {
@@ -91,9 +98,11 @@ export interface EntitiesResult {
   isAdmin: boolean;
   canAccessHr: boolean;
   canAccessCommissions: boolean;
+  canAccessWorkPlan: boolean;
   canAccessProspectos: boolean;
   canAccessCobranzaCommissions: boolean;
   canAccessPostventa: boolean;
+  canAccessAdministracion: boolean;
 }
 
 export interface EntityRowsParams {
@@ -108,9 +117,13 @@ export interface EntityRowsParams {
   estatus?: string;
   /** vendor-transactions-only: narrows to one vendor's rows (the per-vendor drill-down view) - ignored by every other entity. */
   vendorId?: string;
-  /** otros-contratos-only: YYYY-MM-DD, inclusive, on the contract's Fecha - ignored by every other entity. */
+  /** otros-contratos (its Fecha) and contracts (Fecha de alta) only: YYYY-MM-DD, inclusive - ignored by every other entity. */
   dateFrom?: string;
   dateTo?: string;
+  /** contracts-only: 'si' / 'no' on custrecord_cryo_saldo_inicial. */
+  saldoInicial?: string;
+  /** contracts-only: also return the factura inicial / Docs Completos columns. */
+  factura?: boolean;
 }
 
 export async function fetchEntities(token: string | null): Promise<EntitiesResult> {
@@ -120,10 +133,29 @@ export async function fetchEntities(token: string | null): Promise<EntitiesResul
     isAdmin: result.isAdmin,
     canAccessHr: result.canAccessHr,
     canAccessCommissions: result.canAccessCommissions,
+    canAccessWorkPlan: result.canAccessWorkPlan,
     canAccessProspectos: result.canAccessProspectos,
     canAccessCobranzaCommissions: result.canAccessCobranzaCommissions,
     canAccessPostventa: result.canAccessPostventa,
+    canAccessAdministracion: Boolean(result.canAccessAdministracion),
   };
+}
+
+export interface AdministracionReportParams {
+  month: number;
+  year: number;
+  churnFrom?: string;
+  churnTo?: string;
+}
+
+/** Reporte Administración - storage counts as of the month's last day plus abandonment over the
+ * churn range (defaults server-side to Jan 1st of the year through that same day). */
+export async function fetchAdministracionReport(token: string | null, params: AdministracionReportParams): Promise<AdministracionReport> {
+  const query = new URLSearchParams({ month: String(params.month), year: String(params.year) });
+  if (params.churnFrom) query.set('churnFrom', params.churnFrom);
+  if (params.churnTo) query.set('churnTo', params.churnTo);
+  const result = await apiFetch<{ success: boolean; data: AdministracionReport }>(`/reports/administracion?${query.toString()}`, { token });
+  return result.data;
 }
 
 export interface PostventaFiltersParams {
@@ -322,20 +354,13 @@ export async function fetchEntityRows(
   if (params.vendorId) query.set('vendorId', params.vendorId);
   if (params.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params.dateTo) query.set('dateTo', params.dateTo);
+  if (params.saldoInicial) query.set('saldoInicial', params.saldoInicial);
+  if (params.factura) query.set('factura', '1');
 
   return apiFetch<PaginatedRows>(`/reports/${entityKey}?${query.toString()}`, { token });
 }
 
-export interface EntityExportParams {
-  search: string;
-  sortBy: string;
-  sortDir: SortDir;
-  subsidiary: string[];
-  estatus?: string;
-  vendorId?: string;
-  dateFrom?: string;
-  dateTo?: string;
-}
+export type EntityExportParams = Omit<EntityRowsParams, 'page' | 'pageSize'>;
 
 /** CSV of every row matching the current search/subsidiary/sort filters (unpaginated - the whole filtered set). */
 export async function fetchEntityExportCsv(
@@ -352,6 +377,8 @@ export async function fetchEntityExportCsv(
   if (params.vendorId) query.set('vendorId', params.vendorId);
   if (params.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params.dateTo) query.set('dateTo', params.dateTo);
+  if (params.saldoInicial) query.set('saldoInicial', params.saldoInicial);
+  if (params.factura) query.set('factura', '1');
 
   return apiFetchBlob(`/reports/${entityKey}/export?${query.toString()}`, { token });
 }
@@ -414,6 +441,22 @@ export async function updateAdminUserPermissions(token: string | null, oid: stri
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
+  });
+}
+
+/** Admin-only: app_pricing years + discount. */
+export async function fetchPricing(token: string | null): Promise<PricingRow[]> {
+  const result = await apiFetch<ApiSuccess<PricingRow[]>>('/reports/admin/pricing', { token });
+  return result.data;
+}
+
+/** Admin-only: sets one app_pricing row's discount (percentage, 0-50) and notas (empty = cleared). */
+export async function updatePricingDiscount(token: string | null, id: number, discount: number, notas: string): Promise<void> {
+  await apiFetch(`/reports/admin/pricing/${id}`, {
+    token,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ discount, notas }),
   });
 }
 
@@ -687,6 +730,39 @@ export async function fetchMarketingReport(
   return apiFetch<MarketingReportResponse>(`/reports/marketing?${query.toString()}`, { token });
 }
 
+export interface MarketingLeadsFilters {
+  pais: MarketingPais;
+  dateFrom: string;
+  dateTo: string;
+  /** Argentina only - one brand id, or '' for all. */
+  marca: string;
+  /** '' = every category / channel. */
+  categoria: string;
+  canal: string;
+}
+
+function marketingLeadsQuery(filters: MarketingLeadsFilters): URLSearchParams {
+  const { pais, dateFrom, dateTo, marca, categoria, canal } = filters;
+  const query = new URLSearchParams({ pais, dateFrom, dateTo });
+  if (marca) query.set('marca', marca);
+  if (categoria) query.set('categoria', categoria);
+  if (canal) query.set('canal', canal);
+  return query;
+}
+
+/** One page of the lead classification grid - each lead with its category and why. */
+export async function fetchMarketingLeads(token: string | null, filters: MarketingLeadsFilters, page: number, pageSize: number): Promise<MarketingLeadsResponse> {
+  const query = marketingLeadsQuery(filters);
+  query.set('page', String(page));
+  query.set('pageSize', String(pageSize));
+  return apiFetch<MarketingLeadsResponse>(`/reports/marketing/leads?${query.toString()}`, { token });
+}
+
+/** CSV of the whole filtered lead classification grid, same convention as fetchProspectosExportCsv. */
+export async function fetchMarketingLeadsExportCsv(token: string | null, filters: MarketingLeadsFilters): Promise<Blob> {
+  return apiFetchBlob(`/reports/marketing/leads/export?${marketingLeadsQuery(filters).toString()}`, { token });
+}
+
 /** The Marketing group's Zammad tickets for the date range (by creation date). */
 export async function fetchMarketingTickets(token: string | null, dateFrom: string, dateTo: string): Promise<MarketingTicketsResponse> {
   const query = new URLSearchParams({ dateFrom, dateTo });
@@ -714,6 +790,13 @@ export async function saveMarketingInputs(token: string | null, pais: MarketingP
 export async function fetchComercialReport(token: string | null, dateFrom: string, dateTo: string): Promise<ComercialReportResponse> {
   const query = new URLSearchParams({ dateFrom, dateTo });
   return apiFetch<ComercialReportResponse>(`/reports/comercial?${query.toString()}`, { token });
+}
+
+/** Core and genetics sales in the date range, per zona and ejecutivo - see
+ * api/src-ts/reporting/comercialVentasRepository.ts. */
+export async function fetchComercialVentas(token: string | null, dateFrom: string, dateTo: string): Promise<ComercialVentasResponse> {
+  const query = new URLSearchParams({ dateFrom, dateTo });
+  return apiFetch<ComercialVentasResponse>(`/reports/comercial/ventas?${query.toString()}`, { token });
 }
 
 export interface TareasVencidasParams {
@@ -893,6 +976,13 @@ export interface ContratosReportParams {
   pageSize: number;
   search: string;
   subsidiary: string[];
+  /** Fecha de alta range, YYYY-MM-DD - '' for an open end. */
+  dateFrom: string;
+  dateTo: string;
+  /** 'si' | 'no' | '' (both). */
+  saldoInicial: string;
+  /** "Mostrar factura inicial" - fills the factura/Docs Completos columns. */
+  factura: boolean;
 }
 
 export interface ContratosReportResult {
@@ -905,13 +995,17 @@ export interface ContratosReportResult {
 }
 
 function buildContratosReportQuery(
-  params: Pick<ContratosReportParams, 'search' | 'subsidiary'> & Partial<Pick<ContratosReportParams, 'page' | 'pageSize'>>,
+  params: Omit<ContratosReportParams, 'page' | 'pageSize'> & Partial<Pick<ContratosReportParams, 'page' | 'pageSize'>>,
 ): URLSearchParams {
   const query = new URLSearchParams();
   if (params.page) query.set('page', String(params.page));
   if (params.pageSize) query.set('pageSize', String(params.pageSize));
   if (params.search) query.set('search', params.search);
   if (params.subsidiary.length > 0) query.set('subsidiary', params.subsidiary.join(','));
+  if (params.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params.dateTo) query.set('dateTo', params.dateTo);
+  if (params.saldoInicial) query.set('saldoInicial', params.saldoInicial);
+  if (params.factura) query.set('factura', '1');
   return query;
 }
 
@@ -929,8 +1023,8 @@ export async function fetchContratosReport(token: string | null, params: Contrat
   };
 }
 
-/** CSV of every contrato matching the current search/subsidiary filters (unpaginated - the whole filtered set). */
-export async function fetchContratosReportExportCsv(token: string | null, params: Pick<ContratosReportParams, 'search' | 'subsidiary'>): Promise<Blob> {
+/** CSV of every contrato matching the current filters (unpaginated - the whole filtered set). */
+export async function fetchContratosReportExportCsv(token: string | null, params: Omit<ContratosReportParams, 'page' | 'pageSize'>): Promise<Blob> {
   const query = buildContratosReportQuery(params);
   return apiFetchBlob(`/reports/contratos-report/export?${query.toString()}`, { token });
 }
@@ -983,13 +1077,19 @@ export async function setCobranzaGoalOverride(token: string | null, employeeId: 
   });
 }
 
-/** Permanently removes a person from (or restores them to) the cobranza goals list - every month. */
-export async function setCobranzaGoalExclusion(token: string | null, employeeId: string, excluded: boolean): Promise<void> {
+export interface CobranzaGoalExclusionInput {
+  month: number;
+  year: number;
+  excluded: boolean;
+}
+
+/** Removes a person from (or restores them to) the cobranza goals list for that month only. */
+export async function setCobranzaGoalExclusion(token: string | null, employeeId: string, input: CobranzaGoalExclusionInput): Promise<void> {
   await apiFetch('/reports/cobranza-comisiones/metas/employees/' + encodeURIComponent(employeeId) + '/exclusion', {
     token,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ excluded }),
+    body: JSON.stringify(input),
   });
 }
 
@@ -1029,4 +1129,68 @@ export async function saveCobranzaIncentives(token: string | null, input: Cobran
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
   });
+}
+
+/** Plan de trabajo for one month. A vendedor always gets their own (vendedor is ignored); a gerente
+ * passes the vendedor to look at, or nothing to just get the vendedor list. */
+export async function fetchWorkPlan(token: string | null, month: number, year: number, vendedor?: string): Promise<WorkPlanResponse> {
+  const query = new URLSearchParams({ month: String(month), year: String(year) });
+  if (vendedor) query.set('vendedor', vendedor);
+  return apiFetch<WorkPlanResponse>(`/reports/work-plans?${query.toString()}`, { token });
+}
+
+export interface WorkPlanTarget {
+  month: number;
+  year: number;
+  /** Gerente only - ignored for a vendedor. */
+  vendedor?: string;
+}
+
+function jsonRequest(token: string | null, method: string, body: unknown) {
+  return { token, method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+}
+
+/** Gerente only: the plan's puesto and free-text objetivos. */
+export async function saveWorkPlanHeader(token: string | null, target: WorkPlanTarget, input: { puesto: string | null; objetivos: string[] }): Promise<void> {
+  await apiFetch('/reports/work-plans/header', jsonRequest(token, 'PUT', { ...target, ...input }));
+}
+
+export async function createWorkPlanActivity(token: string | null, target: WorkPlanTarget, input: WorkPlanActivityInput): Promise<void> {
+  await apiFetch('/reports/work-plans/activities', jsonRequest(token, 'POST', { ...target, ...input }));
+}
+
+export async function updateWorkPlanActivity(token: string | null, id: number, input: WorkPlanActivityInput): Promise<void> {
+  await apiFetch(`/reports/work-plans/activities/${id}`, jsonRequest(token, 'PUT', input));
+}
+
+export async function deleteWorkPlanActivity(token: string | null, id: number): Promise<void> {
+  await apiFetch(`/reports/work-plans/activities/${id}`, { token, method: 'DELETE' });
+}
+
+/** Copies another month's activities into the target month (same weekday of the same week). */
+export async function cloneWorkPlan(token: string | null, target: WorkPlanTarget, from: { month: number; year: number }): Promise<{ copied: number }> {
+  const result = await apiFetch<ApiSuccess<{ copied: number }>>(
+    '/reports/work-plans/clone',
+    jsonRequest(token, 'POST', { ...target, from_month: from.month, from_year: from.year }),
+  );
+  return result.data;
+}
+
+export async function fetchWorkPlanPdf(token: string | null, target: WorkPlanTarget): Promise<Blob> {
+  const query = new URLSearchParams({ month: String(target.month), year: String(target.year) });
+  if (target.vendedor) query.set('vendedor', target.vendedor);
+  return apiFetchBlob(`/reports/work-plans/pdf?${query.toString()}`, { token });
+}
+
+/** NetSuite médicos / hospitales matching q, scoped to the vendedor's subsidiarias. */
+export async function searchWorkPlanCatalog(
+  token: string | null,
+  catalog: 'medicos' | 'hospitales',
+  q: string,
+  vendedor?: string,
+): Promise<WorkPlanCatalogOption[]> {
+  const query = new URLSearchParams({ q });
+  if (vendedor) query.set('vendedor', vendedor);
+  const result = await apiFetch<ApiSuccess<WorkPlanCatalogOption[]>>(`/reports/work-plans/catalog/${catalog}?${query.toString()}`, { token });
+  return result.data;
 }

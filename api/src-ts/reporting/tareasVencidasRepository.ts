@@ -78,6 +78,17 @@ function baseTareasVencidasQuery(
     .innerJoin('Cryo.dbo.Vendedor as v', 'v.ID_Vendedor', 'p.ID_Vendedor')
     .where('t.FechaInicial', '<', legacyDb.raw('GETDATE()'))
     .andWhere((builder) => builder.whereNull('t.FechaCierre').orWhereRaw('t.FechaCierre < t.FechaInicial'))
+    // Only the prospecto's LAST registered task counts, per explicit instruction: vendedores log a
+    // new task without closing the previous one (confirmed live on prospecto 335950 - 11 tasks,
+    // none ever closed), so any newer task supersedes an older one. Activo = 0 means closed, not
+    // deleted (confirmed live: every inactive task has a FechaCierre), so closed ones count too.
+    .whereNotExists(function () {
+      this.select(legacyDb.raw('1'))
+        .from('Cryo.dbo.Tarea as t2')
+        .innerJoin('Cryo.dbo.Lead as l2', 'l2.ID_Lead', 't2.ID_Lead')
+        .whereRaw('l2.ID_Prospecto = l.ID_Prospecto')
+        .andWhereRaw('t2.ID_Tarea > t.ID_Tarea');
+    })
     .andWhere('t.FechaInicial', '>=', fechaInicial)
     .andWhere('t.FechaInicial', '<', exclusiveUpperBound(fechaFinal));
 

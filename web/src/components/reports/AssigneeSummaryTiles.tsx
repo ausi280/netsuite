@@ -1,6 +1,7 @@
 import type { AsignacionTipo, CobranzaCommissionContractGroup } from '../../api/types';
 import { summarizeByAssignee } from '../../utils/cobranzaCommissions';
 import { currencyLabel } from '../../config/currencies';
+import { subsidiaryLabel } from '../../config/subsidiaries';
 import { formatCurrency } from '../../utils/format';
 import styles from './AssigneeSummaryTiles.module.css';
 
@@ -24,8 +25,9 @@ const TIPO_ORDER: Record<AsignacionTipo, number> = {
   dueno: 4,
 };
 
-/** One tile per (Dueño, Cobrador) pair, plus one for "Bolsa" and one for "Paquete inicial de
- * anualidades" (always first, distinctly styled - neither is a person), each showing how much got
+/** One tile per (Dueño, Cobrador) pair, plus one per subsidiaria for each shared pool ("Bolsa",
+ * "Bolsa Domiciliado" - every subsidiaria has its own) and one for "Paquete inicial de anualidades"
+ * (always first, distinctly styled - none is a person), each showing how much got
  * paid under that assignment this period, labeled by role since the same person can hold both
  * roles across different contracts - see
  * api/src-ts/reporting/cobranzaCommissionsRepository.ts for how a contract lands on one bucket or
@@ -33,7 +35,7 @@ const TIPO_ORDER: Record<AsignacionTipo, number> = {
 export function AssigneeSummaryTiles({ groups }: AssigneeSummaryTilesProps) {
   const summaries = summarizeByAssignee(groups).sort((a, b) => {
     const tipoDiff = TIPO_ORDER[a.tipo] - TIPO_ORDER[b.tipo];
-    return tipoDiff !== 0 ? tipoDiff : a.name.localeCompare(b.name);
+    return tipoDiff !== 0 ? tipoDiff : a.name.localeCompare(b.name) || (a.subsidiaria ?? '').localeCompare(b.subsidiaria ?? '');
   });
 
   if (summaries.length === 0) return null;
@@ -42,12 +44,15 @@ export function AssigneeSummaryTiles({ groups }: AssigneeSummaryTilesProps) {
     <div className={styles.grid}>
       {summaries.map((summary) => (
         <div
-          key={`${summary.tipo}:${summary.name}`}
+          key={`${summary.tipo}:${summary.name}:${summary.subsidiaria ?? ''}`}
           className={`${styles.tile} ${summary.tipo === 'bolsa' || summary.tipo === 'bolsa_domiciliado' ? styles.bolsaTile : ''} ${
             summary.tipo === 'paquete_inicial' ? styles.paqueteInicialTile : ''
           }`}
         >
-          <p className={styles.name}>{summary.name}</p>
+          <p className={styles.name}>
+            {summary.name}
+            {summary.subsidiaria ? ` · ${subsidiaryLabel(summary.subsidiaria)}` : ''}
+          </p>
           <p className={styles.meta}>
             {summary.tipo === 'dueno' || summary.tipo === 'cobrador' ? `${TIPO_LABELS[summary.tipo]} · ` : ''}
             {summary.contractsCount} {summary.contractsCount === 1 ? 'contrato' : 'contratos'} · {summary.partidasCount}{' '}

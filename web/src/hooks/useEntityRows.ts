@@ -28,6 +28,8 @@ export function useEntityRows(
       params.vendorId,
       params.dateFrom,
       params.dateTo,
+      params.saldoInicial,
+      params.factura,
     ],
     queryFn: async () => {
       const token = await getAccessToken();

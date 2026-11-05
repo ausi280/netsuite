@@ -181,16 +181,30 @@ function SchemeSelect({ person, month, year }: { person: CobranzaGoalPerson; mon
   );
 }
 
-/** Removes (or restores) a person from the goals list for every month - for placeholder/shared
- * employees ("COBRADOR 1", "OFICINA"...) who show up as Dueño/Cobrador but shouldn't have a goal. */
-function ExclusionButton({ employeeId, nombre, excluded }: { employeeId: string; nombre: string; excluded: boolean }) {
+/** Removes (or restores) a person from the goals list for the selected month only - e.g. someone who
+ * left, or placeholder/shared employees ("COBRADOR 1", "OFICINA"...). Later months not edited yet
+ * carry the list over. */
+function ExclusionButton({
+  employeeId,
+  nombre,
+  excluded,
+  month,
+  year,
+}: {
+  employeeId: string;
+  nombre: string;
+  excluded: boolean;
+  month: number;
+  year: number;
+}) {
   const toggle = useSetCobranzaGoalExclusion();
+  const period = `${MONTH_NAMES[month - 1]} ${year}`;
 
   function handleClick() {
-    if (!excluded && !window.confirm(`¿Quitar a ${nombre} de las metas? Dejará de tener meta y de aparecer en las gráficas, en todos los meses.`)) {
+    if (!excluded && !window.confirm(`¿Quitar a ${nombre} de las metas de ${period}? No tendrá meta ni aparecerá en las gráficas de ese mes.`)) {
       return;
     }
-    toggle.mutate({ employeeId, excluded: !excluded });
+    toggle.mutate({ employeeId, input: { month, year, excluded: !excluded } });
   }
 
   return (
@@ -229,6 +243,8 @@ export function CobranzaGoalsPage() {
   // Esquemas shown from an earlier month (this month has none stored yet).
   const schemeSource = goals?.scheme_source ?? null;
   const schemesCarriedFrom = schemeSource && (schemeSource.year !== year || schemeSource.month !== month) ? schemeSource : null;
+  const exclusionSource = goals?.exclusion_source ?? null;
+  const exclusionsCarriedFrom = exclusionSource && (exclusionSource.year !== year || exclusionSource.month !== month) ? exclusionSource : null;
 
   function handlePeriodChange(key: 'month' | 'year', value: string) {
     const next = new URLSearchParams(searchParams);
@@ -352,7 +368,7 @@ export function CobranzaGoalsPage() {
                         <SchemeSelect person={person} month={month} year={year} />
                       </td>
                       <td>
-                        <ExclusionButton employeeId={person.employee_id} nombre={person.nombre} excluded={false} />
+                        <ExclusionButton employeeId={person.employee_id} nombre={person.nombre} excluded={false} month={month} year={year} />
                       </td>
                     </tr>
                   ))}
@@ -365,15 +381,22 @@ export function CobranzaGoalsPage() {
 
           {goals.excluded.length > 0 ? (
             <div>
-              <h3 className={goalStyles.title}>Excluidos de metas ({goals.excluded.length})</h3>
-              <p className={goalStyles.subtitle}>No reciben meta ni aparecen en las gráficas, en ningún mes.</p>
+              <h3 className={goalStyles.title}>
+                Excluidos de metas en {MONTH_NAMES[month - 1]} {year} ({goals.excluded.length})
+              </h3>
+              <p className={goalStyles.subtitle}>
+                No reciben meta ni aparecen en las gráficas de este mes.
+                {exclusionsCarriedFrom
+                  ? ` Lista tomada de ${MONTH_NAMES[exclusionsCarriedFrom.month - 1]} ${exclusionsCarriedFrom.year} - al cambiar a alguien se guarda la lista completa para este mes.`
+                  : ''}
+              </p>
               <table className={chartStyles.table}>
                 <tbody>
                   {goals.excluded.map((person) => (
                     <tr key={person.employee_id}>
                       <td>{person.nombre}</td>
                       <td>
-                        <ExclusionButton employeeId={person.employee_id} nombre={person.nombre} excluded />
+                        <ExclusionButton employeeId={person.employee_id} nombre={person.nombre} excluded month={month} year={year} />
                       </td>
                     </tr>
                   ))}

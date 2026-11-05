@@ -9,6 +9,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ReportPage } from './pages/ReportPage';
 import { ReportDetailPage } from './pages/ReportDetailPage';
 import { AdminUsersPage } from './pages/AdminUsersPage';
+import { AdminPricingPage } from './pages/AdminPricingPage';
 import { CommissionsPage } from './pages/CommissionsPage';
 import { ProspectosPage } from './pages/ProspectosPage';
 import { CuentasPage } from './pages/CuentasPage';
@@ -20,6 +21,7 @@ import { NotasReportPage } from './pages/NotasReportPage';
 import { ContratosReportPage } from './pages/ContratosReportPage';
 import { CommissionLevelsPage } from './pages/CommissionLevelsPage';
 import { PaymentsHistoryPage } from './pages/PaymentsHistoryPage';
+import { WorkPlanPage } from './pages/WorkPlanPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 // recharts is a sizeable dependency only needed on these chart pages - lazy-loading it keeps the
@@ -34,6 +36,9 @@ const HrReportPage = lazy(() => import('./pages/HrReportPage').then((m) => ({ de
 const MarketingReportPage = lazy(() => import('./pages/MarketingReportPage').then((m) => ({ default: m.MarketingReportPage })));
 const MarketingInputsPage = lazy(() => import('./pages/MarketingInputsPage').then((m) => ({ default: m.MarketingInputsPage })));
 const ComercialReportPage = lazy(() => import('./pages/ComercialReportPage').then((m) => ({ default: m.ComercialReportPage })));
+const AdministracionReportPage = lazy(() =>
+  import('./pages/AdministracionReportPage').then((m) => ({ default: m.AdministracionReportPage }))
+);
 const LogisticaTicketPage = lazy(() => import('./pages/LogisticaTicketPage').then((m) => ({ default: m.LogisticaTicketPage })));
 
 export function App() {
@@ -100,6 +105,16 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <CommissionsPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/reports/plan-trabajo"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <WorkPlanPage />
               </PageTransition>
             </RequireAuth>
           }
@@ -255,6 +270,18 @@ export function App() {
           }
         />
         <Route
+          path="/reports/administracion"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <Suspense fallback={<LoadingState label="Cargando..." />}>
+                  <AdministracionReportPage />
+                </Suspense>
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/reports/payments"
           element={
             <RequireAuth>
@@ -270,6 +297,16 @@ export function App() {
             <RequireAuth>
               <PageTransition>
                 <AdminUsersPage />
+              </PageTransition>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/admin/pricing"
+          element={
+            <RequireAuth>
+              <PageTransition>
+                <AdminPricingPage />
               </PageTransition>
             </RequireAuth>
           }

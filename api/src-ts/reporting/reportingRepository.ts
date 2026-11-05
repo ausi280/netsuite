@@ -11,6 +11,9 @@ export interface PagedQueryParams {
   subsidiary?: unknown;
 }
 
+/** Entity-specific WHERE clauses layered on top of the generic filters (e.g. contracts' Fecha de alta range). */
+export type ExtraFilter = (qb: Knex.QueryBuilder) => void;
+
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 200;
 
@@ -52,9 +55,11 @@ function resolveSort(config: EntityConfig, sortBy: unknown, sortDir: unknown): S
 /** `(',' + REPLACE(col, ' ', '') + ',') LIKE '%,<id>,%'` — matches a single subsidiary id whether the
  * column holds one scalar value or a comma-separated multi-select ("24, 25"). Always OR'd into an
  * enclosing `.where(builder => ...)` group (see applySubsidiaryRestriction) - matching ANY id in a
- * requested/allowed set, never narrowing to all of them at once. */
-function subsidiaryContainsClause(qb: Knex.QueryBuilder, column: string, id: string): void {
-  qb.orWhereRaw(`(',' + REPLACE(CAST(?? AS NVARCHAR(MAX)), ' ', '') + ',') LIKE ?`, [column, `%,${id},%`]);
+ * requested/allowed set, never narrowing to all of them at once. `column` may also be a raw
+ * expression (e.g. a COALESCE across two columns), inlined as-is. */
+function subsidiaryContainsClause(qb: Knex.QueryBuilder, column: string | Knex.Raw, id: string): void {
+  const placeholder = typeof column === 'string' ? '??' : '?';
+  qb.orWhereRaw(`(',' + REPLACE(CAST(${placeholder} AS NVARCHAR(MAX)), ' ', '') + ',') LIKE ?`, [column, `%,${id},%`]);
 }
 
 /**
@@ -62,7 +67,7 @@ function subsidiaryContainsClause(qb: Knex.QueryBuilder, column: string, id: str
  * "allowed to see zero subsidiaries" and must return no rows at all - not "unrestricted" - since
  * an empty OR-group would otherwise add no real condition.
  */
-export function applySubsidiaryRestriction(qb: Knex.QueryBuilder, column: string, allowedIds: Set<string>): void {
+export function applySubsidiaryRestriction(qb: Knex.QueryBuilder, column: string | Knex.Raw, allowedIds: Set<string>): void {
   if (allowedIds.size === 0) {
     qb.whereRaw('1 = 0');
     return;
@@ -92,8 +97,10 @@ function buildFilteredQuery(
   search: string,
   subsidiary: Set<string>,
   restrictSubsidiaries: Set<string> | null,
+  extraFilter?: ExtraFilter,
 ): Knex.QueryBuilder {
   const qb = db(config.table);
+  extraFilter?.(qb);
   if (search && config.searchableColumns.length > 0) {
     qb.where((builder) => {
       for (const column of config.searchableColumns) {
@@ -119,6 +126,7 @@ export function buildExportQuery(
   config: EntityConfig,
   params: Pick<PagedQueryParams, 'search' | 'sortBy' | 'sortDir' | 'subsidiary'>,
   restrictSubsidiaries: Set<string> | null,
+  extraFilter?: ExtraFilter,
 ): Knex.QueryBuilder {
   const { column, dir } = resolveSort(config, params.sortBy, params.sortDir);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
@@ -127,7 +135,7 @@ export function buildExportQuery(
   // A secondary sort by idColumn keeps OFFSET/LIMIT pagination stable across the export's batched
   // reads - without a deterministic tiebreaker, SQL Server doesn't guarantee row order is
   // preserved between two queries differing only by OFFSET when the primary sort column has ties.
-  return buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries)
+  return buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries, extraFilter)
     .select(config.listColumns)
     .orderBy(column, dir)
     .orderBy(config.idColumn, 'asc');
@@ -138,6 +146,7 @@ export async function getPagedRows(
   config: EntityConfig,
   params: PagedQueryParams,
   restrictSubsidiaries: Set<string> | null = null,
+  extraFilter?: ExtraFilter,
 ): Promise<Paginated<Record<string, unknown>>> {
   const page = clampPage(params.page);
   const pageSize = clampPageSize(params.pageSize);
@@ -146,12 +155,12 @@ export async function getPagedRows(
   const subsidiary = parseSubsidiaryFilter(params.subsidiary);
 
   const [rows, countRow] = await Promise.all([
-    buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries)
+    buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries, extraFilter)
       .select(config.listColumns)
       .orderBy(column, dir)
       .offset((page - 1) * pageSize)
       .limit(pageSize),
-    buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries).count({ count: '*' }).first(),
+    buildFilteredQuery(db, config, search, subsidiary, restrictSubsidiaries, extraFilter).count({ count: '*' }).first(),
   ]);
 
   const total = Number((countRow as { count: number | string } | undefined)?.count ?? 0);

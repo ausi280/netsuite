@@ -11,10 +11,6 @@ export interface MarketingPaisConfig {
   onlineNote: string;
   /** Source of the prospectos, for subtitles. */
   fuente: string;
-  /** Header of the motivo breakdown table's brand/empresa column, and its id -> name labels. */
-  empresaHeader: string;
-  empresaLabels: Record<number, string>;
-  motivoHeader: string;
 }
 
 export const MARKETING_PAISES: Record<MarketingPais, MarketingPaisConfig> = {
@@ -24,9 +20,6 @@ export const MARKETING_PAISES: Record<MarketingPais, MarketingPaisConfig> = {
     marcas: 'CRYO-CELL DE MEXICO, BCU y BSCU',
     onlineNote: '"Online" = canal Internet de cada empresa.',
     fuente: 'CRM',
-    empresaHeader: 'Empresa',
-    empresaLabels: { 1: 'CRYO-CELL DE MEXICO', 2: 'BCU', 3: 'BSCU' },
-    motivoHeader: 'Motivo (Cryo.dbo.noventa)',
   },
   AR: {
     label: 'Argentina',
@@ -35,9 +28,6 @@ export const MARKETING_PAISES: Record<MarketingPais, MarketingPaisConfig> = {
     onlineNote:
       '"Online" = canal de ingreso Redes sociales, Instagram, Web o WhatsApp del lead. Contratos cuyo titular nunca fue lead en NetSuite cuentan como offline.',
     fuente: 'NetSuite',
-    empresaHeader: 'Marca',
-    empresaLabels: { 4: 'Biocells', 9: 'Cryolab' },
-    motivoHeader: 'Motivo de pérdida (NetSuite)',
   },
 };
 

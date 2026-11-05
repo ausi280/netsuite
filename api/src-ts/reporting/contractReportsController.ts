@@ -38,7 +38,7 @@ export function subsidiaryRestrictionFor(permissions: UserPermissions): Set<stri
  * instead, same as anyone else without full access). A 'commissions' grant with no 'contracts'
  * does nothing - see PermissionKey in types.ts.
  */
-function isCommissionsFullAccessAllowed(permissions?: UserPermissions): boolean {
+export function isCommissionsFullAccessAllowed(permissions?: UserPermissions): boolean {
   return Boolean(permissions?.isAdmin || (permissions?.allowedEntities.has('contracts') && permissions?.allowedEntities.has('commissions')));
 }
 

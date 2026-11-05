@@ -16,33 +16,38 @@ function formatMonthKey(key: string): string {
   return `${monthLabel} ${anio}`;
 }
 
-// Same blue/neutral palette as MarketingSalesChart's Online/Offline split (var(--color-primary) /
-// var(--color-neutral-800)), extended with one more neutral shade for the third category - not
-// the status good/warning/critical triad used before, per explicit instruction to make this chart
-// look like the sales one instead of a traffic-light. Validated via the dataviz skill's
-// validate_palette.js: CVD separation and normal-vision floor both pass with strong margins; the
-// only checks it fails are "grays don't read as saturated hues," the same accepted tradeoff
-// hrAnalytics.ts's own status/gender binary charts already ship with in this app.
-const SERIES_LABELS: Record<string, string> = {
-  calificados: 'Calificados',
-  no_contactado: 'No contactado',
-  lead_no_calificado: 'Lead no calificado',
-};
-const SERIES_COLORS: Record<string, string> = {
-  calificados: 'var(--color-primary)',
-  no_contactado: 'var(--color-neutral-300)',
-  lead_no_calificado: 'var(--color-neutral-800)',
-};
+// Same blue/neutral family as MarketingSalesChart's Online/Offline split, not the status
+// good/warning/critical triad, per explicit instruction to make this chart look like the sales one
+// instead of a traffic-light: blues = contacted and still viable, neutrals = everything else.
+// Stacked in this order so lightness alternates between neighbors. Validated via the dataviz skill's
+// validate_palette.js: CVD separation and normal-vision floor pass; it fails "grays don't read as
+// saturated hues," the same accepted tradeoff hrAnalytics.ts's own status/gender binary charts
+// already ship with in this app. The light shades' contrast warning is covered by the legend,
+// tooltip and the per-motivo table.
+const SERIES = [
+  { key: 'prospecto', label: 'Prospecto', color: 'var(--color-primary)' },
+  { key: 'datos_incompletos', label: 'Contactado: datos incompletos', color: 'var(--color-primary-tint2)' },
+  { key: 'no_calificado', label: 'No calificado', color: 'var(--color-secondary)' },
+  { key: 'no_contactado', label: 'No contactado', color: 'var(--color-neutral-400)' },
+  { key: 'lead_invalido', label: 'Lead inválido', color: 'var(--color-neutral-900)' },
+  { key: 'en_intento', label: 'En intento', color: 'var(--color-neutral-300)' },
+] as const;
+const SERIES_LABELS: Record<string, string> = Object.fromEntries(SERIES.map((s) => [s.key, s.label]));
 
-/** Prospecto qualification (Calificados / No contactado / Lead no calificado), per year/month by
- * FechaCaptura - stacked bar, mirroring MarketingSalesChart's month-bucketing convention. */
+/** Lead classification per year/month by capture date - stacked bar, mirroring
+ * MarketingSalesChart's month-bucketing convention. Categories with no leads in the period are left
+ * out (Argentina only uses three), keeping each one's color. */
 export function MarketingQualificationChart({ rows, formatValue }: MarketingQualificationChartProps) {
   const data = rows.map((row) => ({
     key: `${row.anio}-${row.mes}`,
-    calificados: row.calificados,
+    prospecto: row.prospecto,
+    datos_incompletos: row.datos_incompletos,
+    no_calificado: row.no_calificado,
     no_contactado: row.no_contactado,
-    lead_no_calificado: row.lead_no_calificado,
+    lead_invalido: row.lead_invalido,
+    en_intento: row.en_intento,
   }));
+  const visibleSeries = SERIES.filter((series) => data.some((row) => row[series.key] > 0));
 
   return (
     <>
@@ -68,41 +73,28 @@ export function MarketingQualificationChart({ rows, formatValue }: MarketingQual
                 <StackedChartTooltip formatLabel={formatMonthKey} formatValue={formatValue} seriesLabel={(key) => SERIES_LABELS[key] ?? key} />
               }
             />
-            <Bar
-              dataKey="calificados"
-              name="calificados"
-              stackId="calificacion"
-              fill={SERIES_COLORS.calificados}
-              radius={[0, 0, 0, 0]}
-              maxBarSize={28}
-              animationDuration={450}
-            />
-            <Bar
-              dataKey="no_contactado"
-              name="no_contactado"
-              stackId="calificacion"
-              fill={SERIES_COLORS.no_contactado}
-              radius={[0, 0, 0, 0]}
-              maxBarSize={28}
-              animationDuration={450}
-            />
-            <Bar
-              dataKey="lead_no_calificado"
-              name="lead_no_calificado"
-              stackId="calificacion"
-              fill={SERIES_COLORS.lead_no_calificado}
-              radius={[6, 6, 0, 0]}
-              maxBarSize={28}
-              animationDuration={450}
-            />
+            {visibleSeries.map((series, index) => (
+              <Bar
+                key={series.key}
+                dataKey={series.key}
+                name={series.key}
+                stackId="calificacion"
+                fill={series.color}
+                stroke="var(--color-white)"
+                strokeWidth={1}
+                radius={index === visibleSeries.length - 1 ? [6, 6, 0, 0] : [0, 0, 0, 0]}
+                maxBarSize={28}
+                animationDuration={450}
+              />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </div>
       <div className={styles.legendRow}>
-        {(Object.keys(SERIES_LABELS) as Array<keyof typeof SERIES_LABELS>).map((key) => (
-          <span className={styles.legendItem} key={key}>
-            <span className={styles.legendSwatch} style={{ backgroundColor: SERIES_COLORS[key] }} aria-hidden="true" />
-            {SERIES_LABELS[key]}
+        {visibleSeries.map((series) => (
+          <span className={styles.legendItem} key={series.key}>
+            <span className={styles.legendSwatch} style={{ backgroundColor: series.color }} aria-hidden="true" />
+            {series.label}
           </span>
         ))}
       </div>

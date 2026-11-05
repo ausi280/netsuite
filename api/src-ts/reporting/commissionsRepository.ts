@@ -33,7 +33,7 @@ import { getAllLevelTiers, resolveCommissionPercentage } from './commissionTiers
  *
  * Separately, a contract with MORE THAN ONE distinct año of "Anualidad" partidas (i.e. it has
  * renewed/prepaid storage for more than one future year, not just its initial year) pays a flat
- * $100 bonus for EACH of those distinct años - the threshold is about how many YEARS the contract
+ * $100 bonus ($250 from October 2026, except Sangre-only packages - see anualidadBonusPerYear) for EACH of those distinct años - the threshold is about how many YEARS the contract
  * has, not how many service-type Anualidad lines exist within a given year (e.g. a year billed with
  * both SCU and TCU anualidad lines is still a single $100 for that year, not $100 each - grouped by
  * año for display). A contract with only a single distinct año of Anualidad partidas doesn't pay at
@@ -84,7 +84,19 @@ const SERVICE_PAYMENT_STATUS_PAGADO = '1';
 // this rule beyond Placenta-only).
 const SPECIAL_BONUS_SERVICE_TYPE_IDS = new Set(['15', '3']);
 const SPECIAL_BONUS_RATE = 3; // percent, of the contract's full services total
-const ANUALIDAD_BONUS_PER_YEAR = 100; // currency units, per distinct año - not per service line
+// Currency units, per distinct año - not per service line. Raised from 100 to 250 for October 2026
+// onward (by report month) - except a Sangre-only (SCU) package, which stays at 100 (per explicit
+// instruction).
+const ANUALIDAD_BONUS_PER_YEAR = 100;
+const ANUALIDAD_BONUS_PER_YEAR_FROM_2026_10 = 250;
+const TIPO_SANGRE = '1';
+
+/** `services` = the contract's active services, paid or not (what was sold - same set tipoServicio uses). */
+function anualidadBonusPerYear(month: number, year: number, services: ServiceRow[]): number {
+  const tipos = new Set(services.map((s) => s.custrecord_cryo_tipodeserv).filter((t): t is string => t !== null));
+  const sangreOnly = tipos.size === 1 && tipos.has(TIPO_SANGRE);
+  return year * 100 + month >= 202610 && !sangreOnly ? ANUALIDAD_BONUS_PER_YEAR_FROM_2026_10 : ANUALIDAD_BONUS_PER_YEAR;
+}
 
 // The only subsidiaries whose contracts were ever tracked in the legacy Cryo.dbo.Contrato system
 // (confirmed by their netsuite_contracts.name prefix: MX-CC/MX-BC/MX-BS respectively) - the
@@ -110,7 +122,7 @@ export interface AnualidadYearLine {
    * this count (see the file-level comment) - the $100 is paid once per qualifying año regardless
    * of how many service lines make it up. */
   count: number;
-  /** Always ANUALIDAD_BONUS_PER_YEAR (one flat bonus for the year, not count * that amount). Null
+  /** Always the report month's anualidadBonusPerYear (one flat bonus for the year, not count * that amount). Null
    * when the caller lacks the 'commissions_amounts' grant - see redactCommissionAmounts. */
   monto: number | null;
 }
@@ -126,6 +138,14 @@ export interface ContractCommission {
   titular_nombre: string | null;
   /** custrecord_cryo_contratosistemaanterior - the legacy CryoCell folio, when this contract has one. */
   folio_sistema_anterior: string | null;
+  /** Cryo.dbo.Contrato.ID_Contrato (see getLegacyContractMatches) - null outside Mexico, or when
+   * the contract can't be matched to CryoWeb by name nor folio. */
+  id_contrato_cryoweb: number | null;
+  /** Package as service types, e.g. "S+T+ADN" - see tipoServicio. */
+  tipo_servicio: string | null;
+  /** Multi-year package: how many años of Anualidad it carries - anualidades.length, so 0 for a
+   * contract with a single año (same "more than one año" rule as the anualidad bonus). */
+  anios_anticipados: number;
   /** Pagado services only (see custrecord_cryo_statuspagoserv) - an active service with any other
    * payment status is excluded here (and from total_servicios), never shown as if it counted. */
   services: ServiceCommissionLine[];
@@ -418,37 +438,73 @@ function totalForServices(services: ServiceRow[], paidProcesamientoKeys: Set<str
 // under that so this still works for a vendedor set with hundreds of contracts in a period.
 const LEGACY_LOOKUP_CHUNK_SIZE = 1000;
 
+/** A NetSuite contract's row in the legacy Cryo.dbo.Contrato table (CryoWeb). */
+export interface LegacyContractMatch {
+  /** Cryo.dbo.Contrato.ID_Contrato - CryoWeb's own contract id. */
+  id_contrato: number;
+  docs_completos: boolean;
+}
+
+interface LegacyContratoRow {
+  key: string;
+  id_contrato: number;
+  docs_completos: boolean | number;
+}
+
+/** Several legacy rows can share a key - the first one's id is kept, and docs count as complete
+ * when ANY of them says so. */
+function addLegacyMatch(matches: Map<string, LegacyContractMatch>, row: LegacyContratoRow): void {
+  const existing = matches.get(row.key);
+  matches.set(row.key, {
+    id_contrato: existing?.id_contrato ?? row.id_contrato,
+    docs_completos: Boolean(existing?.docs_completos) || Boolean(row.docs_completos),
+  });
+}
+
+// Past this many keys, one read of every legacy row beats hundreds of chunked lookups - Contrato.NetSuite
+// isn't indexed, so each chunk is a full scan anyway (e.g. Reporte Contratos' unfiltered export).
+const LEGACY_FULL_READ_THRESHOLD = 5 * LEGACY_LOOKUP_CHUNK_SIZE;
+
+async function getLegacyContratosBy(legacyDb: Knex, column: 'NetSuite' | 'Folio', keys: string[]): Promise<Map<string, LegacyContractMatch>> {
+  const matches = new Map<string, LegacyContractMatch>();
+  if (keys.length > LEGACY_FULL_READ_THRESHOLD) {
+    const wanted = new Set(keys);
+    const rows = (await legacyDb('Cryo.dbo.Contrato')
+      .whereNotNull(column)
+      .orderBy('ID_Contrato')
+      .select(`${column} as key`, 'ID_Contrato as id_contrato', 'DocsCompletos as docs_completos')) as LegacyContratoRow[];
+    for (const row of rows) if (wanted.has(row.key)) addLegacyMatch(matches, row);
+    return matches;
+  }
+  for (let i = 0; i < keys.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
+    const chunk = keys.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
+    const rows = (await legacyDb('Cryo.dbo.Contrato')
+      .whereIn(column, chunk)
+      .orderBy('ID_Contrato')
+      .select(`${column} as key`, 'ID_Contrato as id_contrato', 'DocsCompletos as docs_completos')) as LegacyContratoRow[];
+    for (const row of rows) addLegacyMatch(matches, row);
+  }
+  return matches;
+}
+
 /**
- * Which of these Mexico contracts have DocsCompletos = 1 in the legacy Cryo.dbo.Contrato table.
+ * Each of these Mexico contracts' row in the legacy Cryo.dbo.Contrato table (its CryoWeb id and
+ * DocsCompletos), keyed by the contract's own netsuite_id - contracts with no legacy row are absent.
  * Primary match: legacy.NetSuite = contract.name. Fallback, ONLY for a contract with no legacy
  * row at all under that name (the backfill hasn't reached it yet - confirmed live this affects
- * ~12% of legacy rows at any given time, skewed toward the most recent sales): legacy.Folio =
- * contract.folio_sistema_anterior. Never used to override a real name-based match, even one that
- * says incomplete - see the file-level comment above for why the folio fallback is safe. Returns
- * the set of contracts' own netsuite_id considered complete.
+ * ~12% of legacy rows at any given time, skewed toward the most recent sales, and nearly every
+ * contract since the August 2026 NetSuite sync): legacy.Folio = contract.folio_sistema_anterior.
+ * Never used to override a real name-based match, even one that says incomplete - see the
+ * file-level comment above for why the folio fallback is safe.
  */
-async function getCompleteDocsContractIds(
+export async function getLegacyContractMatches(
   legacyDb: Knex,
   contracts: Array<{ netsuite_id: string; name: string | null; folio_sistema_anterior: string | null }>,
-): Promise<Set<string>> {
+): Promise<Map<string, LegacyContractMatch>> {
   const uniqueNames = Array.from(new Set(contracts.map((c) => c.name).filter((n): n is string => Boolean(n))));
-  // Every legacy NetSuite value with a row at all (regardless of DocsCompletos) - used to tell
-  // "no row yet" (falls back to folio) apart from "row exists, DocsCompletos is 0" (does not).
-  const namesWithLegacyRow = new Set<string>();
-  const namesComplete = new Set<string>();
+  const byName = await getLegacyContratosBy(legacyDb, 'NetSuite', uniqueNames);
 
-  for (let i = 0; i < uniqueNames.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
-    const chunk = uniqueNames.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
-    const rows = (await legacyDb('Cryo.dbo.Contrato')
-      .whereIn('NetSuite', chunk)
-      .select('NetSuite as name', 'DocsCompletos as docsCompletos')) as Array<{ name: string; docsCompletos: boolean | number }>;
-    for (const row of rows) {
-      namesWithLegacyRow.add(row.name);
-      if (row.docsCompletos) namesComplete.add(row.name);
-    }
-  }
-
-  const needsFolioFallback = (c: { name: string | null }) => !c.name || !namesWithLegacyRow.has(c.name);
+  const needsFolioFallback = (c: { name: string | null }) => !c.name || !byName.has(c.name);
   const folios = Array.from(
     new Set(
       contracts
@@ -456,22 +512,35 @@ async function getCompleteDocsContractIds(
         .map((c) => c.folio_sistema_anterior as string),
     ),
   );
-  const foliosComplete = new Set<string>();
-  for (let i = 0; i < folios.length; i += LEGACY_LOOKUP_CHUNK_SIZE) {
-    const chunk = folios.slice(i, i + LEGACY_LOOKUP_CHUNK_SIZE);
-    const rows = (await legacyDb('Cryo.dbo.Contrato').whereIn('Folio', chunk).andWhere('DocsCompletos', 1).select('Folio as folio')) as Array<{
-      folio: string;
-    }>;
-    for (const row of rows) foliosComplete.add(row.folio);
-  }
+  const byFolio = await getLegacyContratosBy(legacyDb, 'Folio', folios);
 
-  const complete = new Set<string>();
+  const matches = new Map<string, LegacyContractMatch>();
   for (const c of contracts) {
-    const viaName = Boolean(c.name && namesComplete.has(c.name));
-    const viaFolio = needsFolioFallback(c) && Boolean(c.folio_sistema_anterior && foliosComplete.has(c.folio_sistema_anterior));
-    if (viaName || viaFolio) complete.add(c.netsuite_id);
+    const match = needsFolioFallback(c) ? (c.folio_sistema_anterior ? byFolio.get(c.folio_sistema_anterior) : undefined) : byName.get(c.name!);
+    if (match) matches.set(c.netsuite_id, match);
   }
-  return complete;
+  return matches;
+}
+
+// custrecord_cryo_tipodeserv ids, in the order their short labels read in a package name ("S+T+ADN").
+const SERVICE_TYPE_SHORT_LABELS: Array<[string, string]> = [
+  ['1', 'S'],
+  ['2', 'T'],
+  ['3', 'ADN'],
+  ['15', 'PLACENTA'],
+  ['4', 'DIENTE'],
+  ['14', 'PULPA DENTAL'],
+  ['7', 'FIBROBLASTOS'],
+];
+
+/** The contract's package as its service types ("S+T", "S+T+ADN") - every active service, paid or
+ * not, since this describes what was sold. Null when it has none. */
+function tipoServicio(services: ServiceRow[]): string | null {
+  const tipos = new Set(services.map((s) => s.custrecord_cryo_tipodeserv).filter((t): t is string => t !== null));
+  const labels = SERVICE_TYPE_SHORT_LABELS.filter(([id]) => tipos.has(id)).map(([, label]) => label);
+  const known = new Set(SERVICE_TYPE_SHORT_LABELS.map(([id]) => id));
+  for (const tipo of tipos) if (!known.has(tipo)) labels.push(`TIPO ${tipo}`);
+  return labels.length > 0 ? labels.join('+') : null;
 }
 
 function buildContractCommission(
@@ -481,6 +550,8 @@ function buildContractCommission(
   paidProcesamientoKeys: Set<string>,
   tierPercentage: number | null,
   docsComplete: boolean,
+  idContratoCryoWeb: number | null,
+  anualidadBonus: number,
 ): ContractCommission {
   // `services` now holds every ACTIVE service regardless of payment status (see
   // ServiceRow.custrecord_cryo_statuspagoserv) - the displayed breakdown (serviceLines) stays
@@ -530,10 +601,10 @@ function buildContractCommission(
   const anualidades: AnualidadYearLine[] =
     anualidadByYear.size > 1
       ? Array.from(anualidadByYear.entries())
-          .map(([anio, count]) => ({ anio, count, monto: ANUALIDAD_BONUS_PER_YEAR }))
+          .map(([anio, count]) => ({ anio, count, monto: anualidadBonus }))
           .sort((a, b) => a.anio.localeCompare(b.anio))
       : [];
-  const anualidadBonusTotal = docsComplete ? anualidades.length * ANUALIDAD_BONUS_PER_YEAR : 0;
+  const anualidadBonusTotal = docsComplete ? anualidades.length * anualidadBonus : 0;
 
   return {
     netsuite_id: contract.netsuite_id,
@@ -545,6 +616,9 @@ function buildContractCommission(
     moneda: contract.moneda,
     titular_nombre: contract.titular_nombre,
     folio_sistema_anterior: contract.folio_sistema_anterior,
+    id_contrato_cryoweb: idContratoCryoWeb,
+    tipo_servicio: tipoServicio(services),
+    anios_anticipados: anualidades.length,
     services: serviceLines,
     non_paid_service_statuses: nonPaidServiceStatuses,
     total_servicios: totalServicios,
@@ -681,9 +755,9 @@ export async function getCommissionsByVendedor(
   const mexicoContracts = [...displayContracts, ...allVendorContracts].filter(
     (c) => c.subsidiaria_id !== null && MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id),
   );
-  const completeDocsContractIds = await getCompleteDocsContractIds(legacyDb, mexicoContracts);
+  const legacyMatches = await getLegacyContractMatches(legacyDb, mexicoContracts);
   const hasCompleteDocs = (c: ContractRow) =>
-    c.subsidiaria_id === null || !MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id) || completeDocsContractIds.has(c.netsuite_id);
+    c.subsidiaria_id === null || !MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id) || Boolean(legacyMatches.get(c.netsuite_id)?.docs_completos);
 
   const displayContractIds = displayContracts.map((c) => c.netsuite_id);
   const allContractIds = Array.from(new Set([...allVendorContracts.map((c) => c.netsuite_id), ...displayContractIds]));
@@ -791,6 +865,8 @@ export async function getCommissionsByVendedor(
       paidProcesamientoKeys,
       tierPercentage,
       hasCompleteDocs(contract),
+      legacyMatches.get(contract.netsuite_id)?.id_contrato ?? null,
+      anualidadBonusPerYear(month, year, servicesByContract.get(contract.netsuite_id) ?? []),
     );
 
     const group = getOrCreateGroup(groups, contract.vendedor_id, contract.vendedor_nombre, ctx);

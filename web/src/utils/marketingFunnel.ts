@@ -5,7 +5,7 @@ import type { MarketingMonthlyInputs, MarketingSalesByMonthRow, QualificationByM
 export interface FunnelFigures {
   leadsDigital: number | null;
   leadsOffline: number | null;
-  /** "Prospecto" stage - the CRM's Calificados (reached and a real opportunity). */
+  /** "Prospecto" stage - contacted and passing the mandatory filters. */
   prospectos: number | null;
   /** Prospectos split by lead channel. On the meta side only Digital has one (70% of meta leads digital). */
   prospectosDigital: number | null;
@@ -74,8 +74,9 @@ function monthsSpanned(dateFrom: string, dateTo: string): number {
   return Math.max(0, to - from + 1);
 }
 
-/** Builds the México funnel for the report's date range: leads and prospectos from the CRM's
- * Prospecto rows (by capture date), sales from Contrato (by sale date), inversión and every meta
+/** Builds the México funnel for the report's date range: valid leads (every record minus Lead
+ * inválido) and prospectos from the CRM's Prospecto rows (by capture date), sales from Contrato (by
+ * sale date), inversión and every meta
  * from the hand-captured monthly inputs (whole months - a partial month in the range still counts
  * its full monthly meta). Same definitions as the CMO Scorecard: CR Offline = (ventas totales −
  * ventas digitales) ÷ leads offline; CAC/CPL are ratios of period totals, not averages of months. */
@@ -91,12 +92,13 @@ export function buildMarketingFunnel(
   let prospectosDigital = 0;
   let prospectosOffline = 0;
   for (const row of qualificationByMonth) {
+    const leadsValidos = row.total - row.lead_invalido;
     if (row.canal === 'online') {
-      leadsDigital += row.total;
-      prospectosDigital += row.calificados;
+      leadsDigital += leadsValidos;
+      prospectosDigital += row.prospecto;
     } else {
-      leadsOffline += row.total;
-      prospectosOffline += row.calificados;
+      leadsOffline += leadsValidos;
+      prospectosOffline += row.prospecto;
     }
   }
   const ventasDigital = salesByMonth.reduce((s, r) => s + r.online, 0);

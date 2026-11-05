@@ -95,7 +95,7 @@ export const logisticaUpload = multer({
 // Zammad's select wouldn't accept.
 const ZONAS = new Set([
   'AGS', 'CANCUN', 'CDMX', 'CDMX/Ingenes', 'CDMX/Norte', 'CDMX/Poniente', 'CDMX/Sur', 'CHIHUAHUA', 'GDL',
-  'HERMOSILLO', 'LEON', 'MORELIA', 'MTY', 'MTY/Operaciones', 'PUEBLA', 'QRO', 'TIJUANA',
+  'HERMOSILLO', 'LEON', 'MORELIA', 'MTY', 'MTY/Operaciones', 'PUEBLA', 'QRO', 'TIJUANA', 'OTRO',
 ]);
 
 // Sections the article body groups fields into, by field-name prefix/membership - everything else
@@ -262,7 +262,8 @@ export async function createLogisticaTicketRoute(req: Request, res: Response): P
   const asunto = `${tipoSolicitud} - Logística`;
 
   const data: Record<string, unknown> = {
-    title: `${requesterName || 'Solicitud'} - ${marca} - ${tipoSolicitud} - Solicitud de Logística`,
+    // Zona only on the request types that ask for it (Kit para stock / Material / Regalos).
+    title: `${requesterName || 'Solicitud'} - ${marca} - ${tipoSolicitud}${zona ? ` - ${zona}` : ''} - Solicitud de Logística`,
     group,
     customer: {
       firstname: requesterName,

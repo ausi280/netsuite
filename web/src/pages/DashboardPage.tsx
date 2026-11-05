@@ -34,9 +34,11 @@ export function DashboardPage() {
           entities={entities}
           canAccessHr={canAccessHr}
           canAccessCommissions={canAccessCommissions}
+          canAccessWorkPlan={data?.canAccessWorkPlan}
           canAccessProspectos={canAccessProspectos}
           canAccessPostventa={canAccessPostventa}
           canAccessCobranzaCommissions={canAccessCobranzaCommissions}
+          canAccessAdministracion={data?.canAccessAdministracion}
         />
       ) : null}
     </AppShell>

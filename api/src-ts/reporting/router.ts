@@ -5,7 +5,7 @@ import { MulterError } from 'multer';
 import { buildEntraAuthMiddleware } from './auth/entraAuth';
 import { buildPermissionsMiddleware } from './auth/permissionsMiddleware';
 import { exportEntityRows, getEntityRowDetail, getPartidaAnalytics, listEntitySummaries, listEntityRows, listSubsidiaryOptions } from './controller';
-import { listUsers, updateUserPermissions } from './adminController';
+import { listPricing, listUsers, updatePricingDiscount, updateUserPermissions } from './adminController';
 import {
   getCommissionsExportRoute,
   getCommissionsPdfRoute,
@@ -23,12 +23,29 @@ import {
   updateEmployeeLevelRoute,
   upsertCommissionTierRoute,
 } from './commissionLevelsController';
+import {
+  cloneWorkPlanRoute,
+  createWorkPlanActivityRoute,
+  deleteWorkPlanActivityRoute,
+  getWorkPlanPdfRoute,
+  getWorkPlanRoute,
+  saveWorkPlanHeaderRoute,
+  searchWorkPlanCatalogRoute,
+  updateWorkPlanActivityRoute,
+} from './salesWorkPlanController';
 import { chargeDomiciledRoute } from './paymentsChargeController';
 import { getHrAnalyticsRoute, getHrSummaryRoute } from './hrController';
 import { createLogisticaTicketRoute, logisticaUpload } from './logisticaTicketController';
 import { exportProspectosRoute, listProspectosRoute } from './prospectosController';
-import { getMarketingInputsRoute, getMarketingReportRoute, getMarketingTicketsRoute, saveMarketingInputsRoute } from './marketingController';
-import { getComercialReportRoute } from './comercialController';
+import {
+  exportMarketingLeadsRoute,
+  getMarketingInputsRoute,
+  getMarketingReportRoute,
+  getMarketingTicketsRoute,
+  listMarketingLeadsRoute,
+  saveMarketingInputsRoute,
+} from './marketingController';
+import { getComercialReportRoute, getVentasRoute } from './comercialController';
 import {
   exportTareasVencidasRoute,
   getTareasVencidasByMonthRoute,
@@ -59,6 +76,7 @@ import {
   listPostventaOwnersRoute,
   listPostventaTicketsRoute,
 } from './postventaController';
+import { getAdministracionReportRoute } from './administracionController';
 import { getZammadTicketsByMonthRoute } from './zammadTicketsAnalyticsController';
 import {
   exportReembolsosRoute,
@@ -95,6 +113,8 @@ export function buildReportingRouter(): Router {
   // and "users" as an id value.
   router.get('/admin/users', listUsers);
   router.patch('/admin/users/:oid', updateUserPermissions);
+  router.get('/admin/pricing', listPricing);
+  router.patch('/admin/pricing/:id', updatePricingDiscount);
   // Must be registered before /:entity/:id, or that route would swallow "commissions"/"vendedores" as an id value.
   router.get('/contracts/commissions', getCommissionsReportRoute);
   router.get('/contracts/commissions/export', getCommissionsExportRoute);
@@ -116,6 +136,16 @@ export function buildReportingRouter(): Router {
   router.get('/commission-levels/tiers', listCommissionTiersRoute);
   router.post('/commission-levels/tiers', upsertCommissionTierRoute);
   router.delete('/commission-levels/tiers/:id', deleteCommissionTierRoute);
+  // Plan de trabajo (vendedores' monthly visit/event plan) - bespoke, app-owned tables. Must be
+  // registered before /:entity/:id, or that route would swallow "work-plans" as an entity key.
+  router.get('/work-plans', getWorkPlanRoute);
+  router.put('/work-plans/header', saveWorkPlanHeaderRoute);
+  router.post('/work-plans/activities', createWorkPlanActivityRoute);
+  router.put('/work-plans/activities/:id', updateWorkPlanActivityRoute);
+  router.delete('/work-plans/activities/:id', deleteWorkPlanActivityRoute);
+  router.post('/work-plans/clone', cloneWorkPlanRoute);
+  router.get('/work-plans/pdf', getWorkPlanPdfRoute);
+  router.get('/work-plans/catalog/:catalog', searchWorkPlanCatalogRoute);
   // HR Report is a bespoke, admin-only, cross-database feature (Peopleforce/Sesame HR data
   // warehouse) - not part of the generic entity registry, so these must be registered before
   // /:entity/analytics, or that route would swallow "hr" as an entity key and 404 (it isn't a
@@ -137,10 +167,13 @@ export function buildReportingRouter(): Router {
   router.get('/marketing/inputs', getMarketingInputsRoute);
   router.put('/marketing/inputs', saveMarketingInputsRoute);
   router.get('/marketing/tickets', getMarketingTicketsRoute);
+  router.get('/marketing/leads', listMarketingLeadsRoute);
+  router.get('/marketing/leads/export', exportMarketingLeadsRoute);
   // Comercial (tareas-per-prospecto distribution, global and per vendedor) - built on the same
   // Prospecto data as /prospectos - likewise bespoke, must be registered before /:entity/export,
   // or that route would swallow "comercial" as an entity key and 404.
   router.get('/comercial', getComercialReportRoute);
+  router.get('/comercial/ventas', getVentasRoute);
   // Tareas Vencidas (overdue, never-properly-closed Tarea rows - FechaInicial < today AND
   // (FechaCierre IS NULL OR FechaCierre < FechaInicial)) - a Comercial sub-report, same Prospecto/
   // Lead/Vendedor join. Must be registered before /:entity/:id, or that route would swallow
@@ -180,6 +213,8 @@ export function buildReportingRouter(): Router {
   // Postventa status tiles (zammad_tickets, "Postventa" group only) is likewise bespoke, not a
   // generic ENTITY_REGISTRY entity - must be registered before /:entity/export, or that route
   // would swallow "postventa" as an entity key and 404.
+  // Reporte Administración ('administracion' grant) - before /:entity/:id like every bespoke report.
+  router.get('/administracion', getAdministracionReportRoute);
   router.get('/postventa/summary', getPostventaSummaryRoute);
   router.get('/postventa/owners', listPostventaOwnersRoute);
   router.get('/postventa/by-month', getPostventaByMonthRoute);

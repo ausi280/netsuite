@@ -26,7 +26,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, index) => CURRENT_YEAR - index);
 
 /** New-contract sales commissions, grouped by vendedor, with every contract's calculation broken
- * down (Placenta's flat 3%, the tiered rate on everything else, the $100-per-year anualidad
+ * down (Placenta's flat 3%, the tiered rate on everything else, the per-year anualidad
  * bonus) so it's clear why each number is what it is. */
 export function CommissionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -194,6 +194,9 @@ export function CommissionsPage() {
               Configurar niveles
             </Link>
           ) : null}
+          <Link to="/reports/plan-trabajo" className={styles.levelsLink}>
+            Plan de trabajo
+          </Link>
           <button type="button" className={styles.actionButton} onClick={handleExport} disabled={isExporting}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M12 3v12" />

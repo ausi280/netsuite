@@ -6,8 +6,8 @@ import { ErrorState } from '../components/common/ErrorState';
 import { EmptyState } from '../components/common/EmptyState';
 import { MarketingSalesChart } from '../components/charts/MarketingSalesChart';
 import { MarketingQualificationChart } from '../components/charts/MarketingQualificationChart';
-import { MotivosBreakdownTable } from '../components/charts/MotivosBreakdownTable';
 import { MarketingFunnelSection } from '../components/charts/MarketingFunnelSection';
+import { MarketingLeadsSection } from '../components/reports/MarketingLeadsSection';
 import { MarketingTicketsSection } from '../components/reports/MarketingTicketsSection';
 import { buildMarketingFunnel } from '../utils/marketingFunnel';
 import { ARGENTINA_MARCAS, MARKETING_PAISES, parseArgentinaMarca, parseMarketingPais } from '../utils/marketingPais';
@@ -35,8 +35,15 @@ function defaultDateTo(): string {
 
 const countFormatter = new Intl.NumberFormat('es-MX');
 
-/** "Leads contactados" = Calificados + Lead no calificado (both mean the prospect WAS reached,
- * regardless of outcome) - deliberately excludes "No contactado", which by definition never was.
+const pctFormatter = new Intl.NumberFormat('es-MX', { style: 'percent', maximumFractionDigits: 1 });
+
+function formatRate(part: number, whole: number): string {
+  return whole > 0 ? pctFormatter.format(part / whole) : '—';
+}
+
+/** "Leads contactados" = Prospecto + datos incompletos + No calificado (all mean the lead WAS
+ * reached, regardless of outcome) - deliberately excludes En intento / No contactado, which by
+ * definition weren't, and Lead inválido, which isn't a lead.
  * Derived client-side from the same qualification.byMonth rows the split chart above already
  * fetches, split online/offline the same way, re-shaped to MarketingSalesChart's own row shape so
  * that component can be reused as-is instead of writing a near-duplicate. */
@@ -46,7 +53,7 @@ function buildLeadsContactadosByMonth(byMonth: QualificationByMonthRow[]): Marke
   for (const row of byMonth) {
     const key = `${row.anio}-${row.mes}`;
     const existing = byKey.get(key) ?? { anio: row.anio, mes: row.mes, online: 0, offline: 0, total: 0 };
-    const contactados = row.calificados + row.lead_no_calificado;
+    const contactados = row.prospecto + row.datos_incompletos + row.no_calificado;
     if (row.canal === 'online') existing.online += contactados;
     else existing.offline += contactados;
     existing.total += contactados;
@@ -65,10 +72,9 @@ function buildLeadsContactadosByMonth(byMonth: QualificationByMonthRow[]): Marke
  *
  *  - "Ventas por mes": every Prospecto with a matched Contrato, by the contract's own sale month,
  *    split online (Internet TipoCanal) vs offline (everything else).
- *  - "Calificación de prospectos": every prospecto in the date range (by capture date), grouped
- *    into Calificados / No contactado / Lead no calificado by its ID_NoVenta - with the full,
- *    always-visible per-motivo breakdown below so it's clear exactly which raw reason rolled into
- *    which bucket, for a future re-categorization.
+ *  - "Clasificación de leads": every lead in the date range (by capture date), classified by
+ *    classifyLead in marketingRepository.ts (México) - with a grid below of every lead, its category
+ *    and why. Argentina keeps its motivo-only classification.
  */
 export function MarketingReportPage() {
   const [dateFrom, setDateFrom] = useState(defaultDateFrom());
@@ -90,6 +96,9 @@ export function MarketingReportPage() {
 
   const { data, isLoading, isError, error, refetch } = useMarketingReport(pais, dateFrom, dateTo, marca);
 
+  const summary = data?.qualification.summary;
+  const leadsValidos = summary ? summary.total - summary.lead_invalido : 0;
+  const contactados = summary ? summary.prospecto + summary.datos_incompletos + summary.no_calificado : 0;
   const leadsContactadosByMonth = useMemo(() => buildLeadsContactadosByMonth(data?.qualification.byMonth ?? []), [data]);
   const funnel = useMemo(
     // Inversión and metas are captured per country, not per brand - a single brand gets none
@@ -104,7 +113,7 @@ export function MarketingReportPage() {
         <div>
           <h1 className={styles.title}>Reporte de Marketing</h1>
           <p className={styles.subtitle}>
-            Ventas por canal y calificación de prospectos · {config.label} - {marcaLabel && marca ? marcaLabel : config.marcas} (prospectos de {config.fuente}).
+            Ventas por canal y clasificación de leads · {config.label} - {marcaLabel && marca ? marcaLabel : config.marcas} (prospectos de {config.fuente}).
           </p>
         </div>
       </div>
@@ -176,33 +185,57 @@ export function MarketingReportPage() {
           </div>
 
           <div className={chartStyles.chartCard}>
-            <h2 className={styles.panelTitle}>Calificación de prospectos por mes</h2>
+            <h2 className={styles.panelTitle}>Clasificación de leads por mes</h2>
             <p className={styles.panelSubtitle}>
-              Todos los prospectos del periodo (por fecha de {pais === 'AR' ? 'alta como lead' : 'captura'}), por mes, agrupados por su motivo de{' '}
-              {pais === 'AR' ? 'pérdida' : 'no-venta'} - separado por canal Online / Offline.
+              {pais === 'AR'
+                ? 'Todos los leads del periodo (por fecha de alta como lead), por mes, agrupados por su motivo de pérdida - separado por canal Online / Offline.'
+                : 'Todos los registros del periodo (por fecha de captura), por mes - separado por canal Online / Offline. Prospecto = hubo conversación y pasa los filtros de embarazo, parto en México y bebé no nacido. Sin score ni prioridad: el CRM no captura intención, parentesco ni tipo de hospital. La conversación se infiere de la venta, la etapa o el motivo de cierre, y una FPP asignada automáticamente al capturar (+14 días) cuenta como dato faltante.'}
             </p>
-            {data.qualification.summary.total === 0 ? (
-              <EmptyState message="No hay prospectos en este periodo." />
-            ) : (
+            {summary?.total === 0 ? (
+              <EmptyState message="No hay leads en este periodo." />
+            ) : summary ? (
               <>
                 <div className={styles.summaryBar}>
-                  <div className={styles.summaryStat}>
-                    <span className={styles.summaryValue}>{countFormatter.format(data.qualification.summary.total)}</span>
-                    <span className={styles.summaryLabel}>prospectos en el periodo</span>
-                  </div>
-                  <div className={styles.summaryStat}>
-                    <span className={styles.summaryValue}>{countFormatter.format(data.qualification.summary.calificados)}</span>
-                    <span className={styles.summaryLabel}>calificados</span>
-                  </div>
-                  <div className={styles.summaryStat}>
-                    <span className={styles.summaryValue}>{countFormatter.format(data.qualification.summary.no_contactado)}</span>
-                    <span className={styles.summaryLabel}>no contactados</span>
-                  </div>
-                  <div className={styles.summaryStat}>
-                    <span className={styles.summaryValue}>{countFormatter.format(data.qualification.summary.lead_no_calificado)}</span>
-                    <span className={styles.summaryLabel}>lead no calificado</span>
-                  </div>
+                  {[
+                    { label: 'registros en el periodo', value: summary.total },
+                    { label: 'leads inválidos', value: summary.lead_invalido },
+                    { label: 'leads válidos', value: leadsValidos },
+                    { label: 'prospectos', value: summary.prospecto },
+                    { label: 'contactados: datos incompletos', value: summary.datos_incompletos },
+                    { label: 'en intento', value: summary.en_intento },
+                    { label: 'no contactados', value: summary.no_contactado },
+                    { label: 'no calificados', value: summary.no_calificado },
+                  ]
+                    .filter((stat) => pais === 'MX' || stat.value > 0)
+                    .map((stat) => (
+                      <div className={styles.summaryStat} key={stat.label}>
+                        <span className={styles.summaryValue}>{countFormatter.format(stat.value)}</span>
+                        <span className={styles.summaryLabel}>{stat.label}</span>
+                      </div>
+                    ))}
                 </div>
+                {data.qualification.filterFailures ? (
+                  <>
+                    <div className={styles.summaryBar}>
+                      {[
+                        { label: 'tasa de contacto', value: formatRate(contactados, leadsValidos) },
+                        { label: 'lead válido → prospecto', value: formatRate(summary.prospecto, leadsValidos) },
+                        { label: 'datos incompletos / contactados', value: formatRate(summary.datos_incompletos, contactados) },
+                        { label: 'registros inválidos', value: formatRate(summary.lead_invalido, summary.total) },
+                      ].map((stat) => (
+                        <div className={styles.summaryStat} key={stat.label}>
+                          <span className={styles.summaryValue}>{stat.value}</span>
+                          <span className={styles.summaryLabel}>{stat.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className={styles.motivosNote}>
+                      No calificados por filtro: {countFormatter.format(data.qualification.filterFailures.f1)} no embarazada (F1) ·{' '}
+                      {countFormatter.format(data.qualification.filterFailures.f2)} fuera de México (F2) ·{' '}
+                      {countFormatter.format(data.qualification.filterFailures.f3)} bebé ya nacido (F3).
+                    </p>
+                  </>
+                ) : null}
                 <div className={styles.splitGrid}>
                   {(['online', 'offline'] as const).map((canal) => {
                     const canalRows = data.qualification.byMonth.filter((row) => row.canal === canal);
@@ -210,7 +243,7 @@ export function MarketingReportPage() {
                       <div key={canal}>
                         <h3 className={styles.splitTitle}>{canal === 'online' ? 'Online' : 'Offline'}</h3>
                         {canalRows.length === 0 ? (
-                          <EmptyState message={`Sin prospectos ${canal} en este periodo.`} />
+                          <EmptyState message={`Sin leads ${canal} en este periodo.`} />
                         ) : (
                           <MarketingQualificationChart rows={canalRows} formatValue={(v) => countFormatter.format(v)} />
                         )}
@@ -219,32 +252,26 @@ export function MarketingReportPage() {
                   })}
                 </div>
               </>
-            )}
+            ) : null}
           </div>
 
           <div className={chartStyles.chartCard}>
             <h2 className={styles.panelTitle}>Leads contactados por mes (Online / Offline)</h2>
-            <p className={styles.panelSubtitle}>Calificados + Lead no calificado (excluye No contactado) - el prospecto fue alcanzado, sin importar el resultado.</p>
+            <p className={styles.panelSubtitle}>
+              {pais === 'AR'
+                ? 'Prospecto + No calificado (excluye No contactado) - el lead fue alcanzado, sin importar el resultado.'
+                : 'Prospecto + datos incompletos + No calificado - hubo conversación con el lead, sin importar el resultado.'}
+            </p>
             {leadsContactadosByMonth.length === 0 ? (
-              <EmptyState message="No hay prospectos en este periodo." />
+              <EmptyState message="No hay leads en este periodo." />
             ) : (
               <MarketingSalesChart rows={leadsContactadosByMonth} formatValue={(v) => countFormatter.format(v)} />
             )}
           </div>
 
-          <MarketingTicketsSection dateFrom={dateFrom} dateTo={dateTo} />
+          <MarketingLeadsSection key={`${pais}-${marca}-${dateFrom}-${dateTo}`} pais={pais} dateFrom={dateFrom} dateTo={dateTo} marca={marca} />
 
-          {data.qualification.motivos.length > 0 ? (
-            <div className={chartStyles.chartCard}>
-              <h2 className={styles.panelTitle}>Detalle por motivo de {pais === 'AR' ? 'pérdida' : 'no-venta'}</h2>
-              <p className={styles.motivosNote}>
-                {pais === 'AR'
-                  ? 'Cada fila es un motivo de pérdida real de NetSuite (por marca) y la categoría en la que se agrupó arriba - útil para verificar o ajustar la clasificación en el futuro.'
-                  : 'Cada fila es un motivo real de Cryo.dbo.noventa (con su propia empresa e ID_NoVenta) y la categoría en la que se agrupó arriba - útil para verificar o ajustar la clasificación en el futuro.'}
-              </p>
-              <MotivosBreakdownTable rows={data.qualification.motivos} formatCount={(v) => countFormatter.format(v)} pais={pais} />
-            </div>
-          ) : null}
+          <MarketingTicketsSection dateFrom={dateFrom} dateTo={dateTo} />
         </div>
       ) : null}
     </AppShell>

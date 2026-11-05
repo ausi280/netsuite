@@ -41,12 +41,12 @@ export interface ProspectoRow {
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 
-function clampPage(value: unknown): number {
+export function clampPage(value: unknown): number {
   const n = Number(value);
   return Number.isInteger(n) && n > 0 ? n : 1;
 }
 
-function clampPageSize(value: unknown): number {
+export function clampPageSize(value: unknown): number {
   const n = Number(value);
   if (!Number.isInteger(n) || n <= 0) return DEFAULT_PAGE_SIZE;
   return Math.min(n, MAX_PAGE_SIZE);

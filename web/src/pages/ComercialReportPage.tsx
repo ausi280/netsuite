@@ -10,6 +10,7 @@ import { Pagination } from '../components/table/Pagination';
 import { ComercialTareasChart } from '../components/charts/ComercialTareasChart';
 import type { TareasBucket } from '../components/charts/ComercialTareasChart';
 import { ComercialTareasByMonthChart } from '../components/charts/ComercialTareasByMonthChart';
+import { ComercialVentasSection } from '../components/reports/ComercialVentasSection';
 import type { TareasByMonthStack } from '../components/charts/ComercialTareasByMonthChart';
 import chartStyles from '../components/charts/charts.module.css';
 import { useComercialReport } from '../hooks/useComercialReport';
@@ -136,7 +137,7 @@ export function ComercialReportPage() {
       <div className={styles.heading}>
         <div>
           <h1 className={styles.title}>Reporte Comercial</h1>
-          <p className={styles.subtitle}>Prospectos agrupados por número de tareas, por fecha de captura.</p>
+          <p className={styles.subtitle}>Ventas por zona y ejecutivo, y prospectos agrupados por número de tareas, por fecha de captura.</p>
         </div>
       </div>
 
@@ -164,6 +165,10 @@ export function ComercialReportPage() {
           Hasta
           <input type="date" className={styles.dateInput} value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} />
         </label>
+      </div>
+
+      <div className={styles.panels} style={{ marginBottom: 20 }}>
+        <ComercialVentasSection dateFrom={dateFrom} dateTo={dateTo} />
       </div>
 
       <div className={styles.controls}>

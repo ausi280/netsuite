@@ -76,7 +76,7 @@ export interface SubformConfig {
 // api/src-ts/reporting/logisticaTicketController.ts, which rejects anything else.
 export const ZONAS = [
   'AGS', 'CANCUN', 'CDMX', 'CDMX/Ingenes', 'CDMX/Norte', 'CDMX/Poniente', 'CDMX/Sur', 'CHIHUAHUA', 'GDL',
-  'HERMOSILLO', 'LEON', 'MORELIA', 'MTY', 'MTY/Operaciones', 'PUEBLA', 'QRO', 'TIJUANA',
+  'HERMOSILLO', 'LEON', 'MORELIA', 'MTY', 'MTY/Operaciones', 'PUEBLA', 'QRO', 'TIJUANA', 'OTRO',
 ];
 
 /** Recolección / Envío de kit - syncs to the ticket's foliocontrato field. Free text for now. */

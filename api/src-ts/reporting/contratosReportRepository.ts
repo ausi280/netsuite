@@ -1,5 +1,6 @@
 import type { Knex } from 'knex';
 import { applySubsidiaryRestriction, clampPage, clampPageSize, parseSubsidiaryFilter } from './reportingRepository';
+import { getLegacyContractMatches } from './commissionsRepository';
 import type { Paginated } from './types';
 
 /**
@@ -187,6 +188,21 @@ export interface ContratoReportRow {
   estatus_cobranza: string | null;
   metal: string | null;
   pago_automatico: boolean | null;
+  /** custrecord_cryo_saldo_inicial - a T/F flag (not an amount): T = a contract migrated from the
+   * old system with its opening balance, which only carries anualidades (no processing invoice). */
+  saldo_inicial: boolean | null;
+  /** "Factura inicial" - only filled when the caller asks for it (?factura=1, see
+   * addFacturaInicial); null otherwise. The invoice(s) of the contract's processing fee. */
+  factura_inicial: string | null;
+  /** Sum of the contract's processing partidas billed on those invoices (partida amounts are
+   * without IVA - confirmed live: a Mexican invoice's total is exactly its partidas x 1.16). */
+  factura_sin_iva: number | null;
+  /** Those invoices' totals, with IVA - prorated by the processing partidas' share when an
+   * invoice also bills something else. */
+  factura_con_iva: number | null;
+  /** DocsCompletos in CryoWeb (see getLegacyContractMatches) - null outside Mexico, which has no
+   * such record. */
+  docs_completos: boolean | null;
 }
 
 /** Columns with no confirmed source anywhere in customrecord1184's full field list (checked, not
@@ -259,6 +275,7 @@ interface RawContratoReportRow {
   ns_estatus_cobranza: string | null;
   ns_metal: string | null;
   ns_pago_automatico: string | null;
+  ns_saldo_inicial: string | null;
 }
 
 /** Whether an ACTIVE (isinactive = 'F') service of one type exists on the contract - "SI"/blank,
@@ -387,6 +404,7 @@ function selectContratoColumns(qb: Knex.QueryBuilder, db: Knex): Knex.QueryBuild
     'C.custrecord_cryo_mx_estatus_cobranza as ns_estatus_cobranza',
     'C.custrecord_cryo_mx_clasificadormetal as ns_metal',
     'C.custrecord_cryo_mx_pagoautomatico as ns_pago_automatico',
+    'C.custrecord_cryo_saldo_inicial as ns_saldo_inicial',
     'FACT.custrecord_cryo_razonsocial as razon_social',
     'FACT.custrecord_cryo_rfc as rfc_fac',
     'FACT.addr1 as dir_fac',
@@ -473,7 +491,133 @@ function buildContratoRow(raw: RawContratoReportRow): ContratoReportRow {
     estatus_cobranza: (raw.ns_estatus_cobranza && MX_ESTATUS_COBRANZA_LABELS[raw.ns_estatus_cobranza]) || null,
     metal: (raw.ns_metal && CLASIFICADOR_METAL_LABELS[raw.ns_metal]) || null,
     pago_automatico: ynFromNetSuiteFlag(raw.ns_pago_automatico),
+    saldo_inicial: ynFromNetSuiteFlag(raw.ns_saldo_inicial),
+    factura_inicial: null,
+    factura_sin_iva: null,
+    factura_con_iva: null,
+    docs_completos: null,
   };
+}
+
+const MEXICO_SUBSIDIARY_IDS = new Set(['5', '7', '8']);
+const LOOKUP_CHUNK_SIZE = 1000;
+
+function chunks<T>(items: T[]): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += LOOKUP_CHUNK_SIZE) result.push(items.slice(i, i + LOOKUP_CHUNK_SIZE));
+  return result;
+}
+
+interface ProcesamientoFacturaRow {
+  contrato: string;
+  factura: string;
+  importe: number | null;
+}
+
+export interface FacturaInicialContract {
+  netsuite_id: string;
+  name: string | null;
+  folio_sistema_anterior: string | null;
+  subsidiaria_id: string | null;
+}
+
+export interface FacturaInicialInfo {
+  factura_inicial: string | null;
+  factura_sin_iva: number | null;
+  factura_con_iva: number | null;
+  docs_completos: boolean | null;
+}
+
+/**
+ * The "factura inicial" columns (the processing-fee invoice: a contract's Procesamiento partidas
+ * carry their invoice in custrecord_cryo_facturarelacionada) and Docs Completos, per contract.
+ * Every invoiced Procesamiento partida is read in one go rather than per contract - there are only
+ * ~2k of them (confirmed live), so even the unfiltered export costs one small query. Shared with
+ * the generic Contratos grid (contractListRepository.ts).
+ */
+export async function getFacturaInicial(db: Knex, legacyDb: Knex, contracts: FacturaInicialContract[]): Promise<Map<string, FacturaInicialInfo>> {
+  const wanted = new Set(contracts.map((c) => c.netsuite_id));
+  const procesamiento = ((await db('netsuite_partidas')
+    .where('isinactive', 'F')
+    .whereNotNull('custrecord_cryo_facturarelacionada')
+    .whereRaw("UPPER(custrecord_cryo_concepto) LIKE '%PROCESAMIENTO%'")
+    .select(
+      'custrecord_cryo_numcontrato as contrato',
+      'custrecord_cryo_facturarelacionada as factura',
+      db.raw('TRY_CONVERT(float, custrecord_cryo_importepartida) as importe'),
+    )) as ProcesamientoFacturaRow[]).filter((p) => wanted.has(p.contrato));
+
+  const facturaIds = Array.from(new Set(procesamiento.map((p) => p.factura)));
+  const invoices = new Map<string, { tranid: string | null; total: number }>();
+  const partidasTotalByFactura = new Map<string, number>();
+  for (const chunk of chunks(facturaIds)) {
+    const [invoiceRows, sumRows] = await Promise.all([
+      db('netsuite_invoices').whereIn('netsuite_id', chunk).select('netsuite_id', 'tranid', db.raw('TRY_CONVERT(float, total) as total')) as Promise<
+        Array<{ netsuite_id: string; tranid: string | null; total: number | null }>
+      >,
+      db('netsuite_partidas')
+        .whereIn('custrecord_cryo_facturarelacionada', chunk)
+        .where('isinactive', 'F')
+        .groupBy('custrecord_cryo_facturarelacionada')
+        .select('custrecord_cryo_facturarelacionada as factura', db.raw('SUM(TRY_CONVERT(float, custrecord_cryo_importepartida)) as importe')) as Promise<
+        Array<{ factura: string; importe: number | null }>
+      >,
+    ]);
+    for (const invoice of invoiceRows) invoices.set(invoice.netsuite_id, { tranid: invoice.tranid, total: Number(invoice.total ?? 0) });
+    for (const sum of sumRows) partidasTotalByFactura.set(sum.factura, Number(sum.importe ?? 0));
+  }
+
+  // contrato -> factura -> its Procesamiento partidas' amount on that invoice
+  const byContrato = new Map<string, Map<string, number>>();
+  for (const p of procesamiento) {
+    const facturas = byContrato.get(p.contrato) ?? new Map<string, number>();
+    facturas.set(p.factura, (facturas.get(p.factura) ?? 0) + Number(p.importe ?? 0));
+    byContrato.set(p.contrato, facturas);
+  }
+
+  const mexicoContracts = contracts.filter((c) => MEXICO_SUBSIDIARY_IDS.has(c.subsidiaria_id ?? ''));
+  const legacy = await getLegacyContractMatches(
+    legacyDb,
+    mexicoContracts.map((c) => ({ netsuite_id: c.netsuite_id, name: c.name, folio_sistema_anterior: c.folio_sistema_anterior })),
+  );
+  const isMexico = new Set(mexicoContracts.map((c) => c.netsuite_id));
+
+  const result = new Map<string, FacturaInicialInfo>();
+  for (const contract of contracts) {
+    const info: FacturaInicialInfo = {
+      factura_inicial: null,
+      factura_sin_iva: null,
+      factura_con_iva: null,
+      docs_completos: isMexico.has(contract.netsuite_id) ? Boolean(legacy.get(contract.netsuite_id)?.docs_completos) : null,
+    };
+    result.set(contract.netsuite_id, info);
+    const facturas = byContrato.get(contract.netsuite_id);
+    if (!facturas) continue;
+    let sinIva = 0;
+    let conIva: number | null = null;
+    const tranids: string[] = [];
+    for (const [factura, importe] of facturas) {
+      sinIva += importe;
+      const invoice = invoices.get(factura);
+      if (!invoice) continue; // invoice not synced yet - its amount with IVA is unknown
+      tranids.push(invoice.tranid ?? factura);
+      const partidasTotal = partidasTotalByFactura.get(factura) ?? 0;
+      conIva = (conIva ?? 0) + (partidasTotal > 0 ? (invoice.total * importe) / partidasTotal : 0);
+    }
+    info.factura_inicial = tranids.length > 0 ? tranids.join(', ') : null;
+    info.factura_sin_iva = sinIva;
+    info.factura_con_iva = conIva;
+  }
+  return result;
+}
+
+async function addFacturaInicial(db: Knex, legacyDb: Knex, rows: ContratoReportRow[], subsidiariaById: Map<string, string | null>): Promise<void> {
+  const facturas = await getFacturaInicial(
+    db,
+    legacyDb,
+    rows.map((r) => ({ netsuite_id: r.netsuite_id, name: r.contrato, folio_sistema_anterior: r.folio_sistema_anterior, subsidiaria_id: subsidiariaById.get(r.netsuite_id) ?? null })),
+  );
+  for (const row of rows) Object.assign(row, facturas.get(row.netsuite_id));
 }
 
 export interface ContratosReportParams {
@@ -481,22 +625,50 @@ export interface ContratosReportParams {
   pageSize: unknown;
   search: unknown;
   subsidiary: unknown;
+  /** Fecha de alta (custrecord_cryo_finicio) range, YYYY-MM-DD, each end optional and inclusive. */
+  dateFrom: unknown;
+  dateTo: unknown;
+  /** 'si' / 'no' - custrecord_cryo_saldo_inicial; anything else = both. */
+  saldoInicial: unknown;
+  /** '1' = fill the factura inicial + Docs Completos columns (see addFacturaInicial). */
+  factura: unknown;
+}
+
+function isDateOnly(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+const FECHA_ALTA_DATE_SQL = 'TRY_CONVERT(date, C.custrecord_cryo_finicio, 103)';
+
+function buildFilteredQuery(db: Knex, params: Omit<ContratosReportParams, 'page' | 'pageSize'>, search: string, restrictSubsidiaries: Set<string> | null): Knex.QueryBuilder {
+  const requestedSubsidiaries = parseSubsidiaryFilter(params.subsidiary);
+  const qb = baseContratosQuery(db, search);
+  if (restrictSubsidiaries !== null) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
+  if (requestedSubsidiaries.size > 0) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, requestedSubsidiaries);
+  if (isDateOnly(params.dateFrom)) qb.whereRaw(`${FECHA_ALTA_DATE_SQL} >= ?`, [params.dateFrom]);
+  if (isDateOnly(params.dateTo)) qb.whereRaw(`${FECHA_ALTA_DATE_SQL} <= ?`, [params.dateTo]);
+  if (params.saldoInicial === 'si') qb.where('C.custrecord_cryo_saldo_inicial', 'T');
+  if (params.saldoInicial === 'no') qb.where('C.custrecord_cryo_saldo_inicial', 'F');
+  return qb;
+}
+
+async function buildRows(db: Knex, legacyDb: Knex, rawRows: RawContratoReportRow[], withFactura: boolean): Promise<ContratoReportRow[]> {
+  const rows = rawRows.map(buildContratoRow);
+  if (withFactura) await addFacturaInicial(db, legacyDb, rows, new Map(rawRows.map((r) => [r.netsuite_id, r.subsidiaria_id])));
+  return rows;
 }
 
 export async function getContratosReportPaged(
   db: Knex,
+  legacyDb: Knex,
   params: ContratosReportParams,
   restrictSubsidiaries: Set<string> | null,
 ): Promise<Paginated<ContratoReportRow>> {
   const page = clampPage(params.page);
   const pageSize = clampPageSize(params.pageSize);
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const requestedSubsidiaries = parseSubsidiaryFilter(params.subsidiary);
 
-  const qb = baseContratosQuery(db, search);
-  if (restrictSubsidiaries !== null) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
-  if (requestedSubsidiaries.size > 0) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, requestedSubsidiaries);
-
+  const qb = buildFilteredQuery(db, params, search, restrictSubsidiaries);
   const countQb = qb.clone().clearSelect().count('* as count').first();
   const rowsQb = selectContratoColumns(addOutputJoins(qb, search), db)
     .orderBy('C.lastmodifieddate_dt', 'desc')
@@ -506,22 +678,19 @@ export async function getContratosReportPaged(
   const [rawRows, countRow] = await Promise.all([rowsQb as Promise<RawContratoReportRow[]>, countQb as Promise<{ count: number } | undefined>]);
   const total = Number(countRow?.count ?? 0);
 
-  return { data: rawRows.map(buildContratoRow), page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  const data = await buildRows(db, legacyDb, rawRows, params.factura === '1');
+  return { data, page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 }
 
 /** Unpaginated - the whole filtered set, for CSV export (same convention as Cuentas' getCuentasForExport). */
 export async function getContratosReportForExport(
   db: Knex,
-  params: Pick<ContratosReportParams, 'search' | 'subsidiary'>,
+  legacyDb: Knex,
+  params: Omit<ContratosReportParams, 'page' | 'pageSize'>,
   restrictSubsidiaries: Set<string> | null,
 ): Promise<ContratoReportRow[]> {
   const search = typeof params.search === 'string' ? params.search.trim() : '';
-  const requestedSubsidiaries = parseSubsidiaryFilter(params.subsidiary);
-
-  const qb = baseContratosQuery(db, search);
-  if (restrictSubsidiaries !== null) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
-  if (requestedSubsidiaries.size > 0) applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, requestedSubsidiaries);
-
+  const qb = buildFilteredQuery(db, params, search, restrictSubsidiaries);
   const rawRows = (await selectContratoColumns(addOutputJoins(qb, search), db).orderBy('C.lastmodifieddate_dt', 'desc')) as RawContratoReportRow[];
-  return rawRows.map(buildContratoRow);
+  return buildRows(db, legacyDb, rawRows, params.factura === '1');
 }

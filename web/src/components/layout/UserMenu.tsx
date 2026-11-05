@@ -74,9 +74,14 @@ export function UserMenu() {
         <div className={styles.dropdown} role="menu">
           <div className={styles.dropdownEmail}>{account.username}</div>
           {data?.isAdmin ? (
-            <Link to="/admin/users" className={styles.adminLink} role="menuitem" onClick={() => setOpen(false)}>
-              Administrar usuarios
-            </Link>
+            <>
+              <Link to="/admin/users" className={styles.adminLink} role="menuitem" onClick={() => setOpen(false)}>
+                Administrar usuarios
+              </Link>
+              <Link to="/admin/pricing" className={styles.adminLink} role="menuitem" onClick={() => setOpen(false)}>
+                Descuentos por años
+              </Link>
+            </>
           ) : null}
           <button type="button" className={styles.signOutButton} role="menuitem" onClick={handleSignOut}>
             Cerrar sesión

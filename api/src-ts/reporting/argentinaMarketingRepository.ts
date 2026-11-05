@@ -2,7 +2,7 @@ import type { Knex } from 'knex';
 import {
   addToSummary,
   emptySummary,
-  type MotivoBreakdownRow,
+  type LeadDetailRow,
   type ProspectoQualificationCategory,
   type ProspectoQualificationResult,
   type QualificationByMonthRow,
@@ -34,26 +34,24 @@ export type ArgentinaMarca = (typeof ARGENTINA_MARCA_IDS)[number];
 const ONLINE_CANAL_IDS = ['5', '15', '16', '17'];
 
 /**
- * custentity_cryo_motivoperdida, mapped onto México's same three buckets:
+ * custentity_cryo_motivoperdida, mapped onto three of México's categories. Argentina is NOT on
+ * México's lead scoring workbook (classifyLead in marketingRepository.ts) - this is still the
+ * motivo-only classification, unchanged:
  *  - No contactado: 4 "No se logro contacto/ No dio respuesta", 7 "Dato equivocado"
- *  - Lead no calificado: 5 "No esta en embarazo", 8 "No le interesa", 10 "Prospecto duplicado",
- *    12 "Ya era cliente", 17 "No autorizó compartir sus datos" - same idea as México's "No está
- *    embarazada" / "No está interesado" / "Prospecto Duplicado" / "Nos buscó para pagar su
- *    anualidad" / "No solicitó información"
- *  - Calificados: every other reason (price, competitor, baby already born, public hospital...)
- *    or none at all (still open, or converted)
+ *  - No calificado: 5 "No esta en embarazo", 8 "No le interesa", 10 "Prospecto duplicado",
+ *    12 "Ya era cliente", 17 "No autorizó compartir sus datos"
+ *  - Prospecto: every other reason (price, competitor, baby already born, public hospital...) or
+ *    none at all (still open, or converted)
  */
 const NO_CONTACTADO_MOTIVO_IDS = ['4', '7'];
-const LEAD_NO_CALIFICADO_MOTIVO_IDS = ['5', '8', '10', '12', '17'];
+const NO_CALIFICADO_MOTIVO_IDS = ['5', '8', '10', '12', '17'];
 
 function categorizeMotivo(motivoId: string | null): ProspectoQualificationCategory {
-  if (motivoId === null) return 'Calificados';
+  if (motivoId === null) return 'Prospecto';
   if (NO_CONTACTADO_MOTIVO_IDS.includes(motivoId)) return 'No contactado';
-  if (LEAD_NO_CALIFICADO_MOTIVO_IDS.includes(motivoId)) return 'Lead no calificado';
-  return 'Calificados';
+  if (NO_CALIFICADO_MOTIVO_IDS.includes(motivoId)) return 'No calificado';
+  return 'Prospecto';
 }
-
-const SIN_MOTIVO_LABEL = '(Sin motivo de pérdida - abierto o ya convertido a venta)';
 
 const sqlList = (ids: string[]) => ids.map((id) => `'${id}'`).join(', ');
 
@@ -104,9 +102,7 @@ export async function getArgentinaSalesByMonth(db: Knex, dateFrom: string, dateT
 interface RawLeadMotivoRow {
   anio: number;
   mes: number;
-  marca: string | null;
   motivo_id: string | null;
-  motivo: string | null;
   es_online: number;
   cantidad: number | string;
 }
@@ -114,8 +110,7 @@ interface RawLeadMotivoRow {
 /**
  * Every Argentina lead in the range (by dategrosslead - the date it entered as a lead), qualified by
  * its motivo de pérdida and split online/offline by canal de ingreso. Same result shape as México's
- * getProspectoQualification - in `motivos`, id_empresa carries the marca id (4 Biocells, 9 Cryolab)
- * and id_noventa the motivo id.
+ * getProspectoQualification.
  */
 export async function getArgentinaLeadQualification(
   db: Knex,
@@ -131,19 +126,14 @@ export async function getArgentinaLeadQualification(
     .select(
       db.raw('YEAR(L.dategrosslead) as anio'),
       db.raw('MONTH(L.dategrosslead) as mes'),
-      'L.custentity_nso_lead_marca as marca',
       'L.custentity_cryo_motivoperdida as motivo_id',
-      'L.motivoperdida_nombre as motivo',
       db.raw(`${onlineSql} as es_online`),
       db.raw('COUNT(*) as cantidad'),
     )
-    .groupByRaw(
-      `YEAR(L.dategrosslead), MONTH(L.dategrosslead), L.custentity_nso_lead_marca, L.custentity_cryo_motivoperdida, L.motivoperdida_nombre, ${onlineSql}`,
-    )) as RawLeadMotivoRow[];
+    .groupByRaw(`YEAR(L.dategrosslead), MONTH(L.dategrosslead), L.custentity_cryo_motivoperdida, ${onlineSql}`)) as RawLeadMotivoRow[];
 
   const summary = emptySummary();
   const byMonth = new Map<string, QualificationByMonthRow>();
-  const motivos: MotivoBreakdownRow[] = [];
 
   for (const row of rows) {
     const cantidad = Number(row.cantidad);
@@ -156,28 +146,52 @@ export async function getArgentinaLeadQualification(
     const monthBucket = byMonth.get(monthKey) ?? { anio: row.anio, mes: row.mes, canal, ...emptySummary() };
     addToSummary(monthBucket, categoria, cantidad);
     byMonth.set(monthKey, monthBucket);
-
-    // One breakdown row per (month, marca, motivo) - online/offline are merged here, as in México.
-    const existing = motivos.find(
-      (m) => m.anio === row.anio && m.mes === row.mes && m.id_empresa === Number(row.marca) && m.id_noventa === (row.motivo_id === null ? null : Number(row.motivo_id)),
-    );
-    if (existing) {
-      existing.cantidad += cantidad;
-    } else {
-      motivos.push({
-        anio: row.anio,
-        mes: row.mes,
-        id_empresa: Number(row.marca),
-        id_noventa: row.motivo_id === null ? null : Number(row.motivo_id),
-        motivo: row.motivo ?? SIN_MOTIVO_LABEL,
-        categoria,
-        cantidad,
-      });
-    }
   }
 
   const sortedByMonth = Array.from(byMonth.values()).sort((a, b) => a.anio - b.anio || a.mes - b.mes || a.canal.localeCompare(b.canal));
-  motivos.sort((a, b) => a.anio - b.anio || a.mes - b.mes || b.cantidad - a.cantidad);
 
-  return { summary, byMonth: sortedByMonth, motivos };
+  return { summary, byMonth: sortedByMonth, filterFailures: null };
+}
+
+const MARCA_LABELS: Record<string, string> = { '4': 'Biocells', '9': 'Cryolab' };
+
+/** Every Argentina lead in the range, newest first, through the same categorizeMotivo as the charts.
+ * The reason is only ever the motivo - Argentina records no attempts or due date to explain more with. */
+export async function getArgentinaLeadDetails(db: Knex, dateFrom: string, dateTo: string, marca: ArgentinaMarca | null): Promise<LeadDetailRow[]> {
+  const rows = (await db('netsuite_leads as L')
+    .where('L.subsidiary', ARGENTINA_SUBSIDIARY)
+    .whereIn('L.custentity_nso_lead_marca', marca ? [marca] : [...ARGENTINA_MARCA_IDS])
+    .whereBetween('L.dategrosslead', [dateFrom, dateTo])
+    .orderBy('L.dategrosslead', 'desc')
+    .select(
+      'L.netsuite_id',
+      'L.entityid',
+      'L.dategrosslead',
+      'L.custentity_nso_lead_marca as marca',
+      'L.custentity_cryo_canalingreso as canal_id',
+      'L.canalingreso_nombre',
+      'L.estadolead_nombre',
+      'L.custentity_cryo_motivoperdida as motivo_id',
+      'L.motivoperdida_nombre',
+    )) as Array<Record<string, string | null>>;
+
+  return rows.map((row) => {
+    const categoria = categorizeMotivo(row.motivo_id);
+    return {
+      id: String(row.netsuite_id),
+      fecha_captura: row.dategrosslead,
+      lead: row.entityid,
+      empresa: MARCA_LABELS[String(row.marca)] ?? String(row.marca),
+      canal: row.canal_id !== null && ONLINE_CANAL_IDS.includes(row.canal_id) ? 'online' : 'offline',
+      canal_nombre: row.canalingreso_nombre,
+      etapa: row.estadolead_nombre,
+      intentos: null,
+      fecha_probable: null,
+      ciudad: null,
+      vendedor: null,
+      motivo: row.motivoperdida_nombre,
+      categoria,
+      razon: row.motivo_id === null ? 'Sin motivo de pérdida: abierto o ya convertido a venta.' : `Motivo de pérdida: ${row.motivoperdida_nombre}.`,
+    };
+  });
 }

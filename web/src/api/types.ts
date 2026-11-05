@@ -55,7 +55,8 @@ export type PermissionKey =
   | 'cobranza_commissions'
   | 'cobranza_goals'
   | 'marketing_inputs'
-  | 'postventa';
+  | 'postventa'
+  | 'administracion';
 
 export interface EntitySummary {
   key: ReportEntityKey;
@@ -120,9 +121,128 @@ export interface EntitiesResponse {
    * contract/otros-contrato as vendedor. That second group only ever sees their own commissions
    * (enforced server-side), never the full contracts entity. */
   canAccessCommissions: boolean;
+  /** Plan de trabajo: gerentes (full commissions access) and vendedores planning their own month. */
+  canAccessWorkPlan: boolean;
   canAccessProspectos: boolean;
   canAccessCobranzaCommissions: boolean;
   canAccessPostventa: boolean;
+  /** Reporte Administración - the standalone 'administracion' grant (or admin). */
+  canAccessAdministracion: boolean;
+}
+
+export interface AdministracionStatusCount {
+  estatus: string;
+  label: string;
+  blood: number;
+  tissue: number;
+}
+
+export interface AdministracionBrandStorage {
+  subsidiaria: string;
+  brand: string;
+  country: string;
+  /** One entry per servicio status - each status is its own count, never summed. */
+  byStatus: AdministracionStatusCount[];
+}
+
+export interface AdministracionFcellsCount {
+  country: string;
+  category: string;
+  status: string;
+  n: number;
+}
+
+export interface AdministracionPlacentaCount {
+  country: string;
+  status: string;
+  n: number;
+}
+
+export interface AdministracionChurnRow {
+  subsidiaria: string;
+  brand: string;
+  inicio: number;
+  abandonos: number;
+  tasaAbandono: number | null;
+  nuevos: number;
+  final: number;
+  tasaCrecimiento: number | null;
+  abandonosVsNuevos: number | null;
+}
+
+export interface AdministracionReport {
+  month: number;
+  year: number;
+  storage: {
+    cutoff: string;
+    brands: AdministracionBrandStorage[];
+    fcells: AdministracionFcellsCount[];
+    placenta: AdministracionPlacentaCount[];
+  };
+  churn: { from: string; to: string; rows: AdministracionChurnRow[] };
+}
+
+// Plan de trabajo - see api/src-ts/reporting/salesWorkPlanRepository.ts.
+export const WORK_PLAN_ACTIVITY_TYPES = ['Visita médica', 'Evento', 'Curso psicoprofiláctico', 'Plática doulas', 'Capacitación enfermería'] as const;
+export const WORK_PLAN_VISIT_TYPE = 'Visita médica';
+
+export interface WorkPlanActivityInput {
+  fecha: string;
+  hora: string | null;
+  tipo: string;
+  medico_netsuite_id: string | null;
+  medico_nombre: string | null;
+  hospital_netsuite_id: string | null;
+  hospital_nombre: string | null;
+  especialidad: string | null;
+  motivo: string | null;
+  evento_nombre: string | null;
+  sede: string | null;
+  asistentes: number | null;
+  requerimientos: string[];
+  notas: string | null;
+}
+
+export interface WorkPlanActivity extends WorkPlanActivityInput {
+  id: number;
+}
+
+export interface WorkPlan {
+  vendedor_id: string;
+  vendedor_nombre: string;
+  year: number;
+  month: number;
+  puesto: string | null;
+  /** Free-text objetivos set by the gerencia for this month. */
+  objetivos: string[];
+  /** Venta goals from the vendedor's niveles (first tier, with IVA) - never captured by hand. */
+  venta: {
+    nivel_contratos: string | null;
+    nivel_otros_contratos: string | null;
+    core: number | null;
+    genetica: number | null;
+  };
+  activities: WorkPlanActivity[];
+}
+
+export interface WorkPlanVendedor {
+  netsuite_id: string;
+  nombre: string;
+  nivel_contratos: string | null;
+  nivel_otros_contratos: string | null;
+}
+
+export interface WorkPlanResponse {
+  success: true;
+  /** Null for a gerente who hasn't picked a vendedor yet. */
+  data: WorkPlan | null;
+  isGerente: boolean;
+  vendedores: WorkPlanVendedor[];
+}
+
+export interface WorkPlanCatalogOption {
+  netsuite_id: string;
+  nombre: string;
 }
 
 // Postventa status tiles - see api/src-ts/reporting/postventaRepository.ts for exactly how each
@@ -380,6 +500,14 @@ export interface UserPermissionUpdate {
   isAdmin: boolean;
   allowedEntities: PermissionKey[];
   allowedSubsidiaries: string[];
+}
+
+/** One app_pricing row as the admin pricing screen sees it - discount is a percentage (0-50). */
+export interface PricingRow {
+  id: number;
+  years: number;
+  discount: number | null;
+  notas: string | null;
 }
 
 export interface ContractDossierHeader {
@@ -774,12 +902,21 @@ export interface MarketingSalesByMonthRow {
   total: number;
 }
 
-export type ProspectoQualificationCategory = 'Calificados' | 'No contactado' | 'Lead no calificado';
+export type ProspectoQualificationCategory =
+  | 'Prospecto'
+  | 'Contactado: datos incompletos'
+  | 'En intento'
+  | 'No contactado'
+  | 'No calificado'
+  | 'Lead inválido';
 
 export interface ProspectoQualificationSummary {
-  calificados: number;
+  prospecto: number;
+  datos_incompletos: number;
+  en_intento: number;
   no_contactado: number;
-  lead_no_calificado: number;
+  no_calificado: number;
+  lead_invalido: number;
   total: number;
 }
 
@@ -791,27 +928,14 @@ export interface QualificationByMonthRow extends ProspectoQualificationSummary {
   canal: 'online' | 'offline';
 }
 
-/** One distinct (year, month, empresa, motivo) combination actually present in the date range,
- * with its resolved category - shown in full so it's always clear exactly which raw
- * Cryo.dbo.noventa row rolled into which bucket, per empresa and per month (the same motivo name
- * can be a different ID_NoVenta per empresa - see the repository file-level comment). */
-export interface MarketingMotivoBreakdownRow {
-  anio: number;
-  mes: number;
-  id_empresa: number;
-  id_noventa: number | null;
-  motivo: string;
-  categoria: ProspectoQualificationCategory;
-  cantidad: number;
-}
-
 export interface MarketingReportResponse {
   success: true;
   salesByMonth: MarketingSalesByMonthRow[];
   qualification: {
     summary: ProspectoQualificationSummary;
     byMonth: QualificationByMonthRow[];
-    motivos: MarketingMotivoBreakdownRow[];
+    /** No calificado leads per mandatory filter. México only - Argentina isn't on the workbook's filters. */
+    filterFailures: { f1: number; f2: number; f3: number } | null;
   };
   /** Captured months (inversión digital + funnel metas) the date range touches - see
    * api/src-ts/reporting/marketingInputsRepository.ts. Months never captured are absent. */
@@ -821,7 +945,54 @@ export interface MarketingReportResponse {
 }
 
 /** Country of the Reporte de Marketing - México (legacy CRM) or Argentina (NetSuite). */
+/** Core (CryoWeb contracts) and genetics (NetSuite Otros Contratos) sales of one ejecutivo in one zona -
+ * see api/src-ts/reporting/comercialVentasRepository.ts. Amounts in MXN with IVA. */
+export interface VentasZonaEjecutivoRow {
+  zona: string;
+  ejecutivo: string;
+  core_unidades: number;
+  core_monto: number;
+  genetica_unidades: number;
+  genetica_monto: number;
+}
+
+export interface ComercialVentasResponse {
+  success: true;
+  rows: VentasZonaEjecutivoRow[];
+  /** Sales left out because their amount comes to $0. */
+  core_sin_monto: number;
+  genetica_sin_monto: number;
+}
+
 export type MarketingPais = 'MX' | 'AR';
+
+/** One lead of the classification grid, with why it landed in its category. intentos, fecha_probable,
+ * ciudad and vendedor are México only. */
+export interface MarketingLeadRow {
+  id: string;
+  fecha_captura: string | null;
+  lead: string | null;
+  empresa: string;
+  canal: 'online' | 'offline';
+  canal_nombre: string | null;
+  etapa: string | null;
+  intentos: number | null;
+  fecha_probable: string | null;
+  ciudad: string | null;
+  vendedor: string | null;
+  motivo: string | null;
+  categoria: ProspectoQualificationCategory;
+  razon: string;
+}
+
+export interface MarketingLeadsResponse {
+  success: true;
+  data: MarketingLeadRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
 
 /** Hand-captured monthly figures for one country's funnel - that country's currency for money,
  * counts for the metas. */
@@ -1133,6 +1304,14 @@ export interface ContratoReportRow {
   estatus_cobranza: string | null;
   metal: string | null;
   pago_automatico: boolean | null;
+  /** True = a contract migrated with its opening balance (only anualidades, no processing invoice). */
+  saldo_inicial: boolean | null;
+  /** The factura inicial fields below are only filled when requested with factura=1. */
+  factura_inicial: string | null;
+  factura_sin_iva: number | null;
+  factura_con_iva: number | null;
+  /** Null outside Mexico. */
+  docs_completos: boolean | null;
 }
 
 export interface ContratosReportResponse {
@@ -1203,6 +1382,9 @@ export interface CobranzaGoalsForMonth {
   people: CobranzaGoalPerson[];
   /** Permanently left out of goals (every month) - never given a goal, never charted. */
   excluded: CobranzaGoalExcludedPerson[];
+  /** The month the exclusions shown were stored for - this month once edited, else the earlier
+   * month they're carried over from (null when none were ever set). */
+  exclusion_source: { year: number; month: number } | null;
   /** The month the esquemas shown were stored for - this month once configured, else the earlier
    * month they're carried over from (null when none were ever set). */
   scheme_source: { year: number; month: number } | null;

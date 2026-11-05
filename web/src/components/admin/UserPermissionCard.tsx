@@ -139,6 +139,14 @@ export function UserPermissionCard({ user }: UserPermissionCardProps) {
               />
               Postventa (reporte de tickets por estatus)
             </label>
+            <label className={styles.checkItem}>
+              <input
+                type="checkbox"
+                checked={entities.includes('administracion')}
+                onChange={() => setEntities((prev) => toggle(prev, 'administracion'))}
+              />
+              Reporte Administración (almacenamiento y abandonos)
+            </label>
           </div>
         </div>
         <div>

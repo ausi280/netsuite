@@ -295,8 +295,9 @@ export async function setCobranzaGoalOverrideRoute(req: Request, res: Response):
   res.status(200).json({ success: true });
 }
 
-/** PUT /api/reports/cobranza-comisiones/metas/employees/:id/exclusion - body { excluded: boolean }.
- * Permanently removes a person from (or restores them to) the goals list, for every month. */
+/** PUT /api/reports/cobranza-comisiones/metas/employees/:id/exclusion - body { month, year,
+ * excluded: boolean }. Removes a person from (or restores them to) the goals list for that month
+ * only - see cobranzaGoalsRepository.ts's setCobranzaGoalExclusion for how months are kept separate. */
 export async function setCobranzaGoalExclusionRoute(req: Request, res: Response): Promise<void> {
   if (!isCobranzaGoalsEditAllowed(req.permissions)) {
     res.status(403).json({ success: false, message: 'No tienes permiso para modificar esta configuración.' });
@@ -304,13 +305,15 @@ export async function setCobranzaGoalExclusionRoute(req: Request, res: Response)
   }
 
   const employeeId = paramString(req.params.id);
-  const excluded = (req.body ?? {}).excluded;
-  if (!employeeId || typeof excluded !== 'boolean') {
-    res.status(400).json({ success: false, message: 'Provide excluded (boolean).' });
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const period = parseMonthYearBody(body);
+  const excluded = body.excluded;
+  if (!employeeId || !period || typeof excluded !== 'boolean') {
+    res.status(400).json({ success: false, message: 'Provide month (1-12), year and excluded (boolean).' });
     return;
   }
 
-  await setCobranzaGoalExclusion(knex, employeeId, excluded);
+  await setCobranzaGoalExclusion(knex, employeeId, period.year, period.month, excluded);
   res.status(200).json({ success: true });
 }
 

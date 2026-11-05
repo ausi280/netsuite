@@ -24,3 +24,13 @@
 .graphsLink:hover {
   text-decoration: underline;
 }
+
+.facturaToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--color-neutral-900);
+  cursor: pointer;
+}

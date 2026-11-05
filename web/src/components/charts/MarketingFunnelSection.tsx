@@ -294,7 +294,7 @@ function buildStages(funnel: MarketingFunnel, canal: FunnelCanal): Stage[] {
     },
     {
       key: 'prospecto',
-      label: 'Prospecto (calificado)',
+      label: 'Prospecto',
       shortLabel: 'Prospecto',
       value: figures.prospectos[0],
       meta: figures.prospectos[1],
@@ -383,8 +383,8 @@ export function MarketingFunnelSection({
         <div>
           <h2 className={styles.title}>Funnel de Marketing · {config.label}</h2>
           <p className={styles.subtitle}>
-            Del lead a la venta en el periodo seleccionado, por canal - ancho de cada barra proporcional a los leads de su canal. Leads y prospectos
-            (calificados) por fecha de captura, clientes por fecha de venta.
+            Del lead a la venta en el periodo seleccionado, por canal - ancho de cada barra proporcional a los leads de su canal. Leads válidos y
+            prospectos por fecha de captura, clientes por fecha de venta.
           </p>
         </div>
         {canEditInputs ? (

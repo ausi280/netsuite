@@ -41,10 +41,14 @@ export function ContratosReportPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [subsidiary, setSubsidiary] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState({ from: '', to: '' });
+  const [saldoInicial, setSaldoInicial] = useState('');
+  const [showFactura, setShowFactura] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
 
-  const { data, isLoading, isError, error, refetch } = useContratosReport(page, pageSize, search, subsidiary);
+  const filters = { search, subsidiary, dateFrom: dateRange.from, dateTo: dateRange.to, saldoInicial, factura: showFactura };
+  const { data, isLoading, isError, error, refetch } = useContratosReport({ page, pageSize, ...filters });
 
   function handleSearchChange(value: string) {
     setSearch(value);
@@ -53,6 +57,16 @@ export function ContratosReportPage() {
 
   function handleSubsidiaryChange(ids: string[]) {
     setSubsidiary(ids);
+    setPage(1);
+  }
+
+  function handleDateRangeChange(range: { from: string; to: string }) {
+    setDateRange(range);
+    setPage(1);
+  }
+
+  function handleSaldoInicialChange(value: string) {
+    setSaldoInicial(value);
     setPage(1);
   }
 
@@ -66,7 +80,7 @@ export function ContratosReportPage() {
     setExportError(null);
     try {
       const token = await getAccessToken();
-      const blob = await fetchContratosReportExportCsv(token, { search, subsidiary });
+      const blob = await fetchContratosReportExportCsv(token, filters);
       downloadBlob(blob, 'reporte-contratos.csv');
     } catch (err) {
       setExportError(err instanceof Error ? err.message : 'No se pudo exportar el CSV.');
@@ -75,10 +89,22 @@ export function ContratosReportPage() {
     }
   }
 
+  // Processing-fee invoice ("factura inicial") - only fetched and shown with the checkbox on.
+  const facturaColumns: SimpleColumn<ContratoReportRow>[] = showFactura
+    ? [
+        { key: 'factura_inicial', header: 'Factura inicial (procesamiento)', render: (r) => r.factura_inicial || '—' },
+        { key: 'factura_sin_iva', header: 'Monto factura sin IVA', render: (r) => (r.factura_sin_iva !== null ? formatCurrency(r.factura_sin_iva, null) : '—') },
+        { key: 'factura_con_iva', header: 'Monto factura con IVA', render: (r) => (r.factura_con_iva !== null ? formatCurrency(r.factura_con_iva, null) : '—') },
+        { key: 'docs_completos', header: 'Documentos completos', render: (r) => yesNo(r.docs_completos) },
+        { key: 'saldo_inicial', header: 'Saldo inicial', render: (r) => yesNo(r.saldo_inicial) },
+      ]
+    : [];
+
   const columns: SimpleColumn<ContratoReportRow>[] = [
     { key: 'contrato', header: 'N° contrato', render: (r) => r.contrato || '—' },
     { key: 'folio_sistema_anterior', header: 'N° contrato sistema anterior', render: (r) => r.folio_sistema_anterior || '—' },
     { key: 'fecha_alta', header: 'Fecha de alta', render: (r) => formatDate(r.fecha_alta) },
+    ...facturaColumns,
     { key: 'estado_contrato', header: 'Estado contrato', render: (r) => r.estado_contrato || '—' },
     { key: 'titular_contrato', header: 'Titular contrato', render: (r) => r.titular_contrato || '—' },
     { key: 'especimen', header: 'Espécimen', render: (r) => r.especimen || '—' },
@@ -158,9 +184,24 @@ export function ContratosReportPage() {
         onSearchChange={handleSearchChange}
         totalLabel={totalLabel}
         subsidiaryFilter={{ value: subsidiary, options: KNOWN_SUBSIDIARY_IDS, onChange: handleSubsidiaryChange }}
+        statusFilter={{
+          value: saldoInicial,
+          options: [
+            { value: 'no', label: 'Saldo inicial: No' },
+            { value: 'si', label: 'Saldo inicial: Sí (solo anualidades)' },
+          ],
+          onChange: handleSaldoInicialChange,
+          ariaLabel: 'Filtrar por saldo inicial',
+          allLabel: 'Saldo inicial: Todos',
+        }}
+        dateRangeFilter={{ from: dateRange.from, to: dateRange.to, onChange: handleDateRangeChange }}
         onExport={handleExport}
         isExporting={isExporting}
       />
+      <label className={styles.facturaToggle}>
+        <input type="checkbox" checked={showFactura} onChange={(event) => setShowFactura(event.target.checked)} />
+        Mostrar factura inicial (cuota de procesamiento)
+      </label>
       {isLoading ? <LoadingState label="Cargando contratos..." /> : null}
       {isError ? (
         <ErrorState message={error instanceof Error ? error.message : 'No se pudo cargar el reporte de contratos.'} onRetry={() => refetch()} />

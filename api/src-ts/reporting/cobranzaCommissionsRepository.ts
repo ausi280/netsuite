@@ -178,7 +178,11 @@ interface RawRow {
   pagado_domiciliado: number;
 }
 
-const SUBSIDIARY_COLUMN = 'P.custrecord_cryo_subsidiaria_partida';
+// The partida's own subsidiaria, falling back to its contract's - custrecord_cryo_subsidiaria_partida
+// is null on ~12.5k invoiced partidas (confirmed live, mostly Mexico 5/7/8), which silently dropped
+// them from any subsidiary-filtered report (e.g. FV-CRYOMEX-11785, paid 29/10/2026, missing from
+// October's México view).
+const SUBSIDIARY_SQL = 'COALESCE(P.custrecord_cryo_subsidiaria_partida, CONTRACT.custrecord_cryo_subsidiariacontrato)';
 
 const SELECT_COLUMNS = [
   'P.netsuite_id as partida_id',
@@ -265,10 +269,10 @@ function baseQuery(
     .where('P.isinactive', 'F');
 
   if (restrictSubsidiaries !== null) {
-    applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, restrictSubsidiaries);
+    applySubsidiaryRestriction(qb, db.raw(SUBSIDIARY_SQL), restrictSubsidiaries);
   }
   if (subsidiary.size > 0) {
-    applySubsidiaryRestriction(qb, SUBSIDIARY_COLUMN, subsidiary);
+    applySubsidiaryRestriction(qb, db.raw(SUBSIDIARY_SQL), subsidiary);
   }
 
   return qb;
@@ -399,8 +403,8 @@ export async function resolveSelfCobradorDuenoId(db: Knex, email: string | null)
 }
 
 /**
- * The distinct subsidiarias (custrecord_cryo_subsidiaria_partida, the SAME column
- * applySubsidiaryRestriction enforces on the main report) among partidas where this employee is the
+ * The distinct subsidiarias (SUBSIDIARY_SQL, the SAME expression applySubsidiaryRestriction
+ * enforces on the main report) among partidas where this employee is the
  * resolved Dueño or Cobrador - a self cobrador/dueño may only ever see cobranza commissions in the
  * subsidiaria(s) where they actually have contracts, per explicit instruction. Deliberately NOT
  * `permissions.allowedSubsidiaries` (that's empty for a caller with no explicit grant at all, which
@@ -420,7 +424,7 @@ export async function resolveSelfCobradorDuenoSubsidiarias(db: Knex, employeeId:
         .orWhere('INVOICE.custbody_cryo_duenio', employeeId)
         .orWhere('CONTRACT.custrecord_cryo_duenio', employeeId);
     })
-    .distinct('P.custrecord_cryo_subsidiaria_partida as subsidiaria_id')) as Array<{ subsidiaria_id: string | null }>;
+    .distinct(db.raw(`${SUBSIDIARY_SQL} as subsidiaria_id`))) as Array<{ subsidiaria_id: string | null }>;
 
   return new Set(rows.map((r) => r.subsidiaria_id).filter((id): id is string => id !== null));
 }
